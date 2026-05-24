@@ -736,7 +736,16 @@ public class WeftRuntime(
             maxOutputTokens = 8_192,
         )
 
-        private const val MAX_ITERATIONS_DEFAULT = 10
+        /**
+         * Per-turn cap on the agent's tool-call iterations. Bumped from
+         * Koog's original 10 because Undercurrent-style multi-step
+         * patterns (ui_event → data_upsert → data_query → ui_render,
+         * with possible memory_recall and retry overhead) consistently
+         * brushed against the old limit on tracker-shaped mini-apps.
+         * Apps that need more (long agentic plans) can override via the
+         * `maxIterations` parameter on [create] / [createWithMcpServers].
+         */
+        public const val MAX_ITERATIONS_DEFAULT: Int = 25
 
         /**
          * How often the periodic TTL sweeper runs after the initial startup
@@ -787,6 +796,7 @@ public class WeftRuntime(
             conversationStoreOverride: ConversationStore? = null,
             quotaPolicy: QuotaPolicy = QuotaPolicy(),
             redactor: Redactor = Redactor(),
+            maxIterations: Int = MAX_ITERATIONS_DEFAULT,
         ): WeftRuntime {
             val appContext = context.applicationContext
             val database = WeftDatabaseFactory.create(appContext)
@@ -813,6 +823,7 @@ public class WeftRuntime(
                 conversationStoreOverride = conversationStoreOverride,
                 quotaPolicy = quotaPolicy,
                 redactor = redactor,
+                maxIterations = maxIterations,
                 database = database,
             )
         }
@@ -856,6 +867,7 @@ public class WeftRuntime(
             conversationStoreOverride: ConversationStore? = null,
             quotaPolicy: QuotaPolicy = QuotaPolicy(),
             redactor: Redactor = Redactor(),
+            maxIterations: Int = MAX_ITERATIONS_DEFAULT,
             onMcpError: (McpServerConfig, Throwable) -> Unit = { _, _ -> },
         ): WeftRuntime {
             // Reuse the substrate's NetworkPolicy: MCP server hosts must
@@ -899,6 +911,7 @@ public class WeftRuntime(
                 conversationStoreOverride = conversationStoreOverride,
                 quotaPolicy = quotaPolicy,
                 redactor = redactor,
+                maxIterations = maxIterations,
                 extraToolsFactory = { ctx ->
                     val mcpTools: List<WeftTool<*, *>> = discovered.map { (server, mcpTool) ->
                         val qualified = "${server.name}:${mcpTool.name}"

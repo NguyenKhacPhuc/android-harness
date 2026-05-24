@@ -1,5 +1,8 @@
 package dev.weft.contracts
 
+import kotlinx.coroutines.flow.MutableSharedFlow
+import kotlinx.coroutines.flow.SharedFlow
+import kotlinx.coroutines.flow.asSharedFlow
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.json.JsonElement
 import kotlinx.serialization.json.JsonObject
@@ -11,9 +14,28 @@ import kotlinx.serialization.json.JsonObject
  * The substrate doesn't know what records look like — sources are opaque
  * key-value collections from data.*'s perspective. Validation of filter
  * shapes is the app's responsibility.
+ *
+ * ### Reactivity
+ *
+ * Implementations emit a [Unit] on [changes] every time a mutation
+ * (`upsert` / `delete`) lands. The Compose-side data-binding renderer
+ * subscribes to this flow so display bindings auto-refresh after a
+ * direct tool call — i.e. button taps that execute `data_upsert` via
+ * the action-binding path don't need an LLM round-trip to make the
+ * numbers on screen update. Implementations that don't (or can't)
+ * support live mutation notifications can leave [changes] as an
+ * empty flow; the binding renderer falls back to the initial value.
  */
 interface DataSource {
     val name: String
+
+    /**
+     * Emits one [Unit] per mutation (upsert or delete). Subscribers
+     * re-query for whatever they need. Implementations should signal
+     * AFTER the durable write completes — not optimistically — so
+     * subscribers can trust that a re-query will reflect the change.
+     */
+    val changes: SharedFlow<Unit>
 
     suspend fun query(
         filter: JsonObject = JsonObject(emptyMap()),
@@ -32,6 +54,15 @@ interface DataSource {
     companion object {
         const val LIMIT_DEFAULT = 50
         const val LIMIT_MAX = 500
+
+        /**
+         * Off-the-shelf [changes] flow for implementations that opt
+         * out of reactivity. Buffer of zero, no replay — subscribers
+         * get nothing until the next mutation, which is the right
+         * semantics for an empty change stream.
+         */
+        val NEVER_CHANGES: SharedFlow<Unit> =
+            MutableSharedFlow<Unit>(replay = 0).asSharedFlow()
     }
 }
 
