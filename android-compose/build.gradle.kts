@@ -74,6 +74,13 @@ dependencies {
     // surface this module implements.
     api(project(":contracts"))
 
+    // BindingEvaluator — pure-JVM resolver for `$binding` sentinels
+    // embedded in agent-emitted ComponentNode props. Used by
+    // `BindingAwareRenderer` to replace bindings with live values
+    // before component decode + render. Same JVM target (17), so
+    // the inline reified helpers are safe to inline here.
+    api(project(":harness:prompt"))
+
     // Compose runtime + foundation (no Material 3). The framework needs
     // @Composable, Modifier, Column/padding (for error placeholder), and
     // BasicText. Everything else (M3 surfaces, palette components) is in

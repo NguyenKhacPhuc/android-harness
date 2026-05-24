@@ -61,6 +61,15 @@ public fun AgentRenderedTreeScreen(
     registry: ComponentRegistry,
     onAction: suspend (action: String, sourceLabel: String?, fieldValues: Map<String, String>) -> Unit,
     onBack: () -> Unit,
+    /**
+     * Optional [DataSourceRegistry] for resolving `$binding` sentinels
+     * in component props against live data. When non-null, the screen
+     * uses [BindingAwareRenderer] (which subscribes to source-change
+     * flows for reactive updates); when null, falls back to the plain
+     * [TreeRenderer]. Apps that ship `data_*` tools should pass the
+     * same registry they handed to `WeftRuntime.create`.
+     */
+    dataSources: dev.weft.contracts.DataSourceRegistry? = null,
 ) {
     val update = uiBridge.lastUpdate
     if (update !is UIUpdate.RenderTree) {
@@ -120,31 +129,46 @@ public fun AgentRenderedTreeScreen(
                     .padding(horizontal = 8.dp, vertical = 12.dp),
                 verticalArrangement = Arrangement.spacedBy(12.dp),
             ) {
-                TreeRenderer(
-                    tree = update.tree,
-                    registry = registry,
-                    onEvent = { event ->
-                        when (event) {
-                            is ComponentEvent.TextChanged -> {
-                                fieldValues[event.sourceId] = event.value
-                            }
-                            is ComponentEvent.ToggleChanged -> {
-                                fieldValues[event.sourceId] = event.value.toString()
-                            }
-                            is ComponentEvent.Action -> {
-                                if (inFlight) return@TreeRenderer
-                                inFlight = true
-                                scope.launch {
-                                    try {
-                                        onAction(event.action, event.sourceLabel, fieldValues.toMap())
-                                    } finally {
-                                        inFlight = false
-                                    }
+                val onEvent: (ComponentEvent) -> Unit = handler@{ event ->
+                    when (event) {
+                        is ComponentEvent.TextChanged -> {
+                            fieldValues[event.sourceId] = event.value
+                        }
+                        is ComponentEvent.ToggleChanged -> {
+                            fieldValues[event.sourceId] = event.value.toString()
+                        }
+                        is ComponentEvent.Action -> {
+                            if (inFlight) return@handler
+                            inFlight = true
+                            scope.launch {
+                                try {
+                                    onAction(event.action, event.sourceLabel, fieldValues.toMap())
+                                } finally {
+                                    inFlight = false
                                 }
                             }
                         }
-                    },
-                )
+                    }
+                }
+                // Pick the renderer based on whether the host supplied a
+                // data-source registry. With one we get reactive $binding
+                // resolution; without one we fall back to the static tree
+                // renderer (existing behavior for apps that haven't
+                // adopted bindings yet).
+                if (dataSources != null) {
+                    BindingAwareRenderer(
+                        tree = update.tree,
+                        registry = registry,
+                        sources = dataSources,
+                        onEvent = onEvent,
+                    )
+                } else {
+                    TreeRenderer(
+                        tree = update.tree,
+                        registry = registry,
+                        onEvent = onEvent,
+                    )
+                }
             }
         }
     }

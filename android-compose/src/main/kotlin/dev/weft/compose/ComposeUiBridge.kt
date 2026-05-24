@@ -144,6 +144,19 @@ public class ComposeUiBridge(
         fun walk(n: ComponentNode) {
             val component = registry.get(n.type)
             if (component != null) {
+                // Data bindings: any `$binding` JsonObject inside a prop
+                // is a sentinel that resolves to a primitive at render
+                // time. The component's typed schema expects that
+                // primitive directly, so a strict decode would reject
+                // the unresolved sentinel here. Skip strict validation
+                // for nodes that contain sentinels — the binding-aware
+                // renderer takes care of resolution before the typed
+                // deserializer runs. Apps that don't use bindings still
+                // get full strict validation.
+                if (containsBindingSentinel(n.props)) {
+                    n.children.forEach(::walk)
+                    return
+                }
                 try {
                     component.decode(n.props)
                 } catch (t: Throwable) {
@@ -155,6 +168,22 @@ public class ComposeUiBridge(
         }
         walk(node)
         return errors
+    }
+
+    /**
+     * Recursively check whether [value] contains a `$binding` sentinel
+     * at any depth. Used by the validation path to detect "this prop
+     * subtree resolves at render time, don't validate now."
+     */
+    private fun containsBindingSentinel(value: kotlinx.serialization.json.JsonElement): Boolean {
+        return when (value) {
+            is kotlinx.serialization.json.JsonObject -> {
+                if ("\$binding" in value) return true
+                value.values.any { containsBindingSentinel(it) }
+            }
+            is kotlinx.serialization.json.JsonArray -> value.any { containsBindingSentinel(it) }
+            else -> false
+        }
     }
 
     /**
