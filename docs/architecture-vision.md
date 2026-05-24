@@ -69,6 +69,17 @@ Tracked here so they show up in code review:
   routing tier hint, iter cap). Apps select via
   `runtime.buildAgent(provider, modelPoolOverride, strategy)`. See
   [architecture/strategy-hook.md](architecture/strategy-hook.md).
+- **Tool catalog grows unbounded in every prompt.** Two-part
+  problem: (a) per-agent `allowedTools` filters the wire-level
+  registry but the system-prompt catalog still describes every
+  tool, so a writer agent declared with two tools still pays for
+  ~50 in its prompt; (b) MCP integrations multiply the catalog
+  fast (4 integrations → 80+ tools), and the eager-embed model
+  doesn't scale. Direction chosen: small Stage 1 fix
+  (per-agent prompt re-scoping) shipping first; Stage 2
+  `ToolProvider` + `find_tool` discovery meta-tool deferred
+  pending a Koog mid-turn registry-mutation probe. Full design:
+  [architecture/tool-provider.md](architecture/tool-provider.md).
 
 ## Multi-agent — design sketch
 
