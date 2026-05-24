@@ -142,6 +142,9 @@ Pointers that are mostly current:
 - `docs/07-harness.md` — reliability / observability / cost / behavior.
 - `docs/ui-components.md` — `WeftComponent` framework.
 - `docs/writing-a-custom-component.md` — step-by-step recipe.
+- `docs/writing-a-custom-tool.md` — `WeftTool` authoring rules,
+  especially the naming + description conventions that make the LLM
+  actually pick the tool.
 
 ## Contributing
 

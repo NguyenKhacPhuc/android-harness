@@ -24,6 +24,24 @@ import dev.weft.contracts.UiBridge
  *
  * Subclasses implement [executeWeft]. Don't override [execute] —
  * the gates won't run.
+ *
+ * ### Authoring rules — read before writing a new tool
+ *
+ * Tool selection is a soft attention process: the LLM scans the catalog
+ * looking for the best match for the user's request. Names + descriptions
+ * are *load-bearing*, not cosmetic. See `docs/writing-a-custom-tool.md`
+ * for the full guide; the headline rules:
+ *
+ *   - **Name: `<verb>_<noun>`, ≤3 words, lowercase_snake_case.**
+ *     `open_map`, `send_email`, `set_theme_palette`. Compound names with
+ *     prepositions (`show_location_on_map`) get skipped by the model.
+ *   - **Description: lead with the action.** "Open the map app pinned
+ *     at…" beats "This tool is used when…". Include 2–4 user-phrasing
+ *     examples so the model knows when to fire.
+ *   - **Cap descriptions at ~3 sentences.** Longer descriptions are a
+ *     known cause of tool-skip behavior.
+ *   - **Disambiguate from neighbors.** When two tools sound similar,
+ *     add a sentence like "NOT for X — use `other_tool` for X."
  */
 public abstract class WeftTool<TArgs, TResult>(
     public val ctx: WeftContext,
