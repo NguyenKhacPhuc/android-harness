@@ -97,14 +97,19 @@ import dev.weft.tools.context.DeviceContextProvider
 import io.ktor.client.engine.okhttp.OkHttp
 import io.ktor.client.plugins.contentnegotiation.ContentNegotiation
 import io.ktor.serialization.kotlinx.json.json
+import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Deferred
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.async
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+import kotlinx.coroutines.withTimeoutOrNull
 import kotlin.time.Duration
 import kotlin.time.Duration.Companion.hours
+import kotlin.time.Duration.Companion.seconds
 
 /**
  * The substrate SDK composition root. Apps construct one of these at startup
@@ -246,6 +251,41 @@ public class WeftRuntime(
      */
     private val maxOutputTokens: Int = WeftAgent.DEFAULT_MAX_OUTPUT_TOKENS,
     /**
+     * Registered agent declarations. Empty list (default) =
+     * auto-synthesize a single
+     * [dev.weft.harness.agents.AgentDeclaration.default] entry, which
+     * reproduces pre-multi-agent behavior. Apps that want multiple
+     * agents (e.g. "writer" + "researcher") pass declarations here;
+     * `runtime.buildAgent(name, provider)` selects by name.
+     */
+    agents: List<dev.weft.harness.agents.AgentDeclaration> = emptyList(),
+    /**
+     * MCP servers to discover tools from. Discovery (HTTP initialize +
+     * tools/list) runs asynchronously in [runtimeScope] on
+     * [Dispatchers.IO]; the resulting tools resolve through
+     * [mcpToolsReady] and are appended to the agent's tool catalog the
+     * first time [buildAgent] is called.
+     *
+     * Empty list (default) = no MCP, no background work. Same
+     * [networkPolicy] gates apply: every server URL must pass the
+     * allowlist or the request fails.
+     */
+    private val mcpServers: List<McpServerConfig> = emptyList(),
+    /**
+     * Per-server error sink. Discovery isolates failures — a single
+     * unreachable server doesn't reject [mcpToolsReady]; it routes
+     * through here and the failing server's tools are omitted. Use to
+     * log diagnostics or surface a "reconnect" hint.
+     */
+    private val onMcpError: (McpServerConfig, Throwable) -> Unit = { _, _ -> },
+    /**
+     * Hard timeout per MCP server discovery. A misbehaving server can
+     * otherwise hang the deferred forever, blocking the first
+     * [buildAgent] call. On timeout the server is treated like any
+     * other failure — [onMcpError] fires and its tools are omitted.
+     */
+    private val mcpDiscoveryTimeout: Duration = DEFAULT_MCP_DISCOVERY_TIMEOUT,
+    /**
      * SQLDelight database backing every persistent store the substrate
      * ships. Built by [WeftRuntime.create] from the app's context;
      * tests can pass a JDBC in-memory variant.
@@ -255,7 +295,41 @@ public class WeftRuntime(
 ) {
     public val keyVault: KeyVault get() = os.keyVault
 
+    /** Raw list snapshot — kept for prompt re-assembly when MCP tools resolve. */
+    private val rawDataSources: List<DataSource> = dataSources
+
     public val dataSources: DataSourceRegistry = DataSourceRegistry(dataSources)
+
+    /**
+     * Map of [dev.weft.harness.agents.AgentDeclaration]s keyed by
+     * [dev.weft.harness.agents.AgentDeclaration.name]. Auto-includes a
+     * default declaration named
+     * [dev.weft.harness.agents.AgentDeclaration.DEFAULT_AGENT_NAME]
+     * when the host passed no `agents` list, so existing single-agent
+     * apps see no behavior change.
+     *
+     * Phase 4.1 surfaces declarations only; built [WeftAgent]s come
+     * from [buildAgent] (lifetime: caller-owned, fresh per call). A
+     * future phase may add a cached `agents: Map<String, WeftAgent>`
+     * keyed by provider identity.
+     */
+    public val agentDeclarations: Map<String, dev.weft.harness.agents.AgentDeclaration> = run {
+        val effective = if (agents.isEmpty()) {
+            listOf(dev.weft.harness.agents.AgentDeclaration.default())
+        } else {
+            // Apps that supplied agents but forgot a default get one
+            // synthesized so `buildAgent(provider)` still works.
+            val hasDefault = agents.any {
+                it.name == dev.weft.harness.agents.AgentDeclaration.DEFAULT_AGENT_NAME
+            }
+            if (hasDefault) agents else agents + dev.weft.harness.agents.AgentDeclaration.default()
+        }
+        val byName = effective.associateBy { it.name }
+        require(byName.size == effective.size) {
+            "AgentDeclaration names must be unique. Got: ${effective.map { it.name }}"
+        }
+        byName
+    }
 
     public val contextRegistry: ContextRegistry = ContextRegistry(
         listOf(DeviceContextProvider(os)) + extraContextProviders,
@@ -418,9 +492,27 @@ public class WeftRuntime(
     ) + extraToolsFactory(toolContext)
 
     /**
+     * Pre-computed `extraNotes` payload for the system prompt — reused
+     * by both [systemPrompt] (pre-MCP) and [resolvedSystemPrompt] (post-MCP).
+     */
+    private val systemPromptExtraNotes: String? =
+        listOfNotNull(extraSystemNotes, dynamicSystemPromptSection?.invoke())
+            .filter { it.isNotBlank() }
+            .joinToString("\n\n")
+            .takeIf { it.isNotBlank() }
+
+    /**
      * The assembled system prompt: app preamble + auto-generated tool
      * catalog + standard trailing notes + optional [extraSystemNotes].
      * Computed once at construction.
+     *
+     * **MCP caveat:** this reflects the *pre-MCP* tool catalog (substrate
+     * + [extraToolsFactory] only). Tools discovered from [mcpServers]
+     * are NOT advertised here — they join the agent's catalog at
+     * [buildAgent] time via [resolvedSystemPrompt]. The wire-level
+     * `tools` block the LLM sees on each call still includes MCP tools
+     * once discovery completes; this field is for human / devtools
+     * inspection of the substrate-stable prompt.
      */
     public val systemPrompt: String = assembleSystemPrompt(
         appPreamble = appPromptPreamble,
@@ -431,15 +523,98 @@ public class WeftRuntime(
         // their data layer in the preamble — register a DataSource with
         // a description and the SDK takes it from there.
         dataSources = dataSources,
-        // Compose the two extension points into a single `extraNotes`
-        // payload: static [extraSystemNotes] first, then the per-session
-        // [dynamicSystemPromptSection] (evaluated once here, stable for
-        // the runtime's lifetime — see the param's KDoc).
-        extraNotes = listOfNotNull(extraSystemNotes, dynamicSystemPromptSection?.invoke())
-            .filter { it.isNotBlank() }
-            .joinToString("\n\n")
-            .takeIf { it.isNotBlank() },
+        extraNotes = systemPromptExtraNotes,
     )
+
+    /**
+     * MCP-discovered tools, resolved asynchronously. Always present
+     * (resolves to an empty list when [mcpServers] is empty). Per-server
+     * failures route to [onMcpError]; the deferred itself never rejects.
+     *
+     * Awaited internally by [buildAgent] before constructing the agent's
+     * tool registry. Apps that want to surface "MCP loading…" UI can
+     * observe `.isCompleted` directly.
+     */
+    public val mcpToolsReady: Deferred<List<WeftTool<*, *>>> = buildMcpToolsReady()
+
+    private fun buildMcpToolsReady(): Deferred<List<WeftTool<*, *>>> {
+        if (mcpServers.isEmpty()) {
+            return CompletableDeferred(emptyList())
+        }
+        val mcpHttp = whitelistingHttpClient(
+            engine = OkHttp.create(),
+            policy = networkPolicy,
+            extraConfig = { install(ContentNegotiation) { json(HttpMcpClient.DEFAULT_JSON) } },
+        )
+        val mcpClient = HttpMcpClient(mcpHttp)
+        return runtimeScope.async(Dispatchers.IO) {
+            mcpServers.flatMap { server ->
+                val discovered: List<McpToolDescriptor>? = withTimeoutOrNull(mcpDiscoveryTimeout) {
+                    runCatching {
+                        mcpClient.initialize(server)
+                        mcpClient.listTools(server)
+                    }.getOrElse { t ->
+                        onMcpError(server, t)
+                        null
+                    }
+                }
+                if (discovered == null) {
+                    // null means either runCatching swallowed the failure
+                    // (already routed to onMcpError above) or the timeout
+                    // fired. In the timeout case, emit a synthetic error
+                    // so callers see the diagnostic.
+                    onMcpError(server, McpDiscoveryTimeoutException(server, mcpDiscoveryTimeout))
+                    emptyList()
+                } else {
+                    discovered.map { mcpTool ->
+                        val qualified = "${server.name}:${mcpTool.name}"
+                        McpRemoteTool(
+                            ctx = toolContext,
+                            client = mcpClient,
+                            serverConfig = server,
+                            remoteToolName = mcpTool.name,
+                            descriptor = translateToKoogDescriptor(qualified, mcpTool),
+                        ) as WeftTool<*, *>
+                    }
+                }
+            }
+        }
+    }
+
+    /**
+     * In-memory cache for [resolvedSystemPrompt]. Computed lazily once
+     * MCP discovery completes. Null until the first call.
+     */
+    @Volatile
+    private var cachedResolvedSystemPrompt: String? = null
+
+    /**
+     * The system prompt awaiting MCP tools to be discovered first. Equal
+     * to [systemPrompt] when there are no MCP tools; otherwise includes
+     * MCP tools in the auto-generated catalog. Cached after first
+     * resolution.
+     */
+    public suspend fun resolvedSystemPrompt(): String {
+        cachedResolvedSystemPrompt?.let { return it }
+        val mcp = mcpToolsReady.await()
+        if (mcp.isEmpty()) {
+            cachedResolvedSystemPrompt = systemPrompt
+            return systemPrompt
+        }
+        val prompt = assembleSystemPrompt(
+            appPreamble = appPromptPreamble,
+            tools = tools + mcp,
+            components = componentMetadata,
+            dataSources = rawDataSources,
+            extraNotes = systemPromptExtraNotes,
+        )
+        cachedResolvedSystemPrompt = prompt
+        return prompt
+    }
+
+    /** Substrate + extra + MCP tools, in the order they reach the agent. */
+    public suspend fun resolvedTools(): List<WeftTool<*, *>> =
+        tools + mcpToolsReady.await()
 
     /**
      * Build a Koog-backed [WeftAgent] using a [WeftCredentialProvider].
@@ -458,20 +633,71 @@ public class WeftRuntime(
      */
     @OptIn(kotlin.time.ExperimentalTime::class)
     public suspend fun buildAgent(provider: dev.weft.contracts.WeftCredentialProvider): WeftAgent =
-        buildAgent(provider, modelPoolOverride = null)
+        buildAgent(provider, modelPoolOverride = null, strategy = null)
 
     /**
-     * Build an agent with an optional [modelPoolOverride] that fully
-     * replaces the provider's default [dev.weft.harness.agents.routing.ModelPool].
-     * Use this when the app exposes a per-tier model picker — pass a
-     * pool whose slots are filled with the user's selections (falling
-     * back to defaults for unset slots before the call).
-     *
-     * `null` is equivalent to the no-override [buildAgent] overload.
+     * Two-arg back-compat overload — equivalent to passing
+     * `strategy = null`. Builds the default agent.
      */
     public suspend fun buildAgent(
         provider: dev.weft.contracts.WeftCredentialProvider,
         modelPoolOverride: dev.weft.harness.agents.routing.ModelPool?,
+    ): WeftAgent = buildAgent(provider, modelPoolOverride, strategy = null)
+
+    /**
+     * Build the default agent with optional [modelPoolOverride] and
+     * [strategy] override. Equivalent to
+     * `buildAgent(AgentDeclaration.DEFAULT_AGENT_NAME, provider, ...)`
+     * but the explicit-strategy form takes precedence over the
+     * declaration's strategy.
+     */
+    public suspend fun buildAgent(
+        provider: dev.weft.contracts.WeftCredentialProvider,
+        modelPoolOverride: dev.weft.harness.agents.routing.ModelPool?,
+        strategy: dev.weft.harness.agents.strategy.WeftStrategy?,
+    ): WeftAgent = buildAgent(
+        agentName = dev.weft.harness.agents.AgentDeclaration.DEFAULT_AGENT_NAME,
+        provider = provider,
+        modelPoolOverride = modelPoolOverride,
+        strategyOverride = strategy,
+    )
+
+    /**
+     * Build a named agent. The agent's tool catalog is filtered by the
+     * declaration's [AgentDeclaration.allowedTools]; its system prompt
+     * appends the declaration's
+     * [AgentDeclaration.systemFragment]; its loop policy is the
+     * declaration's [AgentDeclaration.strategy] (unless [strategyOverride]
+     * is non-null).
+     *
+     * Throws [IllegalArgumentException] if [agentName] is not in
+     * [agentDeclarations].
+     */
+    public suspend fun buildAgent(
+        agentName: String,
+        provider: dev.weft.contracts.WeftCredentialProvider,
+        modelPoolOverride: dev.weft.harness.agents.routing.ModelPool? = null,
+        strategyOverride: dev.weft.harness.agents.strategy.WeftStrategy? = null,
+    ): WeftAgent {
+        val declaration = agentDeclarations[agentName]
+            ?: error(
+                "Unknown agent: '$agentName'. " +
+                    "Registered: ${agentDeclarations.keys}",
+            )
+        return buildAgentForDeclaration(
+            declaration = declaration,
+            provider = provider,
+            modelPoolOverride = modelPoolOverride,
+            strategyOverride = strategyOverride,
+        )
+    }
+
+    @OptIn(kotlin.time.ExperimentalTime::class)
+    private suspend fun buildAgentForDeclaration(
+        declaration: dev.weft.harness.agents.AgentDeclaration,
+        provider: dev.weft.contracts.WeftCredentialProvider,
+        modelPoolOverride: dev.weft.harness.agents.routing.ModelPool?,
+        strategyOverride: dev.weft.harness.agents.strategy.WeftStrategy?,
     ): WeftAgent {
         // Pick the Koog client + model pool + cache binder for the
         // configured provider. Adding a new provider here means: import the
@@ -491,20 +717,46 @@ public class WeftRuntime(
         // discarded trace store). The `delegate` and `delegate_parallel`
         // tools wrap this runner so the orchestrator LLM can invoke it
         // via the normal tool-call mechanism.
-        val subAgentRunner = dev.weft.harness.agents.subagents.SubAgentRunner(
-            executor = executor,
-            modelPool = modelPool,
-            cacheBinder = cacheBinder,
-            parentTools = tools,
-            traceStore = traceStore,
-            usageStore = usageStore,
-            quotaPolicy = quotaPolicy,
-            redactor = redactor,
-            maxOutputTokens = maxOutputTokens,
-        )
-        val delegateTool = dev.weft.harness.agents.subagents.DelegateTool(toolContext, subAgentRunner)
-        val delegateParallelTool = dev.weft.harness.agents.subagents.DelegateParallelTool(toolContext, subAgentRunner)
-        val allTools = tools + delegateTool + delegateParallelTool
+        // Block the first buildAgent call until MCP discovery resolves.
+        // Subsequent calls see the already-completed deferred at zero
+        // cost. mcpToolsReady never rejects — failed servers go through
+        // onMcpError and yield empty.
+        val resolvedToolsAll = resolvedTools()
+
+        // Apply this declaration's tool allowlist. Empty allowlist =
+        // every tool is included (today's default-agent behavior).
+        // Non-empty = filter to whitelisted names only; MCP tools are
+        // matched in their qualified ${server}:${name} form.
+        val agentTools = if (declaration.allowedTools.isEmpty()) {
+            resolvedToolsAll
+        } else {
+            resolvedToolsAll.filter { it.descriptor.name in declaration.allowedTools }
+        }
+
+        // delegate_to_agent: present in every agent's catalog when more
+        // than the default agent is registered. The factory captures
+        // the active provider so the delegate inherits credentials.
+        // Depth is bounded by DelegateToAgentTool.MAX_DELEGATION_DEPTH
+        // via DelegationContext in the coroutine context — no extra
+        // tracking needed here.
+        val otherAgents = agentDeclarations.values.filter { it.name != declaration.name }
+        val delegateTool = if (otherAgents.isEmpty()) {
+            null
+        } else {
+            dev.weft.harness.agents.DelegateToAgentTool(
+                ctx = toolContext,
+                resolveAgent = { targetName ->
+                    buildAgent(
+                        agentName = targetName,
+                        provider = provider,
+                        modelPoolOverride = modelPoolOverride,
+                        strategyOverride = null,
+                    )
+                },
+                knownAgents = otherAgents,
+            )
+        }
+        val allTools = if (delegateTool != null) agentTools + delegateTool else agentTools
 
         // Bind cache markers to the catalog: the LAST tool's descriptor
         // gets `cache_control = OneHour`, which Anthropic uses as the
@@ -514,6 +766,19 @@ public class WeftRuntime(
         val cachedTools = cacheBinder.markedTools(allTools, dev.weft.harness.prompt.cache.CacheTier.STATIC)
         val toolRegistry = ToolRegistry { cachedTools.forEach { tool(it) } }
 
+        // Compose the effective system prompt for this declaration:
+        // substrate's resolved prompt + the agent's role fragment. For
+        // the default declaration (empty fragment, allowlist) this is
+        // identical to today's prompt. For declared agents with role
+        // fragments, the fragment is appended as a "Role" section so
+        // the LLM can tell it apart from the substrate's standard
+        // notes.
+        val baseSystemPrompt = resolvedSystemPrompt()
+        val effectiveSystemPrompt = if (declaration.systemFragment.isBlank()) {
+            baseSystemPrompt
+        } else {
+            "$baseSystemPrompt\n\n## Role\n${declaration.systemFragment}"
+        }
         return WeftAgent(
             executor = executor,
             modelPool = modelPool,
@@ -524,7 +789,7 @@ public class WeftRuntime(
             // via a future WeftRuntime opt-out.
             toolRegistry = toolRegistry,
             traceStore = traceStore,
-            baseSystemPromptSupplier = { systemPrompt },
+            baseSystemPromptSupplier = { effectiveSystemPrompt },
             // Compose: device snapshot first (substrate default), then
             // the app-supplied per-turn extension. Each section
             // separated by a blank line so the LLM can tell them apart.
@@ -543,6 +808,11 @@ public class WeftRuntime(
             conversationStore = conversationStore,
             cacheBinder = cacheBinder,
             memoryRegistry = memoryRegistry,
+            // Explicit override beats the declaration's own strategy
+            // (which itself defaults to DefaultStrategy() per the
+            // AgentDeclaration data class).
+            strategy = strategyOverride ?: declaration.strategy,
+            agentName = declaration.name,
         )
     }
 
@@ -748,9 +1018,16 @@ public class WeftRuntime(
          * with possible memory_recall and retry overhead) consistently
          * brushed against the old limit on tracker-shaped mini-apps.
          * Apps that need more (long agentic plans) can override via the
-         * `maxIterations` parameter on [create] / [createWithMcpServers].
+         * `maxIterations` parameter on [create].
          */
         public const val MAX_ITERATIONS_DEFAULT: Int = 25
+
+        /**
+         * Hard timeout per MCP server during initial tools/list
+         * discovery. A misbehaving server otherwise hangs the
+         * [mcpToolsReady] deferred and blocks the first agent build.
+         */
+        public val DEFAULT_MCP_DISCOVERY_TIMEOUT: Duration = 10.seconds
 
         /**
          * How often the periodic TTL sweeper runs after the initial startup
@@ -802,6 +1079,23 @@ public class WeftRuntime(
             quotaPolicy: QuotaPolicy = QuotaPolicy(),
             redactor: Redactor = Redactor(),
             maxIterations: Int = MAX_ITERATIONS_DEFAULT,
+            /**
+             * MCP servers to discover tools from. Empty list = no MCP.
+             * Discovery runs in the background on [Dispatchers.IO]; the
+             * first [buildAgent] call awaits its completion. Same
+             * [networkPolicy] allowlist applies to MCP server hosts.
+             */
+            mcpServers: List<McpServerConfig> = emptyList(),
+            onMcpError: (McpServerConfig, Throwable) -> Unit = { _, _ -> },
+            mcpDiscoveryTimeout: Duration = DEFAULT_MCP_DISCOVERY_TIMEOUT,
+            /**
+             * Multi-agent registry. Empty list = auto-default single
+             * agent named [dev.weft.harness.agents.AgentDeclaration.DEFAULT_AGENT_NAME]
+             * (preserves pre-multi-agent behavior). Non-empty = each
+             * declaration becomes addressable via
+             * [WeftRuntime.buildAgent(agentName, ...)][buildAgent].
+             */
+            agents: List<dev.weft.harness.agents.AgentDeclaration> = emptyList(),
         ): WeftRuntime {
             val appContext = context.applicationContext
             val database = WeftDatabaseFactory.create(appContext)
@@ -829,108 +1123,24 @@ public class WeftRuntime(
                 quotaPolicy = quotaPolicy,
                 redactor = redactor,
                 maxIterations = maxIterations,
+                agents = agents,
+                mcpServers = mcpServers,
+                onMcpError = onMcpError,
+                mcpDiscoveryTimeout = mcpDiscoveryTimeout,
                 database = database,
             )
         }
 
-        /**
-         * Like [create], but discovers tools from [mcpServers] before building
-         * the runtime and registers them alongside the substrate's built-in
-         * catalog. Each remote tool gets `{serverName}:{remoteName}` as its
-         * qualified name in the LLM-visible tool list.
-         *
-         * **Suspending.** This factory talks to every configured server
-         * synchronously at startup — initialize + tools/list. Per-server
-         * failures are isolated: a down server skips its tools and the rest
-         * proceeds (use [onMcpError] to log diagnostics). Apps usually call
-         * this from a `LaunchedEffect` in their initial composition so the
-         * UI thread isn't blocked.
-         *
-         * **NetworkPolicy.** Every MCP server URL goes through the same
-         * [networkPolicy] allowlist as `network_fetch`. Add the server hosts
-         * to the policy before calling this factory.
-         *
-         * **No process-death survival in v1.** The MCP client is built fresh
-         * each session; reconnection is the next call's job. Server-side
-         * tool catalogs are re-fetched on every app start.
-         */
-        public suspend fun createWithMcpServers(
-            context: Context,
-            uiBridge: UiBridge,
-            appPromptPreamble: String,
-            mcpServers: List<McpServerConfig>,
-            dataSources: List<DataSource> = emptyList(),
-            networkPolicy: NetworkPolicy = NetworkPolicy(coreAllowlist = emptySet()),
-            extraContextProviders: List<ContextProvider> = emptyList(),
-            extraToolsFactory: (WeftContext) -> List<WeftTool<*, *>> = { _ -> emptyList() },
-            componentMetadata: List<ComponentMetadata> = emptyList(),
-            extraSystemNotes: String? = null,
-            dynamicSystemPromptSection: (() -> String)? = null,
-            extraVolatilePrefix: () -> String = { "" },
-            extraMemoryProviders: List<dev.weft.contracts.MemoryProvider> = emptyList(),
-            memoryStoreOverride: MemoryStore? = null,
-            conversationStoreOverride: ConversationStore? = null,
-            quotaPolicy: QuotaPolicy = QuotaPolicy(),
-            redactor: Redactor = Redactor(),
-            maxIterations: Int = MAX_ITERATIONS_DEFAULT,
-            onMcpError: (McpServerConfig, Throwable) -> Unit = { _, _ -> },
-        ): WeftRuntime {
-            // Reuse the substrate's NetworkPolicy: MCP server hosts must
-            // pass the same allowlist as network_fetch URLs.
-            val mcpHttp = whitelistingHttpClient(
-                engine = OkHttp.create(),
-                policy = networkPolicy,
-                extraConfig = { install(ContentNegotiation) { json(HttpMcpClient.DEFAULT_JSON) } },
-            )
-            val mcpClient = HttpMcpClient(mcpHttp)
-
-            // Pre-discover tool descriptors on Dispatchers.IO so the caller's
-            // thread (typically the main thread inside a Composable's
-            // LaunchedEffect) isn't blocked by network round-trips.
-            val discovered: List<Pair<McpServerConfig, McpToolDescriptor>> =
-                withContext(Dispatchers.IO) {
-                    mcpServers.flatMap { server ->
-                        runCatching {
-                            mcpClient.initialize(server)
-                            mcpClient.listTools(server).map { server to it }
-                        }.getOrElse { t ->
-                            onMcpError(server, t)
-                            emptyList()
-                        }
-                    }
-                }
-
-            return create(
-                context = context,
-                uiBridge = uiBridge,
-                appPromptPreamble = appPromptPreamble,
-                dataSources = dataSources,
-                networkPolicy = networkPolicy,
-                extraContextProviders = extraContextProviders,
-                componentMetadata = componentMetadata,
-                extraSystemNotes = extraSystemNotes,
-                dynamicSystemPromptSection = dynamicSystemPromptSection,
-                extraVolatilePrefix = extraVolatilePrefix,
-                extraMemoryProviders = extraMemoryProviders,
-                memoryStoreOverride = memoryStoreOverride,
-                conversationStoreOverride = conversationStoreOverride,
-                quotaPolicy = quotaPolicy,
-                redactor = redactor,
-                maxIterations = maxIterations,
-                extraToolsFactory = { ctx ->
-                    val mcpTools: List<WeftTool<*, *>> = discovered.map { (server, mcpTool) ->
-                        val qualified = "${server.name}:${mcpTool.name}"
-                        McpRemoteTool(
-                            ctx = ctx,
-                            client = mcpClient,
-                            serverConfig = server,
-                            remoteToolName = mcpTool.name,
-                            descriptor = translateToKoogDescriptor(qualified, mcpTool),
-                        )
-                    }
-                    extraToolsFactory(ctx) + mcpTools
-                },
-            )
-        }
     }
 }
+
+/**
+ * Thrown via [WeftRuntime]'s `onMcpError` sink when a single MCP server's
+ * discovery exceeds the configured per-server timeout. The runtime
+ * continues with whatever tools resolved; the failing server's tools
+ * are omitted.
+ */
+public class McpDiscoveryTimeoutException(
+    public val server: McpServerConfig,
+    public val timeout: Duration,
+) : RuntimeException("MCP discovery timed out for ${server.name} after $timeout")

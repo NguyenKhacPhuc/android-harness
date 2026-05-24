@@ -31,17 +31,44 @@ should live in the SDK.
 
 Tracked here so they show up in code review:
 
-- **`runBlocking` on suspend factories.** Apps still wrap
-  `createWithMcpServers` in `runBlocking` at DI configuration time
-  because the factory is suspend (MCP discovery is async). The fix is
-  either a sync factory + lazy MCP discovery, or a builder pattern the
-  app can construct in a coroutine-friendly site. See
-  [issue / design doc placeholder].
-- **Multi-agent.** `WeftRuntime` ships exactly one `WeftAgent` today.
-  Hosts that want specialized agents (a "research" agent, a "writing"
-  agent) have to fork the runtime. Design sketch below.
-- **Pluggable strategy.** Retry / cache / routing / quota policies are
-  hardcoded paths in the agent loop. Design sketch below.
+- **`runBlocking` on suspend factories.** ✅ Landed 2026-05-24 — sync
+  `WeftRuntime.create(mcpServers = ...)` + background MCP discovery.
+  `createWithMcpServers` retained as a `@Deprecated` shim. Undercurrent
+  no longer wraps DI in `runBlocking`; first turn awaits MCP if it
+  hasn't already. See
+  [architecture/runtime-factory-async.md](architecture/runtime-factory-async.md).
+- **Multi-agent.** ✅ Landed 2026-05-24 across phases 4.1–4.4:
+  [`AgentDeclaration`](../harness/agents/src/main/kotlin/dev/weft/harness/agents/AgentDeclaration.kt)
+  registered on `WeftRuntime.create(agents = ...)`, addressable via
+  `runtime.buildAgent(agentName, provider, ...)`, with per-agent tool
+  allowlist + system fragment + strategy. The old `SubAgentRunner` is
+  gone — a substrate-supplied
+  [`delegate_to_agent`](../harness/agents/src/main/kotlin/dev/weft/harness/agents/DelegateToAgentTool.kt)
+  tool routes through the registry with a 3-level depth cap (enforced
+  via `DelegationContext` coroutine context). Conversation rows carry
+  `agent_name` (SQLDelight migration 4.sqm) so chat UIs can label
+  assistant turns.
+  [`AgentMentionParser`](../harness/agents/src/main/kotlin/dev/weft/harness/agents/AgentMentionParser.kt)
+  parses `@agent body` from chat input;
+  [`AgentSelector`](../android-compose-defaults/src/main/kotlin/dev/weft/compose/components/AgentSelector.kt)
+  is the default Material 3 picker composable. Reference-app dogfood
+  (Undercurrent registers a "writer" agent, the selector renders above
+  the chat input when more than one agent is registered, assistant
+  bubbles carry an `· WRITER`-style label sourced from the persisted
+  `agent_name` column) landed alongside in
+  [`AppModule`](../../undercurrent/app/src/main/kotlin/dev/weft/undercurrent/di/AppModule.kt)
+  +
+  [`AppStore`](../../undercurrent/app/src/main/kotlin/dev/weft/undercurrent/core/AppStore.kt)
+  +
+  [`ChatScreen`](../../undercurrent/app/src/main/kotlin/dev/weft/undercurrent/features/chat/ChatScreen.kt).
+  See [architecture/multi-agent-registry.md](architecture/multi-agent-registry.md).
+- **Pluggable strategy.** ✅ Landed 2026-05-24 — `WeftStrategy`
+  interface in `:harness:agents:strategy` with `DefaultStrategy`,
+  `FrugalStrategy`, `BurstStrategy` reference impls. Wired through
+  `WeftAgent`'s four hardcoded touchpoints (retry, cache tiers,
+  routing tier hint, iter cap). Apps select via
+  `runtime.buildAgent(provider, modelPoolOverride, strategy)`. See
+  [architecture/strategy-hook.md](architecture/strategy-hook.md).
 
 ## Multi-agent — design sketch
 

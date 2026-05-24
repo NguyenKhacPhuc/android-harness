@@ -1,33 +1,54 @@
--- Per-day usage aggregates. Lifetime totals are computed by SUM over all
--- days at read time — cheap because there's one row per day and apps
--- live for months, not centuries.
+-- Per-day, per-agent usage aggregates. Lifetime totals are computed by
+-- SUM at read time — cheap because there's one row per (day, agent)
+-- and apps live for months, not centuries.
 --
 -- "day" is a LocalDate.toString() (ISO-8601 "yyyy-MM-dd"), in the device's
 -- default time zone. We do not store time zone — same as the in-memory
 -- store; midnight rollover is whatever the device thinks "today" is.
+--
+-- "agent_name" is the registered AgentDeclaration.name that produced
+-- the LLM call. Single-agent apps see all rows under 'default'.
+-- Multi-agent hosts get per-agent cost breakdowns for free.
 --
 -- Last-call ephemeral state (lastCallUsd / lastCallTokens / lastCallModelId
 -- in UsageTotals) intentionally stays in-memory: it's a transient UI signal
 -- ("this call cost $X") that doesn't need to survive restart.
 
 CREATE TABLE usage_daily (
-    day TEXT NOT NULL PRIMARY KEY,
+    day TEXT NOT NULL,
+    agent_name TEXT NOT NULL DEFAULT 'default',
     usd_total REAL NOT NULL DEFAULT 0,
     input_tokens INTEGER NOT NULL DEFAULT 0,
     output_tokens INTEGER NOT NULL DEFAULT 0,
     cache_read_tokens INTEGER NOT NULL DEFAULT 0,
-    cache_write_tokens INTEGER NOT NULL DEFAULT 0
+    cache_write_tokens INTEGER NOT NULL DEFAULT 0,
+    PRIMARY KEY (day, agent_name)
 );
 
+-- Day-level rollup. Sums across all agents on each day so the
+-- pre-multi-agent API (UsageTotals.byDay) keeps the same shape.
 selectAll:
-SELECT day, usd_total, input_tokens, output_tokens, cache_read_tokens, cache_write_tokens
+SELECT day,
+       SUM(usd_total) AS usd_total,
+       SUM(input_tokens) AS input_tokens,
+       SUM(output_tokens) AS output_tokens,
+       SUM(cache_read_tokens) AS cache_read_tokens,
+       SUM(cache_write_tokens) AS cache_write_tokens
 FROM usage_daily
+GROUP BY day
 ORDER BY day DESC;
 
+-- Single-day, single-agent — used internally by addToDay's read-back.
 selectDay:
-SELECT day, usd_total, input_tokens, output_tokens, cache_read_tokens, cache_write_tokens
+SELECT day,
+       SUM(usd_total) AS usd_total,
+       SUM(input_tokens) AS input_tokens,
+       SUM(output_tokens) AS output_tokens,
+       SUM(cache_read_tokens) AS cache_read_tokens,
+       SUM(cache_write_tokens) AS cache_write_tokens
 FROM usage_daily
-WHERE day = ?;
+WHERE day = ?
+GROUP BY day;
 
 selectLifetimeTotals:
 SELECT COALESCE(SUM(usd_total), 0.0) AS lifetime_usd,
@@ -37,11 +58,23 @@ SELECT COALESCE(SUM(usd_total), 0.0) AS lifetime_usd,
        COALESCE(SUM(cache_write_tokens), 0) AS lifetime_cache_write
 FROM usage_daily;
 
--- Atomic add: insert-or-add. SQLDelight 2.x supports ON CONFLICT DO UPDATE.
+-- Per-agent rollup across all days. For "where did my budget go" UIs.
+selectLifetimeByAgent:
+SELECT agent_name,
+       COALESCE(SUM(usd_total), 0.0) AS lifetime_usd,
+       COALESCE(SUM(input_tokens), 0) AS lifetime_input,
+       COALESCE(SUM(output_tokens), 0) AS lifetime_output,
+       COALESCE(SUM(cache_read_tokens), 0) AS lifetime_cache_read,
+       COALESCE(SUM(cache_write_tokens), 0) AS lifetime_cache_write
+FROM usage_daily
+GROUP BY agent_name
+ORDER BY lifetime_usd DESC;
+
+-- Atomic add: insert-or-add. Per-agent attribution via the composite PK.
 addToDay:
-INSERT INTO usage_daily(day, usd_total, input_tokens, output_tokens, cache_read_tokens, cache_write_tokens)
-VALUES (:day, :usd, :inputTokens, :outputTokens, :cacheReadTokens, :cacheWriteTokens)
-ON CONFLICT(day) DO UPDATE SET
+INSERT INTO usage_daily(day, agent_name, usd_total, input_tokens, output_tokens, cache_read_tokens, cache_write_tokens)
+VALUES (:day, :agentName, :usd, :inputTokens, :outputTokens, :cacheReadTokens, :cacheWriteTokens)
+ON CONFLICT(day, agent_name) DO UPDATE SET
     usd_total = usd_total + excluded.usd_total,
     input_tokens = input_tokens + excluded.input_tokens,
     output_tokens = output_tokens + excluded.output_tokens,

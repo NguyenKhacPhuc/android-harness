@@ -138,18 +138,28 @@ public class WeftAgent(
      */
     private val memoryRegistry: dev.weft.harness.memory.MemoryRegistry =
         dev.weft.harness.memory.MemoryRegistry(providers = emptyList()),
+    /**
+     * Per-agent loop policy. Read each turn for retry, cache, routing,
+     * and iteration cap. Defaults to [dev.weft.harness.agents.strategy.DefaultStrategy]
+     * which mirrors today's hardcoded values; passing a different impl
+     * ([dev.weft.harness.agents.strategy.FrugalStrategy] or a custom
+     * type) overrides those defaults. See
+     * `docs/architecture/strategy-hook.md` for the contract.
+     */
+    private val strategy: dev.weft.harness.agents.strategy.WeftStrategy =
+        dev.weft.harness.agents.strategy.DefaultStrategy(maxIterationsValue = maxIterations),
+    /**
+     * Name of the [AgentDeclaration] this agent was built from.
+     * Defaults to [AgentDeclaration.DEFAULT_AGENT_NAME] when constructed
+     * directly (tests, single-agent setups). [WeftRuntime.buildAgent]
+     * threads the declaration's name through automatically. Persisted on
+     * every conversation row so chat surfaces can label assistant turns
+     * by agent.
+     */
+    private val agentName: String = AgentDeclaration.DEFAULT_AGENT_NAME,
 ) {
     private val compactor = Compactor(behaviorConfig)
     private val history: MutableList<HistoryEntry> = mutableListOf()
-
-    /**
-     * Number of trailing turns kept VOLATILE (uncached). The last user
-     * message + its assistant reply almost always change between turns —
-     * caching them would just churn the cache. Everything older becomes
-     * a SESSION-tier cache candidate, with [cacheBinder] attaching the
-     * marker to the deepest user message in the older block.
-     */
-    private val historyVolatileTailTurns: Int = HISTORY_VOLATILE_TAIL_TURNS
 
     /**
      * Emit the compacted history into the active prompt builder, marking
@@ -158,18 +168,20 @@ public class WeftAgent(
      * share this so cache behavior stays identical across the two paths.
      */
     private fun ai.koog.prompt.dsl.PromptBuilder.emitCompactedHistory(compacted: List<Turn>) {
-        val older = compacted.dropLast(historyVolatileTailTurns)
+        val older = compacted.dropLast(strategy.historyVolatileTailTurns)
         // indexOfLast returns -1 when the older block has no User turn —
         // either it's empty or it's an all-Assistant fragment (unusual).
         // Either way the comparison below fails for every index and we
         // emit everything plain, which is fine.
         val sessionMarkerIdx = older.indexOfLast { it is Turn.User }
+        val olderTier = strategy.cacheTiers["history-older"]
+            ?: dev.weft.harness.prompt.cache.CacheTier.SESSION
         for ((idx, turn) in compacted.withIndex()) {
             when (turn) {
                 is Turn.System -> system(turn.text)
                 is Turn.User -> {
                     if (idx == sessionMarkerIdx) {
-                        cacheBinder.cachedUser(this, turn.text, dev.weft.harness.prompt.cache.CacheTier.SESSION)
+                        cacheBinder.cachedUser(this, turn.text, olderTier)
                     } else {
                         user(turn.text)
                     }
@@ -272,7 +284,7 @@ public class WeftAgent(
         ) {
         try {
             val reply = withRetry(
-                policy = retryPolicy,
+                policy = strategy.retry,
                 breaker = circuitBreaker,
                 onAttemptFailed = { attempt, cause, retryingInMs ->
                     _events.tryEmit(
@@ -293,8 +305,8 @@ public class WeftAgent(
             // conversation_history, same as before.
             conversationStore?.let { cs ->
                 val convId = _conversationId.value
-                cs.append(convId, PersistedRole.USER, userText)
-                cs.append(convId, PersistedRole.ASSISTANT, reply)
+                cs.append(convId, PersistedRole.USER, userText, agentName)
+                cs.append(convId, PersistedRole.ASSISTANT, reply, agentName)
             }
             // Trace gets the redacted version; the live reply returned to
             // the caller is unchanged so the chat UI shows the model's actual
@@ -380,7 +392,7 @@ public class WeftAgent(
         ) {
         try {
             val reply = withRetry(
-                policy = retryPolicy,
+                policy = strategy.retry,
                 breaker = circuitBreaker,
                 onAttemptFailed = { attempt, cause, retryingInMs ->
                     _events.tryEmit(
@@ -405,8 +417,8 @@ public class WeftAgent(
             history += HistoryEntry(Role.ASSISTANT, reply)
             conversationStore?.let { cs ->
                 val convId = _conversationId.value
-                cs.append(convId, PersistedRole.USER, userText)
-                cs.append(convId, PersistedRole.ASSISTANT, reply)
+                cs.append(convId, PersistedRole.USER, userText, agentName)
+                cs.append(convId, PersistedRole.ASSISTANT, reply, agentName)
             }
             traceStore.completeTrace(traceId, redactor.redact(reply))
             trySend(StreamChunk.Done(reply))
@@ -563,7 +575,11 @@ public class WeftAgent(
         val compacted = compactor.compact(turns)
 
         val initialPrompt: Prompt = prompt(id = "chat", params = LLMParams(maxTokens = maxOutputTokens)) {
-            cacheBinder.cachedSystem(this, systemMsg, dev.weft.harness.prompt.cache.CacheTier.STATIC)
+            cacheBinder.cachedSystem(
+                this,
+                systemMsg,
+                strategy.cacheTiers["system"] ?: dev.weft.harness.prompt.cache.CacheTier.STATIC,
+            )
             emitCompactedHistory(compacted)
         }
 
@@ -580,7 +596,10 @@ public class WeftAgent(
                 historyTurns = history.size,
                 availableTools = toolRegistry.tools.map { it.descriptor },
                 pool = modelPool,
-                tierHint = modelTier,
+                // User's explicit per-turn tier wins; otherwise the
+                // strategy gets a chance to pin; otherwise the router's
+                // input-shape heuristics decide.
+                tierHint = modelTier ?: strategy.pickTier(input, compacted),
             )
         )
 
@@ -589,7 +608,7 @@ public class WeftAgent(
             agentConfig = AIAgentConfig(
                 prompt = initialPrompt,
                 model = routedModel,
-                maxAgentIterations = maxIterations,
+                maxAgentIterations = strategy.maxIterations(input),
             ),
             // WeftUserInput-aware strategy: emits the live user turn as a
             // single Message.User with mixed text + attachment parts.
@@ -633,6 +652,7 @@ public class WeftAgent(
                             outputTokens = meta?.outputTokensCount ?: 0,
                             cacheReadTokens = cacheReadTokens ?: 0,
                             cacheWriteTokens = cacheWriteTokens ?: 0,
+                            agentName = agentName,
                         )
                     }
                     onToolCallStarting { ctx ->
@@ -698,7 +718,11 @@ public class WeftAgent(
         val compacted = compactor.compact(turns)
 
         val initialPrompt: Prompt = prompt(id = "chat-stream", params = LLMParams(maxTokens = maxOutputTokens)) {
-            cacheBinder.cachedSystem(this, systemMsg, dev.weft.harness.prompt.cache.CacheTier.STATIC)
+            cacheBinder.cachedSystem(
+                this,
+                systemMsg,
+                strategy.cacheTiers["system"] ?: dev.weft.harness.prompt.cache.CacheTier.STATIC,
+            )
             emitCompactedHistory(compacted)
         }
 
@@ -713,7 +737,10 @@ public class WeftAgent(
                 historyTurns = history.size,
                 availableTools = toolRegistry.tools.map { it.descriptor },
                 pool = modelPool,
-                tierHint = modelTier,
+                // User's explicit per-turn tier wins; otherwise the
+                // strategy gets a chance to pin; otherwise the router's
+                // input-shape heuristics decide.
+                tierHint = modelTier ?: strategy.pickTier(input, compacted),
             )
         )
 
@@ -721,7 +748,10 @@ public class WeftAgent(
         // Track per-streaming-call LLM trace ids so completion can wire up.
         var pendingLlmId: String? = null
 
-        val strategy = streamingSingleRunStrategy(
+        // Renamed from `strategy` to avoid shadowing the WeftStrategy
+        // field. This is the Koog AIAgent's run-strategy (turn-shape
+        // semantics), not the weft loop policy.
+        val runStrategy = streamingSingleRunStrategy(
             onTextDelta = { delta ->
                 replyBuilder.append(delta)
                 producerScope.trySend(StreamChunk.TextDelta(delta))
@@ -742,6 +772,7 @@ public class WeftAgent(
                         modelId = routedModel.id,
                         inputTokens = meta.inputTokensCount ?: 0,
                         outputTokens = meta.outputTokensCount ?: 0,
+                        agentName = agentName,
                     )
                 }
                 pendingLlmId = null
@@ -753,9 +784,9 @@ public class WeftAgent(
             agentConfig = AIAgentConfig(
                 prompt = initialPrompt,
                 model = routedModel,
-                maxAgentIterations = maxIterations,
+                maxAgentIterations = strategy.maxIterations(input),
             ),
-            strategy = strategy,
+            strategy = runStrategy,
             toolRegistry = toolRegistry,
             installFeatures = {
                 handleEvents {
@@ -815,13 +846,6 @@ public class WeftAgent(
         // Bigger trees still get truncated; the user can drill into the
         // trace in the viewer and see the args.
         private const val ARGS_PREVIEW_MAX = 8000
-
-        /**
-         * Tail of history kept VOLATILE — uncached. 2 keeps the last
-         * user+assistant pair off the cache (they change every turn);
-         * everything older is SESSION-cache eligible.
-         */
-        private const val HISTORY_VOLATILE_TAIL_TURNS = 2
     }
 }
 

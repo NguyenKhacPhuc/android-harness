@@ -33,6 +33,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.produceState
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
@@ -510,7 +511,15 @@ private fun AgentTrace.feedbackEmoji(): String? = when (feedback) {
  */
 @Composable
 private fun PromptTab(runtime: WeftRuntime) {
-    val prompt = remember(runtime) { runtime.systemPrompt }
+    // The synchronous `runtime.systemPrompt` reflects substrate + extra
+    // tools only; MCP tools join the catalog asynchronously when
+    // discovery completes. Show the resolved prompt as soon as it's
+    // ready, falling back to the pre-MCP snapshot during the brief
+    // discovery window. produceState handles cancellation if the tab
+    // closes mid-await.
+    val prompt by produceState(initialValue = runtime.systemPrompt, runtime) {
+        value = runtime.resolvedSystemPrompt()
+    }
     val clipboard = LocalClipboardManager.current
     val scope = rememberCoroutineScope()
 
@@ -556,8 +565,15 @@ private const val CHARS_PER_TOKEN = 4
  */
 @Composable
 private fun ToolsTab(runtime: WeftRuntime) {
-    val tools = remember(runtime) {
-        runtime.tools.sortedBy { it.descriptor.name }
+    // Pre-MCP snapshot while discovery is in flight; swap to the full
+    // resolved list (substrate + extra + MCP) once mcpToolsReady
+    // completes. Same pattern as PromptTab — sync fallback prevents an
+    // empty list during the discovery window.
+    val tools by produceState(
+        initialValue = runtime.tools.sortedBy { it.descriptor.name },
+        runtime,
+    ) {
+        value = runtime.resolvedTools().sortedBy { it.descriptor.name }
     }
     LazyColumn(verticalArrangement = Arrangement.spacedBy(6.dp)) {
         items(tools, key = { it.descriptor.name }) { tool ->

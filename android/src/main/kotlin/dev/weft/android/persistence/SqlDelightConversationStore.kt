@@ -106,6 +106,7 @@ public class SqlDelightConversationStore(
                         role = PersistedRole.valueOf(it.role),
                         content = it.content,
                         createdAtMs = it.created_at_ms,
+                        agentName = it.agent_name,
                     )
                 }
             }
@@ -123,7 +124,12 @@ public class SqlDelightConversationStore(
                 )
             }
 
-    public override suspend fun append(conversationId: String, role: PersistedRole, content: String) {
+    public override suspend fun append(
+        conversationId: String,
+        role: PersistedRole,
+        content: String,
+        agentName: String,
+    ) {
         val now = System.currentTimeMillis()
         val msgId = "msg-${UUID.randomUUID().toString().take(MESSAGE_ID_LEN)}"
         db.conversationsQueries.transaction {
@@ -135,6 +141,7 @@ public class SqlDelightConversationStore(
                 role = role.name,
                 content = content,
                 created_at_ms = now,
+                agent_name = agentName,
             )
             db.conversationsQueries.bumpConversationLastMessage(nowMs = now, id = conversationId)
             // Title comes from the first user message, truncated. Lazy-set so

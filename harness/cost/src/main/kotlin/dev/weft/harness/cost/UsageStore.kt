@@ -30,6 +30,13 @@ public interface UsageStore {
     /**
      * Record an LLM call's usage. Returns the per-call cost in USD; the
      * UI displays this as a "this call cost $X" badge.
+     *
+     * [agentName] attributes the spend to a registered
+     * [AgentDeclaration][dev.weft.harness.agents.AgentDeclaration].
+     * Defaults to `"default"` so single-agent callers don't have to
+     * thread anything new. Multi-agent hosts populate this so the
+     * per-agent cost breakdown (`UsageTotals.byAgent`,
+     * `selectLifetimeByAgent` SQL query) is queryable.
      */
     public fun record(
         modelId: String,
@@ -37,6 +44,7 @@ public interface UsageStore {
         outputTokens: Int,
         cacheReadTokens: Int = 0,
         cacheWriteTokens: Int = 0,
+        agentName: String = DEFAULT_AGENT_NAME,
     ): Double
 
     /** Convenience: today's spend per the implementation's clock. */
@@ -44,6 +52,16 @@ public interface UsageStore {
 
     /** Wipe all aggregates. Used by the "reset usage" admin action. */
     public fun reset()
+
+    public companion object {
+        /**
+         * Canonical name for the auto-default agent — kept in sync
+         * with `AgentDeclaration.DEFAULT_AGENT_NAME` and
+         * `ConversationStore.DEFAULT_AGENT_NAME`. Duplicated here to
+         * keep `:harness:cost` free of a back-dep on `:harness:agents`.
+         */
+        public const val DEFAULT_AGENT_NAME: String = "default"
+    }
 }
 
 /**
@@ -66,6 +84,7 @@ public class InMemoryUsageStore(
         outputTokens: Int,
         cacheReadTokens: Int,
         cacheWriteTokens: Int,
+        agentName: String,
     ): Double {
         val price = priceTable.lookup(modelId) ?: return 0.0
         val cost = price.costUsd(
@@ -77,6 +96,7 @@ public class InMemoryUsageStore(
         val today = nowProvider().toString()
         _totals.update { current ->
             val newToday = current.byDay[today]?.plus(cost) ?: cost
+            val newAgentTotal = current.byAgent[agentName]?.plus(cost) ?: cost
             current.copy(
                 lifetimeUsd = current.lifetimeUsd + cost,
                 lifetimeInputTokens = current.lifetimeInputTokens + inputTokens,
@@ -84,6 +104,7 @@ public class InMemoryUsageStore(
                 lifetimeCacheReadTokens = current.lifetimeCacheReadTokens + cacheReadTokens,
                 lifetimeCacheWriteTokens = current.lifetimeCacheWriteTokens + cacheWriteTokens,
                 byDay = current.byDay + (today to newToday),
+                byAgent = current.byAgent + (agentName to newAgentTotal),
                 lastCallUsd = cost,
                 lastCallTokens = inputTokens + outputTokens,
                 lastCallModelId = modelId,
@@ -114,6 +135,13 @@ public data class UsageTotals(
     /** Cumulative cache-write input tokens — billed at ~1.25× base on Anthropic. */
     val lifetimeCacheWriteTokens: Int = 0,
     val byDay: Map<String, Double> = emptyMap(),
+    /**
+     * Lifetime USD by registered agent name. Single-agent apps see
+     * one entry under `"default"`; multi-agent hosts get the
+     * per-agent breakdown the "where did my budget go" UI needs.
+     * Populated by [UsageStore.record]'s `agentName` parameter.
+     */
+    val byAgent: Map<String, Double> = emptyMap(),
     val lastCallUsd: Double = 0.0,
     val lastCallTokens: Int = 0,
     val lastCallModelId: String? = null,

@@ -45,8 +45,18 @@ public interface ConversationStore {
     /** One-shot load for restoring agent history at startup. */
     public suspend fun loadMessages(conversationId: String): List<PersistedMessage>
 
-    /** Append a turn. The store handles seq + last-activity bookkeeping. */
-    public suspend fun append(conversationId: String, role: PersistedRole, content: String)
+    /**
+     * Append a turn. The store handles seq + last-activity bookkeeping.
+     * [agentName] identifies which registered agent produced this turn
+     * (multi-agent attribution); defaults to `"default"` so single-agent
+     * callers don't need to thread anything new.
+     */
+    public suspend fun append(
+        conversationId: String,
+        role: PersistedRole,
+        content: String,
+        agentName: String = DEFAULT_AGENT_NAME,
+    )
 
     /** Drop a single thread and all its messages. */
     public suspend fun deleteConversation(conversationId: String)
@@ -75,6 +85,16 @@ public interface ConversationStore {
 
     /** Wipe every thread + message. Used by "clear all history" affordances. */
     public suspend fun clearAll()
+
+    public companion object {
+        /**
+         * Canonical name for the auto-default agent. Mirrors
+         * `AgentDeclaration.DEFAULT_AGENT_NAME` in `:harness:agents` —
+         * duplicated here to keep `:harness:conversation` free of a
+         * cyclic dependency on `:harness:agents`.
+         */
+        public const val DEFAULT_AGENT_NAME: String = "default"
+    }
 }
 
 public data class ConversationSummary(
@@ -91,6 +111,13 @@ public data class PersistedMessage(
     val role: PersistedRole,
     val content: String,
     val createdAtMs: Long,
+    /**
+     * Which registered agent produced this turn. `"default"` for
+     * single-agent apps and any rows that predate the multi-agent
+     * registry. Apps render this as a small label next to assistant
+     * bubbles when more than one agent is registered.
+     */
+    val agentName: String = ConversationStore.DEFAULT_AGENT_NAME,
 )
 
 public enum class PersistedRole { USER, ASSISTANT }

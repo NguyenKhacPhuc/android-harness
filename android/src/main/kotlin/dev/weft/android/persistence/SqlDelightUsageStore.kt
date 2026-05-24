@@ -56,14 +56,16 @@ public class SqlDelightUsageStore(
 
     public override val totals: StateFlow<UsageTotals> = combine(
         db.usageQueries.selectAll().asFlow().mapToList(Dispatchers.IO),
+        db.usageQueries.selectLifetimeByAgent().asFlow().mapToList(Dispatchers.IO),
         volatileBump,
-    ) { rows, _ ->
-        val byDay = rows.associate { it.day to it.usd_total }
-        val lifetimeUsd = rows.sumOf { it.usd_total }
-        val lifetimeInput = rows.sumOf { it.input_tokens }
-        val lifetimeOutput = rows.sumOf { it.output_tokens }
-        val lifetimeCacheRead = rows.sumOf { it.cache_read_tokens }
-        val lifetimeCacheWrite = rows.sumOf { it.cache_write_tokens }
+    ) { dayRows, agentRows, _ ->
+        val byDay = dayRows.associate { it.day to (it.usd_total ?: 0.0) }
+        val byAgent = agentRows.associate { it.agent_name to it.lifetime_usd }
+        val lifetimeUsd = dayRows.sumOf { it.usd_total ?: 0.0 }
+        val lifetimeInput = dayRows.sumOf { it.input_tokens ?: 0L }
+        val lifetimeOutput = dayRows.sumOf { it.output_tokens ?: 0L }
+        val lifetimeCacheRead = dayRows.sumOf { it.cache_read_tokens ?: 0L }
+        val lifetimeCacheWrite = dayRows.sumOf { it.cache_write_tokens ?: 0L }
         UsageTotals(
             lifetimeUsd = lifetimeUsd,
             lifetimeInputTokens = lifetimeInput.toInt(),
@@ -71,6 +73,7 @@ public class SqlDelightUsageStore(
             lifetimeCacheReadTokens = lifetimeCacheRead.toInt(),
             lifetimeCacheWriteTokens = lifetimeCacheWrite.toInt(),
             byDay = byDay,
+            byAgent = byAgent,
             lastCallUsd = lastCallUsd,
             lastCallTokens = lastCallTokens,
             lastCallModelId = lastCallModelId,
@@ -85,6 +88,7 @@ public class SqlDelightUsageStore(
         outputTokens: Int,
         cacheReadTokens: Int,
         cacheWriteTokens: Int,
+        agentName: String,
     ): Double {
         val price = priceTable.lookup(modelId) ?: return 0.0
         val cost = price.costUsd(
@@ -96,6 +100,7 @@ public class SqlDelightUsageStore(
         val today = nowProvider().toString()
         db.usageQueries.addToDay(
             day = today,
+            agentName = agentName,
             usd = cost,
             inputTokens = inputTokens.toLong(),
             outputTokens = outputTokens.toLong(),
@@ -115,6 +120,8 @@ public class SqlDelightUsageStore(
 
     public override fun usdToday(): Double {
         val today = nowProvider().toString()
+        // SUM in selectDay produces a nullable Double; ?: 0.0 collapses
+        // the "no row for today" case.
         return db.usageQueries.selectDay(today).executeAsOneOrNull()?.usd_total ?: 0.0
     }
 

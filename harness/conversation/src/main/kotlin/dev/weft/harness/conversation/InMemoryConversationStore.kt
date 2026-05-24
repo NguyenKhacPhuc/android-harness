@@ -83,7 +83,12 @@ public class InMemoryConversationStore(
     public override suspend fun loadMessages(conversationId: String): List<PersistedMessage> =
         synchronized(lock) { messagesByThread[conversationId]?.toList().orEmpty() }
 
-    public override suspend fun append(conversationId: String, role: PersistedRole, content: String) {
+    public override suspend fun append(
+        conversationId: String,
+        role: PersistedRole,
+        content: String,
+        agentName: String,
+    ) {
         val now = clock()
         val msgId = "msg-${UUID.randomUUID().toString().take(MESSAGE_ID_LEN)}"
         synchronized(lock) {
@@ -96,6 +101,7 @@ public class InMemoryConversationStore(
                 role = role,
                 content = content,
                 createdAtMs = now,
+                agentName = agentName,
             )
             _conversations.value = _conversations.value.map { s ->
                 if (s.id != conversationId) s

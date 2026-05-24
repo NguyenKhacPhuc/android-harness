@@ -1,0 +1,12 @@
+-- Migration 4 → 5.
+--
+-- Adds `agent_name` to the `messages` table so the substrate can
+-- attribute each persisted assistant turn to the AgentDeclaration that
+-- produced it. Single-agent apps and any pre-multi-agent rows fill
+-- this column with 'default' via the DEFAULT clause; multi-agent apps
+-- populate with the agent's registered name.
+--
+-- Non-null with a default of 'default', so existing rows back-fill
+-- automatically without a separate UPDATE pass.
+
+ALTER TABLE messages ADD COLUMN agent_name TEXT NOT NULL DEFAULT 'default';

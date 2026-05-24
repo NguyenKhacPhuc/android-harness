@@ -29,7 +29,13 @@ CREATE TABLE messages (
     seq INTEGER NOT NULL,
     role TEXT NOT NULL,
     content TEXT NOT NULL,
-    created_at_ms INTEGER NOT NULL
+    created_at_ms INTEGER NOT NULL,
+    -- Which registered AgentDeclaration produced this turn. 'default'
+    -- for single-agent setups and any pre-multi-agent rows (filled in
+    -- by 4.sqm). Multi-agent apps populate with the AgentDeclaration's
+    -- name so the chat UI can label assistant turns and the LLM
+    -- routing logic can resume conversations under the same agent.
+    agent_name TEXT NOT NULL DEFAULT 'default'
 );
 
 CREATE INDEX messages_by_conversation ON messages(conversation_id, seq);
@@ -98,7 +104,7 @@ DELETE FROM conversations;
 -- ============================================================================
 
 selectMessagesByConversation:
-SELECT id, conversation_id, seq, role, content, created_at_ms
+SELECT id, conversation_id, seq, role, content, created_at_ms, agent_name
 FROM messages
 WHERE conversation_id = ?
 ORDER BY seq ASC;
@@ -107,8 +113,8 @@ nextMessageSeq:
 SELECT COALESCE(MAX(seq), -1) + 1 FROM messages WHERE conversation_id = ?;
 
 insertMessage:
-INSERT INTO messages(id, conversation_id, seq, role, content, created_at_ms)
-VALUES (?, ?, ?, ?, ?, ?);
+INSERT INTO messages(id, conversation_id, seq, role, content, created_at_ms, agent_name)
+VALUES (?, ?, ?, ?, ?, ?, ?);
 
 deleteMessagesByConversation:
 DELETE FROM messages WHERE conversation_id = ?;
