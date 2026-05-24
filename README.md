@@ -12,7 +12,7 @@ plug in custom tools and custom UI components without touching the
 agent loop.
 
 **Status:** pre-1.0, actively developed. Used in production by the
-[Undercurrent](https://github.com/NguyenKhacPhuc) reference app (sibling
+[Undercurrent](https://github.com/NguyenKhacPhuc/undercurrent) reference app (sibling
 repo). API surfaces stabilize before each Undercurrent release; expect
 breaking changes between minor versions until 1.0.
 
@@ -98,13 +98,13 @@ agent.sendStreaming("What's on my calendar today?").collect { chunk ->
 }
 ```
 
-See the [Undercurrent app](https://github.com/NguyenKhacPhuc) for a
+See the [Undercurrent app](https://github.com/NguyenKhacPhuc/undercurrent) for a
 complete wiring (MVI store, Koin DI, theming, multi-provider key vault,
 persona system, settings surfaces).
 
 ## Reference app
 
-[Undercurrent](https://github.com/NguyenKhacPhuc) is a personal-assistant
+[Undercurrent](https://github.com/NguyenKhacPhuc/undercurrent) is a personal-assistant
 app built end-to-end on Weft. It exercises the full surface area:
 streaming chat, multi-provider key management, custom personas, custom
 agent tools (theme switching, persona selection from chat),
