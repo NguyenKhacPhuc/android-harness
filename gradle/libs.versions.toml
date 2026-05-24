@@ -1,0 +1,142 @@
+[versions]
+# Toolchain
+kotlin = "2.2.21"
+agp = "8.7.3"
+java = "17"
+
+# Android SDKs
+compileSdk = "35"
+minSdk = "26"
+targetSdk = "35"
+
+# Compose (Android)
+composeBom = "2025.01.00"
+activityCompose = "1.9.3"
+
+# Coroutines & Serialization
+coroutines = "1.9.0"
+serializationJson = "1.7.3"
+
+# Networking & HTTP
+ktor = "3.0.1"
+
+# Koog (JetBrains agent framework) — see docs/adr/ADR-006-koog-adoption.md
+koog = "1.0.0"
+
+# Storage
+sqldelight = "2.0.2"
+# Bundled SQLite for Android — guarantees FTS5 + modern SQLite features
+# regardless of the device's framework version. See SubstrateDatabaseFactory.
+# Osmerion is the maintained fork of requery/sqlite-android, hosted on
+# Maven Central with full ABI coverage (arm64-v8a, armeabi-v7a, x86, x86_64).
+osmerionSqlite = "0.3.0"
+
+# AndroidX Security (Keystore + EncryptedSharedPreferences)
+androidxSecurity = "1.1.0-alpha06"
+
+# Coil — image loading for the Image component
+coil = "2.7.0"
+
+# Logging
+slf4j = "2.0.16"
+
+# Test
+junit = "5.11.3"
+kotest = "5.9.1"
+turbine = "1.2.0"
+
+# Lint
+detekt = "1.23.7"
+
+[libraries]
+# kotlinx
+kotlinx-coroutines-core = { module = "org.jetbrains.kotlinx:kotlinx-coroutines-core", version.ref = "coroutines" }
+kotlinx-coroutines-android = { module = "org.jetbrains.kotlinx:kotlinx-coroutines-android", version.ref = "coroutines" }
+kotlinx-coroutines-test = { module = "org.jetbrains.kotlinx:kotlinx-coroutines-test", version.ref = "coroutines" }
+kotlinx-serialization-json = { module = "org.jetbrains.kotlinx:kotlinx-serialization-json", version.ref = "serializationJson" }
+kotlinx-datetime = { module = "org.jetbrains.kotlinx:kotlinx-datetime", version = "0.6.1" }
+
+# Compose (Android)
+androidx-compose-bom = { module = "androidx.compose:compose-bom", version.ref = "composeBom" }
+androidx-activity-compose = { module = "androidx.activity:activity-compose", version.ref = "activityCompose" }
+androidx-compose-ui = { module = "androidx.compose.ui:ui" }
+androidx-compose-ui-tooling = { module = "androidx.compose.ui:ui-tooling" }
+androidx-compose-ui-tooling-preview = { module = "androidx.compose.ui:ui-tooling-preview" }
+androidx-compose-foundation = { module = "androidx.compose.foundation:foundation" }
+androidx-compose-material3 = { module = "androidx.compose.material3:material3" }
+
+# Ktor
+ktor-client-core = { module = "io.ktor:ktor-client-core", version.ref = "ktor" }
+ktor-client-content-negotiation = { module = "io.ktor:ktor-client-content-negotiation", version.ref = "ktor" }
+ktor-client-okhttp = { module = "io.ktor:ktor-client-okhttp", version.ref = "ktor" }
+
+# OkHttp version-alignment patch. Koog's AWS Smithy http engine pulls
+# OkHttp 5.3.2; Ktor's ktor-client-okhttp brings in OkHttp 4.12.0 + the
+# matching `okhttp-sse:4.12.0`. Gradle resolves core OkHttp to 5.3.2 (the
+# higher of the two) but `okhttp-sse` stays at 4.12.0 unless we force it
+# explicitly. The mismatch crashes streaming because 4.12.0's
+# `RealEventSource` references `okhttp3.internal.Util` which 5.x moved.
+# Forcing the SSE module to 5.3.2 keeps the pair coherent.
+okhttp-sse = { module = "com.squareup.okhttp3:okhttp-sse", version = "5.3.2" }
+ktor-client-mock = { module = "io.ktor:ktor-client-mock", version.ref = "ktor" }
+ktor-serialization-kotlinx-json = { module = "io.ktor:ktor-serialization-kotlinx-json", version.ref = "ktor" }
+
+# AndroidX
+androidx-security-crypto = { module = "androidx.security:security-crypto", version.ref = "androidxSecurity" }
+androidx-core-ktx = { module = "androidx.core:core-ktx", version = "1.13.1" }
+androidx-browser = { module = "androidx.browser:browser", version = "1.8.0" }
+androidx-biometric = { module = "androidx.biometric:biometric", version = "1.1.0" }
+
+# PDFBox-Android — Tom Roush's port of Apache PDFBox. The only viable
+# Android library for *text extraction* from PDFs (the platform's
+# PdfRenderer only renders pages to bitmaps). ~5 MB AAR. We use it for
+# both `pdf_read` (extractText) and `pdf_create` (PDPageContentStream).
+pdfbox-android = { module = "com.tom-roush:pdfbox-android", version = "2.0.27.0" }
+androidx-fragment-ktx = { module = "androidx.fragment:fragment-ktx", version = "1.8.5" }
+androidx-activity = { module = "androidx.activity:activity", version.ref = "activityCompose" }
+
+# ML Kit (on-device vision)
+mlkit-text-recognition = { module = "com.google.mlkit:text-recognition", version = "16.0.1" }
+mlkit-barcode-scanning = { module = "com.google.mlkit:barcode-scanning", version = "17.3.0" }
+
+# Google Play services
+play-services-location = { module = "com.google.android.gms:play-services-location", version = "21.3.0" }
+
+# Koog
+koog-agents = { module = "ai.koog:koog-agents", version.ref = "koog" }
+# OpenRouter client: 1.0.0 published, native Koog support. Google +
+# DeepSeek clients were only published at 0.8.0; for DeepSeek we use the
+# OpenAI-compatible path (api.deepseek.com via OpenAILLMClient). Gemini
+# needs a custom LLMClient until Koog republishes — deferred.
+koog-prompt-executor-openrouter-client = { module = "ai.koog:prompt-executor-openrouter-client", version.ref = "koog" }
+
+# Coil
+coil-compose = { module = "io.coil-kt:coil-compose", version.ref = "coil" }
+
+# SQLDelight
+sqldelight-android-driver = { module = "app.cash.sqldelight:android-driver", version.ref = "sqldelight" }
+sqldelight-sqlite-driver = { module = "app.cash.sqldelight:sqlite-driver", version.ref = "sqldelight" }
+sqldelight-coroutines-extensions = { module = "app.cash.sqldelight:coroutines-extensions", version.ref = "sqldelight" }
+
+# Osmerion's bundled SQLite for Android — ships a modern SQLite with FTS5
+# always compiled in so we don't depend on whatever the device's framework
+# SQLite happens to support. AndroidSqliteDriver takes a custom
+# SupportSQLiteOpenHelper.Factory; we feed it OsmerionSQLiteOpenHelperFactory.
+osmerion-sqlite-android = { module = "com.osmerion.sqlite.android:sqlite-android", version.ref = "osmerionSqlite" }
+
+# Test
+junit-jupiter = { module = "org.junit.jupiter:junit-jupiter", version.ref = "junit" }
+kotest-runner-junit5 = { module = "io.kotest:kotest-runner-junit5", version.ref = "kotest" }
+kotest-assertions-core = { module = "io.kotest:kotest-assertions-core", version.ref = "kotest" }
+turbine = { module = "app.cash.turbine:turbine", version.ref = "turbine" }
+
+[plugins]
+kotlin-multiplatform = { id = "org.jetbrains.kotlin.multiplatform", version.ref = "kotlin" }
+kotlin-android = { id = "org.jetbrains.kotlin.android", version.ref = "kotlin" }
+kotlin-jvm = { id = "org.jetbrains.kotlin.jvm", version.ref = "kotlin" }
+kotlin-serialization = { id = "org.jetbrains.kotlin.plugin.serialization", version.ref = "kotlin" }
+kotlin-compose = { id = "org.jetbrains.kotlin.plugin.compose", version.ref = "kotlin" }
+android-application = { id = "com.android.application", version.ref = "agp" }
+android-library = { id = "com.android.library", version.ref = "agp" }
+sqldelight = { id = "app.cash.sqldelight", version.ref = "sqldelight" }
+detekt = { id = "io.gitlab.arturbosch.detekt", version.ref = "detekt" }

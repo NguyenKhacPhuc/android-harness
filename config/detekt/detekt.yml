@@ -1,0 +1,25 @@
+# Detekt rules. Start lax during Phase 0; tighten as the codebase grows.
+# Inherits defaults; this file overrides selectively.
+
+build:
+  maxIssues: 0
+  excludeCorrectable: false
+
+style:
+  MagicNumber:
+    active: false  # design-system tokens (16, 24, 32, etc.) hit this constantly
+  MaxLineLength:
+    maxLineLength: 140
+  WildcardImport:
+    active: true
+
+complexity:
+  TooManyFunctions:
+    thresholdInClasses: 30
+    thresholdInFiles: 30
+  LongMethod:
+    threshold: 80
+
+formatting:
+  active: true
+  android: false

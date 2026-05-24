@@ -1,0 +1,111 @@
+<?xml version="1.0" encoding="utf-8"?>
+<manifest xmlns:android="http://schemas.android.com/apk/res/android">
+
+    <!-- Notifications: required on API 33+ (Android 13). -->
+    <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
+
+    <!--
+        Exact alarm scheduling. Required for time-precise reminders on API 31+.
+        The user can also schedule inexact alarms without this permission;
+        substrate scripts that need precision request it; others fall back.
+    -->
+    <uses-permission android:name="android.permission.SCHEDULE_EXACT_ALARM" />
+    <uses-permission android:name="android.permission.USE_EXACT_ALARM" />
+
+    <!-- Contacts read (contacts_read tool). Runtime-requested on API 23+. -->
+    <uses-permission android:name="android.permission.READ_CONTACTS" />
+
+    <!-- Calendar read/write (calendar_read, calendar_create, calendar_update, calendar_delete). Runtime-requested on API 23+. -->
+    <uses-permission android:name="android.permission.READ_CALENDAR" />
+    <uses-permission android:name="android.permission.WRITE_CALENDAR" />
+
+    <!-- Vibration for haptics_feedback. "Normal" permission — no runtime prompt. -->
+    <uses-permission android:name="android.permission.VIBRATE" />
+
+    <!-- Biometric authentication for biometric_authenticate. "Normal" permission since API 28. -->
+    <uses-permission android:name="android.permission.USE_BIOMETRIC" />
+
+    <!-- Location for location_current. Runtime-requested on API 23+. We declare both
+         fine and coarse so the user can grant the lower-precision option if they prefer. -->
+    <uses-permission android:name="android.permission.ACCESS_FINE_LOCATION" />
+    <uses-permission android:name="android.permission.ACCESS_COARSE_LOCATION" />
+
+    <!-- Microphone for audio_record. Runtime-requested on API 23+. -->
+    <uses-permission android:name="android.permission.RECORD_AUDIO" />
+
+    <!--
+        camera_capture delegates to the system camera via ACTION_IMAGE_CAPTURE,
+        so the substrate does NOT declare android.permission.CAMERA — the
+        system camera app handles its own permissioning. Apps that want to
+        use Camera2 / CameraX directly should override the Camera contract
+        and declare CAMERA themselves.
+
+        We DO declare the camera feature as optional so Play Store can
+        surface the app to non-camera devices (tablets without cameras) —
+        the capability detects missing hardware and returns null gracefully.
+    -->
+    <uses-feature android:name="android.hardware.camera.any" android:required="false" />
+
+    <!--
+        Android 11+ package visibility: declare which intent shapes the
+        substrate's tools may resolve. Browsers (http/https), tel, mailto,
+        sms, the standard share/text type for external_share, and the
+        system camera (ACTION_IMAGE_CAPTURE) for camera_capture.
+    -->
+    <queries>
+        <intent>
+            <action android:name="android.intent.action.VIEW" />
+            <data android:scheme="https" />
+        </intent>
+        <intent>
+            <action android:name="android.intent.action.VIEW" />
+            <data android:scheme="http" />
+        </intent>
+        <intent>
+            <action android:name="android.intent.action.VIEW" />
+            <data android:scheme="tel" />
+        </intent>
+        <intent>
+            <action android:name="android.intent.action.VIEW" />
+            <data android:scheme="mailto" />
+        </intent>
+        <intent>
+            <action android:name="android.intent.action.VIEW" />
+            <data android:scheme="sms" />
+        </intent>
+        <intent>
+            <action android:name="android.intent.action.SEND" />
+            <data android:mimeType="text/plain" />
+        </intent>
+        <intent>
+            <action android:name="android.media.action.IMAGE_CAPTURE" />
+        </intent>
+    </queries>
+
+    <application>
+        <!--
+            Receiver that AlarmManager fires when a scheduled notification's time
+            arrives. The receiver posts the notification on the default channel.
+        -->
+        <receiver
+            android:name="dev.weft.osbridge.notifications.NotificationReceiver"
+            android:exported="false" />
+
+        <!--
+            FileProvider for files_save / files_share. Authority is keyed by the
+            consuming app's applicationId so multiple substrate-based apps can
+            coexist without clashing. Paths are restricted to Context.filesDir
+            via res/xml/substrate_file_paths.xml.
+        -->
+        <provider
+            android:name="androidx.core.content.FileProvider"
+            android:authorities="${applicationId}.fileprovider"
+            android:exported="false"
+            android:grantUriPermissions="true">
+            <meta-data
+                android:name="android.support.FILE_PROVIDER_PATHS"
+                android:resource="@xml/substrate_file_paths" />
+        </provider>
+    </application>
+
+</manifest>

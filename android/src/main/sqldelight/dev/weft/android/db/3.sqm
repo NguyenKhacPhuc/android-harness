@@ -1,0 +1,17 @@
+-- Migration 3 → 4.
+--
+-- Adds `parent_trace_id` to the `traces` table so sub-agent traces can
+-- be linked back to the orchestrator's delegation tool call.
+-- Top-level (user-initiated) traces leave the column null; sub-agent
+-- traces fill it with the parent's trace id. DevTools uses the link
+-- to render nested traces under their parent.
+--
+-- Nullable column with no default — existing rows get NULL, which is
+-- the correct value for traces that pre-date sub-agent support.
+
+ALTER TABLE traces ADD COLUMN parent_trace_id TEXT;
+
+-- Index for DevTools' "find this parent's children" query. IF NOT
+-- EXISTS so re-running the migration is a no-op (matches the
+-- defensive pattern documented in MIGRATIONS.md).
+CREATE INDEX IF NOT EXISTS traces_by_parent ON traces(parent_trace_id);

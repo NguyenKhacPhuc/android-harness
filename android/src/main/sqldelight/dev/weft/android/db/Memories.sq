@@ -1,0 +1,86 @@
+-- Weft's memory store. Per ADR-002, every entry is user-visible and
+-- deletable from AgentMemoriesScreen.
+--
+-- Tags are stored as a JSON array (TEXT) so we don't need a separate
+-- join table. Substring search is LIKE for v1; FTS5 is a future
+-- enhancement (see docs/follow-ups.md).
+
+CREATE TABLE memories (
+    id TEXT NOT NULL PRIMARY KEY,
+    content TEXT NOT NULL,
+    tags_json TEXT NOT NULL,
+    scope TEXT NOT NULL,
+    stored_at_ms INTEGER NOT NULL
+);
+
+CREATE INDEX memories_by_stored_at ON memories(stored_at_ms DESC);
+CREATE INDEX memories_by_scope ON memories(scope);
+
+selectAll:
+SELECT id, content, tags_json, scope, stored_at_ms
+FROM memories
+ORDER BY stored_at_ms DESC;
+
+selectMatching:
+SELECT id, content, tags_json, scope, stored_at_ms
+FROM memories
+WHERE (:scope = 'ANY' OR scope = :scope)
+  AND (:query = '' OR LOWER(content) LIKE '%' || LOWER(:query) || '%' OR LOWER(tags_json) LIKE '%' || LOWER(:query) || '%')
+ORDER BY stored_at_ms DESC
+LIMIT :limit;
+
+insert:
+INSERT INTO memories(id, content, tags_json, scope, stored_at_ms)
+VALUES (?, ?, ?, ?, ?);
+
+deleteById:
+DELETE FROM memories WHERE id = ?;
+
+deleteAll:
+DELETE FROM memories;
+
+deleteByScope:
+DELETE FROM memories WHERE scope = :scope;
+
+-- FTS5 virtual table + sync triggers. Added in migration 1.sqm; declared here
+-- so fresh installs get the same shape via Schema.create() without needing
+-- to run the migration. External-content FTS5 — the virtual table stores
+-- only the inverted index, pointing back at memories.rowid.
+
+CREATE VIRTUAL TABLE memories_fts USING fts5(
+    content,
+    tags_json,
+    content='memories',
+    content_rowid='rowid',
+    tokenize='unicode61 remove_diacritics 2'
+);
+
+CREATE TRIGGER memories_fts_ai AFTER INSERT ON memories BEGIN
+    INSERT INTO memories_fts(rowid, content, tags_json)
+    VALUES (new.rowid, new.content, new.tags_json);
+END;
+
+CREATE TRIGGER memories_fts_ad AFTER DELETE ON memories BEGIN
+    INSERT INTO memories_fts(memories_fts, rowid, content, tags_json)
+    VALUES ('delete', old.rowid, old.content, old.tags_json);
+END;
+
+CREATE TRIGGER memories_fts_au AFTER UPDATE ON memories BEGIN
+    INSERT INTO memories_fts(memories_fts, rowid, content, tags_json)
+    VALUES ('delete', old.rowid, old.content, old.tags_json);
+    INSERT INTO memories_fts(rowid, content, tags_json)
+    VALUES (new.rowid, new.content, new.tags_json);
+END;
+
+-- FTS5 MATCH search. The :query is a raw FTS5 expression; callers should
+-- escape user input (quote phrases, append `*` for prefix match).
+-- bm25 ranks by tf-idf — lower (more negative) is better — so ascending
+-- sort surfaces the most relevant hit first.
+selectMatchingFts:
+SELECT m.id, m.content, m.tags_json, m.scope, m.stored_at_ms
+FROM memories m
+JOIN memories_fts f ON f.rowid = m.rowid
+WHERE (:scope = 'ANY' OR m.scope = :scope)
+  AND memories_fts MATCH :query
+ORDER BY bm25(memories_fts) ASC
+LIMIT :limit;

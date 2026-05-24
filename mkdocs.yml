@@ -1,0 +1,67 @@
+site_name: Mobile Agent Substrate
+site_description: An open-source Kotlin Multiplatform substrate for LLM-orchestrated native mobile apps.
+site_url: https://example.invalid  # replace with the real URL when hosted
+repo_url: https://github.com/example/mobile-agent-substrate  # replace
+edit_uri: edit/main/docs/
+
+theme:
+  name: material
+  features:
+    - navigation.tabs
+    - navigation.sections
+    - navigation.expand
+    - content.code.copy
+    - content.action.edit
+    - toc.follow
+  palette:
+    - media: "(prefers-color-scheme: light)"
+      scheme: default
+      toggle:
+        icon: material/weather-night
+        name: Switch to dark mode
+    - media: "(prefers-color-scheme: dark)"
+      scheme: slate
+      toggle:
+        icon: material/weather-sunny
+        name: Switch to light mode
+
+markdown_extensions:
+  - admonition
+  - pymdownx.highlight
+  - pymdownx.superfences
+  - pymdownx.tabbed:
+      alternate_style: true
+  - pymdownx.tasklist:
+      custom_checkbox: true
+  - attr_list
+  - md_in_html
+  - tables
+  - toc:
+      permalink: true
+
+nav:
+  - Home: 00-README.md
+  - Plan:
+    - Vision & Scope: 01-vision-and-scope.md
+    - Architecture: 02-architecture.md
+    - Modules: 03-modules.md
+    - Locked Interfaces: 04-locked-interfaces.md
+    - Script Catalog: 05-script-catalog.md
+    - Design System: 06-design-system.md
+    - Harness: 07-harness.md
+    - Security & Compliance: 08-security-and-compliance.md
+    - Roadmap: 09-roadmap.md
+    - Ownership & Process: 10-ownership-and-process.md
+    - Risks & Mitigations: 11-risks-and-mitigations.md
+    - First Week: 12-first-week.md
+    - v1.1 Backlog: 13-v1.1-backlog.md
+    - Follow-ups (implementation deferrals): follow-ups.md
+  - Decisions:
+    - ADR-001 No streaming in v1: adr/ADR-001-no-streaming-in-v1.md
+    - ADR-002 Explicit memory only: adr/ADR-002-explicit-memory-only.md
+    - ADR-003 Compose + SwiftUI: adr/ADR-003-compose-swiftui-strategy.md
+    - ADR-004 Middleware pattern: adr/ADR-004-middleware-over-extension-point.md
+    - ADR-005 SemanticIntent location: adr/ADR-005-semantic-intent-location.md
+    - ADR-006 Koog as agent foundation: adr/ADR-006-koog-as-agent-foundation.md
+  - Modules:
+    - Template: modules/_template.md

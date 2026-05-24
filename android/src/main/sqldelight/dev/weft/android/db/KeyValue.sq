@@ -1,0 +1,39 @@
+-- Generic namespaced key-value store. Used by both ScriptStorage
+-- (namespace = tool name) and ScheduledNotificationStore
+-- (namespace = "scheduled_notifications").
+--
+-- TTL: expires_at_ms = 0 means "never expires". Cleanup happens on
+-- read (lazy eviction) — no background scheduler needed.
+
+CREATE TABLE key_value (
+    namespace TEXT NOT NULL,
+    key TEXT NOT NULL,
+    value TEXT NOT NULL,
+    expires_at_ms INTEGER NOT NULL DEFAULT 0,
+    PRIMARY KEY (namespace, key)
+);
+
+CREATE INDEX key_value_by_namespace ON key_value(namespace);
+
+get:
+SELECT value, expires_at_ms FROM key_value
+WHERE namespace = ? AND key = ?;
+
+put:
+INSERT OR REPLACE INTO key_value(namespace, key, value, expires_at_ms)
+VALUES (?, ?, ?, ?);
+
+remove:
+DELETE FROM key_value WHERE namespace = ? AND key = ?;
+
+listKeys:
+SELECT key FROM key_value
+WHERE namespace = ? AND key LIKE :prefix || '%';
+
+listAllInNamespace:
+SELECT key, value FROM key_value
+WHERE namespace = ?;
+
+deleteExpired:
+DELETE FROM key_value
+WHERE expires_at_ms > 0 AND expires_at_ms < :nowMs;

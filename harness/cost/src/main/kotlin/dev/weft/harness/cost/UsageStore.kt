@@ -1,0 +1,153 @@
+package dev.weft.harness.cost
+
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.update
+import java.time.LocalDate
+import java.time.ZoneId
+
+/**
+ * Aggregates token usage + dollar cost across turns. Per-conversation,
+ * per-day, per-month, all-time. Weft exposes the current totals to
+ * the UI via [totals].
+ *
+ * Two implementations ship:
+ *   - [InMemoryUsageStore] — totals are lost on app restart. Useful for
+ *     tests and short-lived demos.
+ *   - `SqlDelightUsageStore` (in `:substrate:android`) — per-day rows
+ *     persist via WeftDatabase. Lifetime totals are recomputed
+ *     from the daily aggregates on startup. Last-call ephemeral state
+ *     intentionally lives in-memory only.
+ *
+ * Implementations are responsible for picking up the right `nowProvider`
+ * — same shape, different time-zone strategies allowed.
+ */
+public interface UsageStore {
+    /** Live snapshot of accumulated usage. The cost badge reads from this. */
+    public val totals: StateFlow<UsageTotals>
+
+    /**
+     * Record an LLM call's usage. Returns the per-call cost in USD; the
+     * UI displays this as a "this call cost $X" badge.
+     */
+    public fun record(
+        modelId: String,
+        inputTokens: Int,
+        outputTokens: Int,
+        cacheReadTokens: Int = 0,
+        cacheWriteTokens: Int = 0,
+    ): Double
+
+    /** Convenience: today's spend per the implementation's clock. */
+    public fun usdToday(): Double
+
+    /** Wipe all aggregates. Used by the "reset usage" admin action. */
+    public fun reset()
+}
+
+/**
+ * In-memory [UsageStore]. State lives in a [MutableStateFlow]; daily
+ * aggregates are kept in an immutable map.
+ *
+ * Use this for tests, or in apps that don't need usage to survive
+ * restart. Production apps should use `SqlDelightUsageStore`.
+ */
+public class InMemoryUsageStore(
+    private val priceTable: PriceTable = PriceTable(),
+    private val nowProvider: () -> LocalDate = { LocalDate.now(ZoneId.systemDefault()) },
+) : UsageStore {
+    private val _totals: MutableStateFlow<UsageTotals> = MutableStateFlow(UsageTotals())
+    public override val totals: StateFlow<UsageTotals> = _totals.asStateFlow()
+
+    public override fun record(
+        modelId: String,
+        inputTokens: Int,
+        outputTokens: Int,
+        cacheReadTokens: Int,
+        cacheWriteTokens: Int,
+    ): Double {
+        val price = priceTable.lookup(modelId) ?: return 0.0
+        val cost = price.costUsd(
+            inputTokens = inputTokens,
+            outputTokens = outputTokens,
+            cacheReadTokens = cacheReadTokens,
+            cacheWriteTokens = cacheWriteTokens,
+        )
+        val today = nowProvider().toString()
+        _totals.update { current ->
+            val newToday = current.byDay[today]?.plus(cost) ?: cost
+            current.copy(
+                lifetimeUsd = current.lifetimeUsd + cost,
+                lifetimeInputTokens = current.lifetimeInputTokens + inputTokens,
+                lifetimeOutputTokens = current.lifetimeOutputTokens + outputTokens,
+                lifetimeCacheReadTokens = current.lifetimeCacheReadTokens + cacheReadTokens,
+                lifetimeCacheWriteTokens = current.lifetimeCacheWriteTokens + cacheWriteTokens,
+                byDay = current.byDay + (today to newToday),
+                lastCallUsd = cost,
+                lastCallTokens = inputTokens + outputTokens,
+                lastCallModelId = modelId,
+                lastCallCacheReadTokens = cacheReadTokens,
+                lastCallCacheWriteTokens = cacheWriteTokens,
+            )
+        }
+        return cost
+    }
+
+    public override fun usdToday(): Double = _totals.value.byDay[nowProvider().toString()] ?: 0.0
+
+    public override fun reset() {
+        _totals.value = UsageTotals()
+    }
+}
+
+/**
+ * Snapshot of accumulated usage. The viewer reads from this via the
+ * StateFlow on UsageStore.
+ */
+public data class UsageTotals(
+    val lifetimeUsd: Double = 0.0,
+    val lifetimeInputTokens: Int = 0,
+    val lifetimeOutputTokens: Int = 0,
+    /** Cumulative cache-read input tokens — billed at ~0.1× base on Anthropic. */
+    val lifetimeCacheReadTokens: Int = 0,
+    /** Cumulative cache-write input tokens — billed at ~1.25× base on Anthropic. */
+    val lifetimeCacheWriteTokens: Int = 0,
+    val byDay: Map<String, Double> = emptyMap(),
+    val lastCallUsd: Double = 0.0,
+    val lastCallTokens: Int = 0,
+    val lastCallModelId: String? = null,
+    /**
+     * Cache-read input tokens from the most recent LLM call. The UI uses
+     * this to show "saved $X by cache" badges; over time these add up to
+     * [lifetimeCacheReadTokens]. Volatile in persistent stores.
+     */
+    val lastCallCacheReadTokens: Int = 0,
+    val lastCallCacheWriteTokens: Int = 0,
+)
+
+/**
+ * Quota policy. Default: 5 USD/day soft warning, 10 USD/day hard cap.
+ * The check is invoked by WeftAgent before each send; over the hard
+ * cap, send() throws [QuotaExceededException].
+ */
+public data class QuotaPolicy(
+    val dailySoftWarningUsd: Double? = 5.0,
+    val dailyHardCapUsd: Double? = 10.0,
+) {
+    public fun check(usdToday: Double): QuotaState = when {
+        dailyHardCapUsd != null && usdToday >= dailyHardCapUsd -> QuotaState.Blocked(usdToday, dailyHardCapUsd)
+        dailySoftWarningUsd != null && usdToday >= dailySoftWarningUsd -> QuotaState.Warning(usdToday, dailySoftWarningUsd)
+        else -> QuotaState.Ok(usdToday)
+    }
+}
+
+public sealed class QuotaState {
+    public abstract val usdToday: Double
+    public data class Ok(override val usdToday: Double) : QuotaState()
+    public data class Warning(override val usdToday: Double, val thresholdUsd: Double) : QuotaState()
+    public data class Blocked(override val usdToday: Double, val thresholdUsd: Double) : QuotaState()
+}
+
+public class QuotaExceededException(public val usdToday: Double, public val capUsd: Double) :
+    RuntimeException("Daily cost cap reached: \$%.2f used of \$%.2f cap".format(usdToday, capUsd))

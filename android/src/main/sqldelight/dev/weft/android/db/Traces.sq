@@ -1,0 +1,195 @@
+-- Persistence for AgentTrace + its sub-events.
+--
+-- One row per user turn in `traces`. Each LLM round-trip is a row in
+-- `llm_calls`; each tool invocation is a row in `tool_calls`. Both child
+-- tables FK to traces.id with ON DELETE CASCADE so clearing a trace wipes
+-- its children automatically.
+--
+-- `seq` is a per-trace ordinal we assign at insert time so the viewer can
+-- show calls in the order they happened (start_epoch_ms ties for tool
+-- batches that fire on the same millisecond).
+--
+-- Cap policy is applied in Kotlin (SqlDelightTraceStore.startTrace deletes
+-- traces beyond the cap); SQL doesn't have first-class "keep N newest"
+-- semantics across SQLite versions we target.
+
+CREATE TABLE traces (
+    id TEXT NOT NULL PRIMARY KEY,
+    conversation_id TEXT NOT NULL,
+    start_epoch_ms INTEGER NOT NULL,
+    end_epoch_ms INTEGER,
+    user_message TEXT NOT NULL,
+    final_assistant_message TEXT,
+    status TEXT NOT NULL,
+    error_message TEXT,
+    feedback TEXT NOT NULL DEFAULT 'NONE',
+    parent_trace_id TEXT
+);
+
+CREATE INDEX traces_by_start ON traces(start_epoch_ms DESC);
+CREATE INDEX traces_by_conversation ON traces(conversation_id);
+-- For DevTools' nested-trace UI: rapidly find a parent's children.
+CREATE INDEX traces_by_parent ON traces(parent_trace_id);
+
+CREATE TABLE llm_calls (
+    id TEXT NOT NULL PRIMARY KEY,
+    trace_id TEXT NOT NULL REFERENCES traces(id) ON DELETE CASCADE,
+    seq INTEGER NOT NULL,
+    start_epoch_ms INTEGER NOT NULL,
+    end_epoch_ms INTEGER,
+    model TEXT NOT NULL,
+    input_tokens INTEGER,
+    output_tokens INTEGER,
+    total_tokens INTEGER,
+    cache_read_tokens INTEGER,
+    cache_write_tokens INTEGER
+);
+
+CREATE INDEX llm_calls_by_trace ON llm_calls(trace_id, seq);
+
+CREATE TABLE tool_calls (
+    id TEXT NOT NULL PRIMARY KEY,
+    trace_id TEXT NOT NULL REFERENCES traces(id) ON DELETE CASCADE,
+    seq INTEGER NOT NULL,
+    start_epoch_ms INTEGER NOT NULL,
+    end_epoch_ms INTEGER,
+    tool_name TEXT NOT NULL,
+    args_preview TEXT NOT NULL,
+    result_preview TEXT,
+    status TEXT NOT NULL,
+    error_message TEXT
+);
+
+CREATE INDEX tool_calls_by_trace ON tool_calls(trace_id, seq);
+
+-- ============================================================================
+-- traces queries
+-- ============================================================================
+
+selectAllTraces:
+SELECT id, conversation_id, start_epoch_ms, end_epoch_ms, user_message,
+       final_assistant_message, status, error_message, feedback, parent_trace_id
+FROM traces
+ORDER BY start_epoch_ms DESC;
+
+selectTraceIds:
+SELECT id FROM traces ORDER BY start_epoch_ms DESC;
+
+countTraces:
+SELECT COUNT(*) FROM traces;
+
+selectOldestTraceIdsBeyond:
+SELECT id FROM traces ORDER BY start_epoch_ms DESC LIMIT -1 OFFSET :keepN;
+
+insertTrace:
+INSERT INTO traces(id, conversation_id, start_epoch_ms, user_message, status, feedback, parent_trace_id)
+VALUES (?, ?, ?, ?, 'RUNNING', 'NONE', ?);
+
+completeTrace:
+UPDATE traces
+SET end_epoch_ms = :endEpochMs,
+    final_assistant_message = :finalMessage,
+    status = 'COMPLETED'
+WHERE id = :id;
+
+failTrace:
+UPDATE traces
+SET end_epoch_ms = :endEpochMs,
+    error_message = :errorMessage,
+    status = 'FAILED'
+WHERE id = :id;
+
+setFeedback:
+UPDATE traces SET feedback = :feedback WHERE id = :id;
+
+deleteTraceById:
+DELETE FROM traces WHERE id = ?;
+
+deleteAllTraces:
+DELETE FROM traces;
+
+deleteLlmCallsByTrace:
+DELETE FROM llm_calls WHERE trace_id = ?;
+
+deleteAllLlmCalls:
+DELETE FROM llm_calls;
+
+deleteToolCallsByTrace:
+DELETE FROM tool_calls WHERE trace_id = ?;
+
+deleteAllToolCalls:
+DELETE FROM tool_calls;
+
+-- ============================================================================
+-- llm_calls queries
+-- ============================================================================
+
+selectLlmCallsByTrace:
+SELECT id, trace_id, seq, start_epoch_ms, end_epoch_ms, model,
+       input_tokens, output_tokens, total_tokens,
+       cache_read_tokens, cache_write_tokens
+FROM llm_calls
+WHERE trace_id = ?
+ORDER BY seq ASC;
+
+selectAllLlmCalls:
+SELECT id, trace_id, seq, start_epoch_ms, end_epoch_ms, model,
+       input_tokens, output_tokens, total_tokens,
+       cache_read_tokens, cache_write_tokens
+FROM llm_calls
+ORDER BY trace_id, seq ASC;
+
+nextLlmSeq:
+SELECT COALESCE(MAX(seq), -1) + 1 FROM llm_calls WHERE trace_id = ?;
+
+insertLlmStart:
+INSERT INTO llm_calls(id, trace_id, seq, start_epoch_ms, model)
+VALUES (?, ?, ?, ?, ?);
+
+completeLlmCall:
+UPDATE llm_calls
+SET end_epoch_ms = :endEpochMs,
+    input_tokens = :inputTokens,
+    output_tokens = :outputTokens,
+    total_tokens = :totalTokens,
+    cache_read_tokens = :cacheReadTokens,
+    cache_write_tokens = :cacheWriteTokens
+WHERE id = :id;
+
+-- ============================================================================
+-- tool_calls queries
+-- ============================================================================
+
+selectToolCallsByTrace:
+SELECT id, trace_id, seq, start_epoch_ms, end_epoch_ms, tool_name,
+       args_preview, result_preview, status, error_message
+FROM tool_calls
+WHERE trace_id = ?
+ORDER BY seq ASC;
+
+selectAllToolCalls:
+SELECT id, trace_id, seq, start_epoch_ms, end_epoch_ms, tool_name,
+       args_preview, result_preview, status, error_message
+FROM tool_calls
+ORDER BY trace_id, seq ASC;
+
+nextToolSeq:
+SELECT COALESCE(MAX(seq), -1) + 1 FROM tool_calls WHERE trace_id = ?;
+
+insertToolStart:
+INSERT INTO tool_calls(id, trace_id, seq, start_epoch_ms, tool_name, args_preview, status)
+VALUES (?, ?, ?, ?, ?, ?, 'RUNNING');
+
+completeToolCall:
+UPDATE tool_calls
+SET end_epoch_ms = :endEpochMs,
+    result_preview = :resultPreview,
+    status = 'COMPLETED'
+WHERE id = :id;
+
+failToolCall:
+UPDATE tool_calls
+SET end_epoch_ms = :endEpochMs,
+    error_message = :errorMessage,
+    status = 'FAILED'
+WHERE id = :id;

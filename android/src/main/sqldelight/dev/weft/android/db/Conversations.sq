@@ -1,0 +1,171 @@
+-- Persistent conversation history. The substrate's WeftAgent feeds
+-- new user/assistant turns here as they happen, and reads them back on
+-- startup so the chat UI can rebuild past bubbles and the LLM resumes
+-- with the same context window.
+--
+-- Two tables:
+--   - conversations: one row per chat thread. `title` is filled lazily
+--     from the first user message (truncated). `last_message_at_ms` is
+--     bumped on each append so listing is cheap-and-sorted.
+--   - messages: one row per turn. Role is 'USER' or 'ASSISTANT'. Tool /
+--     event bubbles in the chat UI are NOT persisted — they're ephemeral
+--     scaffolding around the actual conversation.
+--
+-- Cap policy lives in Kotlin (SqlDelightConversationStore.appendMessage
+-- prunes the oldest conversations beyond the cap).
+
+CREATE TABLE conversations (
+    id TEXT NOT NULL PRIMARY KEY,
+    title TEXT NOT NULL DEFAULT '',
+    created_at_ms INTEGER NOT NULL,
+    last_message_at_ms INTEGER NOT NULL
+);
+
+CREATE INDEX conversations_by_last_message ON conversations(last_message_at_ms DESC);
+
+CREATE TABLE messages (
+    id TEXT NOT NULL PRIMARY KEY,
+    conversation_id TEXT NOT NULL REFERENCES conversations(id) ON DELETE CASCADE,
+    seq INTEGER NOT NULL,
+    role TEXT NOT NULL,
+    content TEXT NOT NULL,
+    created_at_ms INTEGER NOT NULL
+);
+
+CREATE INDEX messages_by_conversation ON messages(conversation_id, seq);
+
+-- ============================================================================
+-- conversations queries
+-- ============================================================================
+
+selectAllConversations:
+SELECT id, title, created_at_ms, last_message_at_ms
+FROM conversations
+ORDER BY last_message_at_ms DESC;
+
+selectMostRecentConversation:
+SELECT id, title, created_at_ms, last_message_at_ms
+FROM conversations
+ORDER BY last_message_at_ms DESC
+LIMIT 1;
+
+-- Title-or-content substring search. Empty :q returns all (the equality
+-- guard is the empty-query escape hatch). LIKE is case-insensitive on
+-- ASCII via LOWER() on both sides — good enough for v1; full FTS5 is a
+-- follow-up. Matches the pattern Memories.sq uses (`:query = ''`).
+searchConversations:
+SELECT DISTINCT c.id, c.title, c.created_at_ms, c.last_message_at_ms
+FROM conversations c
+LEFT JOIN messages m ON m.conversation_id = c.id
+WHERE :q = ''
+   OR LOWER(c.title) LIKE '%' || LOWER(:q) || '%'
+   OR LOWER(m.content) LIKE '%' || LOWER(:q) || '%'
+ORDER BY c.last_message_at_ms DESC;
+
+selectConversation:
+SELECT id, title, created_at_ms, last_message_at_ms
+FROM conversations
+WHERE id = ?;
+
+countConversations:
+SELECT COUNT(*) FROM conversations;
+
+selectOldestConversationIdsBeyond:
+SELECT id FROM conversations ORDER BY last_message_at_ms DESC LIMIT -1 OFFSET :keepN;
+
+insertConversation:
+INSERT INTO conversations(id, title, created_at_ms, last_message_at_ms)
+VALUES (?, '', :nowMs, :nowMs);
+
+updateConversationTitleIfBlank:
+UPDATE conversations
+SET title = :title
+WHERE id = :id AND title = '';
+
+bumpConversationLastMessage:
+UPDATE conversations
+SET last_message_at_ms = :nowMs
+WHERE id = :id;
+
+deleteConversationById:
+DELETE FROM conversations WHERE id = ?;
+
+deleteAllConversations:
+DELETE FROM conversations;
+
+-- ============================================================================
+-- messages queries
+-- ============================================================================
+
+selectMessagesByConversation:
+SELECT id, conversation_id, seq, role, content, created_at_ms
+FROM messages
+WHERE conversation_id = ?
+ORDER BY seq ASC;
+
+nextMessageSeq:
+SELECT COALESCE(MAX(seq), -1) + 1 FROM messages WHERE conversation_id = ?;
+
+insertMessage:
+INSERT INTO messages(id, conversation_id, seq, role, content, created_at_ms)
+VALUES (?, ?, ?, ?, ?, ?);
+
+deleteMessagesByConversation:
+DELETE FROM messages WHERE conversation_id = ?;
+
+-- Targeted single-message delete. Used by SqlDelightConversationStore's
+-- deleteLastTurn to roll back the trailing user/assistant pair when the
+-- caller (WeftAgent.regenerate) re-runs a turn.
+deleteMessageById:
+DELETE FROM messages WHERE id = ?;
+
+deleteAllMessages:
+DELETE FROM messages;
+
+-- FTS5 virtual table + sync triggers for the conversation message bodies.
+-- Added in 1.sqm; declared here so fresh installs get them via
+-- Schema.create(). External-content FTS5 over messages.rowid.
+
+CREATE VIRTUAL TABLE messages_fts USING fts5(
+    content,
+    content='messages',
+    content_rowid='rowid',
+    tokenize='unicode61 remove_diacritics 2'
+);
+
+CREATE TRIGGER messages_fts_ai AFTER INSERT ON messages BEGIN
+    INSERT INTO messages_fts(rowid, content) VALUES (new.rowid, new.content);
+END;
+
+CREATE TRIGGER messages_fts_ad AFTER DELETE ON messages BEGIN
+    INSERT INTO messages_fts(messages_fts, rowid, content)
+    VALUES ('delete', old.rowid, old.content);
+END;
+
+CREATE TRIGGER messages_fts_au AFTER UPDATE ON messages BEGIN
+    INSERT INTO messages_fts(messages_fts, rowid, content)
+    VALUES ('delete', old.rowid, old.content);
+    INSERT INTO messages_fts(rowid, content) VALUES (new.rowid, new.content);
+END;
+
+-- FTS5-backed thread search. Surfaces threads whose body OR title matches
+-- the query. Caller MUST pass a non-empty FTS5 expression — the Kotlin
+-- side branches to selectAllConversations for the empty case so the FTS
+-- MATCH never sees an empty string (FTS5 rejects empty match patterns).
+-- :fts is the escaped FTS5 expression (e.g., "metric*"); :like is the
+-- bare substring for title matching (e.g., "metric"). UNION combines
+-- title-matched + body-matched threads; DISTINCT collapses dupes.
+searchConversationsFts:
+SELECT DISTINCT id, title, created_at_ms, last_message_at_ms
+FROM (
+    SELECT c.id, c.title, c.created_at_ms, c.last_message_at_ms
+    FROM conversations c
+    WHERE LOWER(c.title) LIKE '%' || LOWER(:like) || '%'
+    UNION
+    SELECT c.id, c.title, c.created_at_ms, c.last_message_at_ms
+    FROM conversations c
+    JOIN messages m ON m.conversation_id = c.id
+    JOIN messages_fts f ON f.rowid = m.rowid
+    WHERE messages_fts MATCH :fts
+)
+ORDER BY last_message_at_ms DESC;

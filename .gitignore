@@ -1,0 +1,128 @@
+# ---- Gradle / Kotlin Multiplatform ----
+.gradle/
+build/
+**/build/
+!**/src/**/build/
+out/
+bin/
+*.class
+
+# Gradle wrapper logs / caches that shouldn't be checked in
+.gradle-cache/
+buildSrc/.gradle/
+buildSrc/build/
+
+# Local Gradle config
+gradle.properties.local
+local.properties
+
+# Kotlin
+.kotlin/
+**/.kotlin/
+*.hprof
+
+# Compose Multiplatform
+.cxx/
+
+# ---- IDE: IntelliJ / Android Studio ----
+.idea/
+*.iml
+*.ipr
+*.iws
+.shelf/
+captures/
+
+# ---- Android ----
+*.apk
+*.aab
+*.ap_
+*.dex
+*.keystore
+*.jks
+*.aar
+proguard/
+release/
+
+# Android NDK
+.externalNativeBuild/
+
+# Generated Android files
+local.properties
+**/google-services.json
+**/agent-config.json
+
+# ---- iOS / Xcode ----
+# Build products
+DerivedData/
+**/DerivedData/
+build-ios/
+
+# Xcode user-specific
+xcuserdata/
+**/xcuserdata/
+*.xcuserstate
+*.xcuserdatad/
+
+# Xcode workspace shared schemes can be kept; user schemes ignored
+*.xccheckout
+*.moved-aside
+
+# CocoaPods
+Pods/
+**/Pods/
+*.xcworkspace/xcuserdata/
+
+# Swift Package Manager
+.swiftpm/
+**/.swiftpm/
+.build/
+**/.build/
+Package.resolved
+
+# Fastlane
+fastlane/report.xml
+fastlane/Preview.html
+fastlane/screenshots/
+fastlane/test_output/
+
+# ---- macOS ----
+.DS_Store
+**/.DS_Store
+.AppleDouble
+.LSOverride
+Icon
+
+# ---- Misc OS / editors ----
+*.swp
+*.swo
+*~
+.vscode/
+*.code-workspace
+nbproject/private/
+
+# ---- Logs & temp ----
+*.log
+*.tmp
+*.pid
+*.seed
+*.tgz
+
+# ---- Secrets ----
+.env
+.env.local
+.env.*.local
+secrets/
+*.pem
+*.p12
+*.cer
+*.mobileprovision
+
+# ---- Node (docs site tooling, if any) ----
+node_modules/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# ---- Docs site build output ----
+site/
+.docusaurus/

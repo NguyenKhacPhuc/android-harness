@@ -1,0 +1,835 @@
+package dev.weft.harness.agents
+
+import ai.koog.agents.core.agent.AIAgent
+import ai.koog.agents.core.agent.config.AIAgentConfig
+import ai.koog.agents.core.tools.ToolRegistry
+import ai.koog.agents.features.eventHandler.feature.handleEvents
+import ai.koog.prompt.Prompt
+import ai.koog.prompt.dsl.prompt
+import ai.koog.prompt.executor.model.PromptExecutor
+import ai.koog.prompt.llm.LLModel
+import ai.koog.prompt.params.LLMParams
+import dev.weft.harness.behavior.BehaviorConfig
+import dev.weft.harness.behavior.Compactor
+import dev.weft.harness.behavior.Turn
+import dev.weft.harness.cost.QuotaExceededException
+import dev.weft.harness.cost.QuotaPolicy
+import dev.weft.harness.cost.QuotaState
+import dev.weft.harness.cost.UsageStore
+import dev.weft.harness.observability.Redactor
+import dev.weft.harness.observability.TraceStore
+import dev.weft.harness.conversation.ConversationStore
+import dev.weft.harness.conversation.PersistedRole
+import dev.weft.harness.agents.streaming.StreamChunk
+import dev.weft.harness.agents.streaming.streamingSingleRunStrategy
+import dev.weft.harness.prompt.composeEffectiveText
+import kotlinx.coroutines.channels.ProducerScope
+import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.channelFlow
+import kotlinx.coroutines.flow.emitAll
+import kotlinx.coroutines.flow.flow
+import dev.weft.harness.reliability.CircuitBreaker
+import dev.weft.harness.reliability.RetryPolicy
+import dev.weft.harness.reliability.withRetry
+import kotlinx.coroutines.flow.MutableSharedFlow
+import kotlinx.coroutines.flow.SharedFlow
+import kotlinx.coroutines.flow.asSharedFlow
+import java.util.UUID
+
+/**
+ * A multi-turn wrapper around Koog's [AIAgent] with built-in observability,
+ * reliability, behavior (compaction), and cost-tracking.
+ *
+ * On each [send]:
+ *   1. Checks the daily quota (refuses with [QuotaExceededException] if over the cap).
+ *   2. Starts an [AgentTrace][dev.weft.harness.observability.AgentTrace] in the [TraceStore].
+ *   3. Builds a fresh [AIAgent] with conversation history baked into the initial [Prompt].
+ *   4. Installs a Koog event handler that records every LLM call + tool call
+ *      against the current trace AND emits [ToolEvent]s for the chat UI.
+ *   5. Wraps the call in retry-with-circuit-breaker.
+ *   6. Calls `agent.run(text)` and appends user/assistant turns to history.
+ *   7. Marks the trace completed (or failed).
+ *
+ * Cost: a new AIAgent + ToolRegistry per send. Negligible.
+ */
+public class WeftAgent(
+    private val executor: PromptExecutor,
+    /**
+     * Provider's model pool — the menu the [modelRouter] picks from per
+     * turn. Built by [WeftRuntime.buildAgent] based on the active
+     * provider kind. Mandatory because routing has no sensible
+     * provider-agnostic default.
+     */
+    private val modelPool: dev.weft.harness.agents.routing.ModelPool,
+    /**
+     * Picks the model for each turn. Default is
+     * [dev.weft.harness.agents.routing.DefaultModelRouter] (deterministic rules:
+     * vision → vision-capable, coding hints → heavy, short fresh chat →
+     * cheap, else standard). Pass [dev.weft.harness.agents.routing.StaticModelRouter]
+     * to disable routing and pin a single model.
+     */
+    private val modelRouter: dev.weft.harness.agents.routing.ModelRouter =
+        dev.weft.harness.agents.routing.DefaultModelRouter(),
+    private val toolRegistry: ToolRegistry,
+    private val traceStore: TraceStore,
+    /** Returns the stable substrate system prompt — no per-turn volatile content. */
+    private val baseSystemPromptSupplier: () -> String,
+    /**
+     * Returns the per-turn volatile prefix (device snapshot etc.) that goes
+     * into the latest user message so the system layer stays cacheable.
+     * Empty string disables.
+     */
+    private val volatilePrefixSupplier: () -> String = { "" },
+    private val conversationId: String = UUID.randomUUID().toString(),
+    private val maxIterations: Int = MAX_ITERATIONS_DEFAULT,
+    /**
+     * Per-LLM-call `max_tokens` budget. Koog's Anthropic client defaults to
+     * 2048 when `LLMParams.maxTokens` is unset — too small for `ui_render`
+     * tool calls that emit big component trees (a music-player JSON tree
+     * blows past 2048 easily). We bump the default to 8192 which is the
+     * documented cap for Claude Sonnet 4.x without extended-thinking.
+     * Apps can override if they're using a model with a different ceiling.
+     */
+    private val maxOutputTokens: Int = DEFAULT_MAX_OUTPUT_TOKENS,
+    private val retryPolicy: RetryPolicy = RetryPolicy(),
+    public val circuitBreaker: CircuitBreaker = CircuitBreaker(),
+    private val behaviorConfig: BehaviorConfig = BehaviorConfig(),
+    private val usageStore: UsageStore = dev.weft.harness.cost.InMemoryUsageStore(),
+    private val quotaPolicy: QuotaPolicy = QuotaPolicy(),
+    /**
+     * Applied to tool args / results / error messages before they're written
+     * to [TraceStore]. Default rules mask emails, SSNs, bearer tokens, API
+     * keys, and credit-card numbers. Pass `Redactor(rules = emptyList())` to
+     * disable; pass `Redactor(Redactor.DEFAULT_RULES + customRules)` to extend.
+     */
+    private val redactor: Redactor = Redactor(),
+    /**
+     * Optional persistent conversation store. When provided, every USER and
+     * ASSISTANT turn is appended; [resume] hydrates history from it on
+     * startup; [newChat] rotates to a fresh conversation id. Pass `null`
+     * (the default for tests and one-off agents) to keep history in-memory.
+     */
+    private val conversationStore: ConversationStore? = null,
+    /**
+     * Provider-specific cache-control emitter. Defaults to [dev.weft.harness.prompt.cache.NoOpCacheBinder]
+     * so tests and non-Anthropic configurations don't accidentally embed markers
+     * the backend rejects. `WeftRuntime.buildAgent` injects
+     * [dev.weft.harness.prompt.cache.AnthropicCacheBinder] when the active provider is
+     * Anthropic / Anthropic-proxy.
+     *
+     * v1 marks only the system message (`STATIC` tier). Wider coverage —
+     * tool catalog, history tail, multi-tier breakpoints — comes in a
+     * follow-up so the diff stays small and the cache-hit telemetry can
+     * be validated against a single change.
+     */
+    private val cacheBinder: dev.weft.harness.prompt.cache.CacheBinder = dev.weft.harness.prompt.cache.NoOpCacheBinder,
+    /**
+     * Memory-retrieval extension point. Queried per-turn with the user's
+     * current message text; resulting hits are injected as "Relevant
+     * context" inside the volatile prefix so the LLM sees them without
+     * needing a tool round-trip. Default is an empty registry — no
+     * memory injection — for tests and plain text-only agents.
+     *
+     * `WeftRuntime` wires this with the substrate's own memory provider
+     * plus any apps registered via `extraMemoryProviders`.
+     */
+    private val memoryRegistry: dev.weft.harness.memory.MemoryRegistry =
+        dev.weft.harness.memory.MemoryRegistry(providers = emptyList()),
+) {
+    private val compactor = Compactor(behaviorConfig)
+    private val history: MutableList<HistoryEntry> = mutableListOf()
+
+    /**
+     * Number of trailing turns kept VOLATILE (uncached). The last user
+     * message + its assistant reply almost always change between turns —
+     * caching them would just churn the cache. Everything older becomes
+     * a SESSION-tier cache candidate, with [cacheBinder] attaching the
+     * marker to the deepest user message in the older block.
+     */
+    private val historyVolatileTailTurns: Int = HISTORY_VOLATILE_TAIL_TURNS
+
+    /**
+     * Emit the compacted history into the active prompt builder, marking
+     * the last user turn within the older block (`compacted.dropLast(N)`)
+     * with a SESSION cache directive. Both `send` and `sendStreaming`
+     * share this so cache behavior stays identical across the two paths.
+     */
+    private fun ai.koog.prompt.dsl.PromptBuilder.emitCompactedHistory(compacted: List<Turn>) {
+        val older = compacted.dropLast(historyVolatileTailTurns)
+        // indexOfLast returns -1 when the older block has no User turn —
+        // either it's empty or it's an all-Assistant fragment (unusual).
+        // Either way the comparison below fails for every index and we
+        // emit everything plain, which is fine.
+        val sessionMarkerIdx = older.indexOfLast { it is Turn.User }
+        for ((idx, turn) in compacted.withIndex()) {
+            when (turn) {
+                is Turn.System -> system(turn.text)
+                is Turn.User -> {
+                    if (idx == sessionMarkerIdx) {
+                        cacheBinder.cachedUser(this, turn.text, dev.weft.harness.prompt.cache.CacheTier.SESSION)
+                    } else {
+                        user(turn.text)
+                    }
+                }
+                is Turn.Assistant -> assistant(turn.text)
+            }
+        }
+    }
+
+    /**
+     * Current conversation id, observable so the chat UI can subscribe to
+     * `conversationStore.messagesFor(currentConversationId)`. Mutates when
+     * [newChat] or [resume] is called.
+     */
+    private val _conversationId: MutableStateFlow<String> = MutableStateFlow(conversationId)
+    public val currentConversationId: StateFlow<String> = _conversationId.asStateFlow()
+
+    private val _events = MutableSharedFlow<ToolEvent>(
+        replay = 0,
+        extraBufferCapacity = EVENT_BUFFER_CAPACITY,
+    )
+
+    /** Tool-call events from the underlying Koog agent. Use to render trace bubbles in chat. */
+    public val events: SharedFlow<ToolEvent> = _events.asSharedFlow()
+
+    /**
+     * Text-only convenience overload. Equivalent to
+     * `send(userText, attachments = emptyList())`. The most common path
+     * stays string-shaped so existing callers don't change.
+     */
+    public suspend fun send(userText: String): String =
+        send(userText, attachments = emptyList(), modelTier = null)
+
+    /**
+     * Text-only send with a per-turn [dev.weft.harness.agents.routing.ModelTier]
+     * override. Bypasses the [dev.weft.harness.agents.routing.ModelRouter]'s
+     * normal heuristics — the picked tier comes straight from [modelTier].
+     * Passing `null` is identical to the no-tier overload (normal routing).
+     */
+    public suspend fun send(
+        userText: String,
+        modelTier: dev.weft.harness.agents.routing.ModelTier?,
+    ): String = send(userText, attachments = emptyList(), modelTier = modelTier)
+
+    /**
+     * Send a user turn with optional multimodal attachments (image bytes,
+     * image URLs, PDFs, audio, etc.). The attachments are baked into a
+     * single user message alongside the text — Anthropic and OpenAI vision
+     * APIs both expect "one message, mixed parts" rather than separate
+     * messages per attachment.
+     *
+     * Use [dev.weft.harness.prompt.multimodal.Attachments] for ergonomic
+     * construction of common attachment shapes (image bytes, image URL,
+     * PDF, audio). Power users can construct
+     * [ai.koog.prompt.message.MessagePart.Attachment] directly.
+     *
+     * **Persistence note (v1):** the [attachments] list is in-memory for
+     * the current process. Resuming the conversation later replays only
+     * the [userText] portion; attached media is not currently stored to
+     * disk. The agent's *current* turn always sees the full multimodal
+     * input.
+     */
+    public suspend fun send(
+        userText: String,
+        attachments: List<ai.koog.prompt.message.MessagePart.Attachment>,
+        modelTier: dev.weft.harness.agents.routing.ModelTier? = null,
+    ): String {
+        val quotaState = quotaPolicy.check(usageStore.usdToday())
+        if (quotaState is QuotaState.Blocked) {
+            throw QuotaExceededException(quotaState.usdToday, quotaState.thresholdUsd)
+        }
+        // Read parent trace id from the coroutine context. Null on
+        // user-initiated turns (no enclosing TraceContext); set when this
+        // `send` is called from inside a SubAgentRunner that itself runs
+        // inside an orchestrator's TraceContext. The propagation is
+        // automatic — sub-agents don't pass it explicitly.
+        val parentTraceId = kotlin.coroutines.coroutineContext[
+            dev.weft.harness.observability.TraceContext,
+        ]?.traceId
+        val traceId = traceStore.startTrace(_conversationId.value, userText, parentTraceId)
+        // Memory retrieval runs concurrently across all registered
+        // providers (substrate + app-provided). Hits are inlined as
+        // "Relevant context" inside the volatile prefix so the LLM sees
+        // them without a tool round-trip. Empty registry / no hits =
+        // identical behaviour to before this hook existed.
+        val memoryHits = memoryRegistry.retrieveAll(userText)
+        val effectiveText = composeEffectiveText(
+            volatilePrefix = volatilePrefixSupplier(),
+            memoryHits = memoryHits,
+            userText = userText,
+        )
+        val effectiveInput = dev.weft.harness.prompt.multimodal.WeftUserInput(effectiveText, attachments)
+        // Install our own TraceContext for the duration of this turn so
+        // every nested `traceStore.startTrace` (sub-agents, future
+        // delegated work) inherits this trace as their parent AND
+        // shares this conversation id (so sub-agent rows attach to the
+        // same conversation in conversation-scoped queries).
+        return kotlinx.coroutines.withContext(
+            dev.weft.harness.observability.TraceContext(traceId, _conversationId.value),
+        ) {
+        try {
+            val reply = withRetry(
+                policy = retryPolicy,
+                breaker = circuitBreaker,
+                onAttemptFailed = { attempt, cause, retryingInMs ->
+                    _events.tryEmit(
+                        ToolEvent.Failed(
+                            toolName = "llm.retry",
+                            message = if (retryingInMs != null) "attempt $attempt failed (${cause.message}), retrying in ${retryingInMs}ms" else "attempt $attempt failed: ${cause.message}",
+                        ),
+                    )
+                },
+            ) {
+                val agent = buildAgentForThisTurn(traceId, effectiveInput, modelTier)
+                agent.run(effectiveInput)
+            }
+            history += HistoryEntry(Role.USER, userText)
+            history += HistoryEntry(Role.ASSISTANT, reply)
+            // Persist both halves of the turn — only on success, matching
+            // the in-memory history. A failed turn leaves no trace in
+            // conversation_history, same as before.
+            conversationStore?.let { cs ->
+                val convId = _conversationId.value
+                cs.append(convId, PersistedRole.USER, userText)
+                cs.append(convId, PersistedRole.ASSISTANT, reply)
+            }
+            // Trace gets the redacted version; the live reply returned to
+            // the caller is unchanged so the chat UI shows the model's actual
+            // words. (User typed their own data; they're fine seeing it back.)
+            traceStore.completeTrace(traceId, redactor.redact(reply))
+            reply
+        } catch (t: Throwable) {
+            traceStore.failTrace(traceId, redactor.redact(t.message ?: t::class.simpleName.orEmpty()))
+            throw t
+        }
+        }  // close withContext(TraceContext)
+    }
+
+    /**
+     * Streaming variant of [send]. Returns a cold [Flow] of [StreamChunk]s
+     * — text deltas as the model emits them, tool lifecycle events
+     * interleaved, and a terminal [StreamChunk.Done] or [StreamChunk.Failed].
+     *
+     * Same guarantees as [send] (quota, retry, breaker, trace, redaction,
+     * persistence) apply — they fire around the streamed turn, not on each
+     * delta. Collect from a single consumer; the underlying `agent.run()`
+     * is invoked once per Flow subscription.
+     */
+    /**
+     * Text-only convenience overload — mirrors [send]. Pass attachments
+     * via the [sendStreaming] overload taking a list.
+     */
+    public fun sendStreaming(userText: String): Flow<StreamChunk> =
+        sendStreaming(userText, attachments = emptyList(), modelTier = null)
+
+    /**
+     * Streaming variant of [send] with a per-turn
+     * [dev.weft.harness.agents.routing.ModelTier] override. Bypasses the
+     * router's normal heuristics; passing `null` is identical to the
+     * no-tier overload.
+     */
+    public fun sendStreaming(
+        userText: String,
+        modelTier: dev.weft.harness.agents.routing.ModelTier?,
+    ): Flow<StreamChunk> = sendStreaming(userText, attachments = emptyList(), modelTier = modelTier)
+
+    /**
+     * Streaming variant of [send] with multimodal attachments. See the
+     * [send] overload taking attachments for the persistence caveat.
+     */
+    public fun sendStreaming(
+        userText: String,
+        attachments: List<ai.koog.prompt.message.MessagePart.Attachment>,
+        modelTier: dev.weft.harness.agents.routing.ModelTier? = null,
+    ): Flow<StreamChunk> = channelFlow {
+        val quotaState = quotaPolicy.check(usageStore.usdToday())
+        if (quotaState is QuotaState.Blocked) {
+            throw QuotaExceededException(quotaState.usdToday, quotaState.thresholdUsd)
+        }
+        // Same parent-trace-id propagation logic as `send` — see comment
+        // there. channelFlow's block inherits the collector's coroutine
+        // context, so an enclosing TraceContext (from a sub-agent's
+        // streaming send) flows in here as expected.
+        val parentTraceId = kotlin.coroutines.coroutineContext[
+            dev.weft.harness.observability.TraceContext,
+        ]?.traceId
+        val traceId = traceStore.startTrace(_conversationId.value, userText, parentTraceId)
+        // Memory retrieval runs concurrently across all registered
+        // providers (substrate + app-provided). Hits are inlined as
+        // "Relevant context" inside the volatile prefix so the LLM sees
+        // them without a tool round-trip. Empty registry / no hits =
+        // identical behaviour to before this hook existed.
+        val memoryHits = memoryRegistry.retrieveAll(userText)
+        val effectiveText = composeEffectiveText(
+            volatilePrefix = volatilePrefixSupplier(),
+            memoryHits = memoryHits,
+            userText = userText,
+        )
+        val effectiveInput = dev.weft.harness.prompt.multimodal.WeftUserInput(effectiveText, attachments)
+        val replyBuilder = StringBuilder()
+        // Install TraceContext for the duration of this streaming turn
+        // so nested traces (sub-agents spawned mid-turn) inherit this
+        // trace as their parent and share this conversation id.
+        // withContext inside channelFlow is fine — trySend / awaitClose
+        // still work via the captured ProducerScope.
+        kotlinx.coroutines.withContext(
+            dev.weft.harness.observability.TraceContext(traceId, _conversationId.value),
+        ) {
+        try {
+            val reply = withRetry(
+                policy = retryPolicy,
+                breaker = circuitBreaker,
+                onAttemptFailed = { attempt, cause, retryingInMs ->
+                    _events.tryEmit(
+                        ToolEvent.Failed(
+                            toolName = "llm.retry",
+                            message = if (retryingInMs != null) "attempt $attempt failed (${cause.message}), retrying in ${retryingInMs}ms" else "attempt $attempt failed: ${cause.message}",
+                        ),
+                    )
+                },
+            ) {
+                replyBuilder.clear()
+                val agent = buildStreamingAgentForThisTurn(
+                    traceId,
+                    effectiveInput,
+                    this@channelFlow,
+                    replyBuilder,
+                    modelTier,
+                )
+                agent.run(effectiveInput)
+            }
+            history += HistoryEntry(Role.USER, userText)
+            history += HistoryEntry(Role.ASSISTANT, reply)
+            conversationStore?.let { cs ->
+                val convId = _conversationId.value
+                cs.append(convId, PersistedRole.USER, userText)
+                cs.append(convId, PersistedRole.ASSISTANT, reply)
+            }
+            traceStore.completeTrace(traceId, redactor.redact(reply))
+            trySend(StreamChunk.Done(reply))
+        } catch (t: Throwable) {
+            val redactedMsg = redactor.redact(t.message ?: t::class.simpleName.orEmpty())
+            traceStore.failTrace(traceId, redactedMsg)
+            trySend(StreamChunk.Failed(redactedMsg))
+            throw t
+        }
+        }  // close withContext(TraceContext)
+        // Producer block ends here; channelFlow closes the channel and the
+        // consumer's .collect { } returns. Earlier this had `awaitClose { }`
+        // which suspended forever, hanging consumers after the Done chunk —
+        // wrong pattern for a self-driving producer (awaitClose is for
+        // callback-subscription cleanup, not turn-by-turn work).
+    }
+
+    /** Drop the in-memory conversation history. Does NOT touch the persistent store. */
+    public fun resetHistory() {
+        history.clear()
+    }
+
+    /**
+     * Hydrate in-memory history from the persistent store. Call once at
+     * startup BEFORE the first [send] if you want continuity from the
+     * previous app session. Passing `conversationId = null` (the default)
+     * resumes the most recent thread; passing an explicit id resumes that
+     * specific thread; if neither matches, creates a fresh thread.
+     *
+     * No-op when [conversationStore] is null.
+     */
+    public suspend fun resume(conversationId: String? = null) {
+        val store = conversationStore ?: return
+        val id = conversationId
+            ?: store.mostRecentConversationId()
+            ?: store.newConversation()
+        _conversationId.value = id
+        history.clear()
+        store.loadMessages(id).forEach { msg ->
+            val role = if (msg.role == PersistedRole.USER) Role.USER else Role.ASSISTANT
+            history += HistoryEntry(role, msg.content)
+        }
+    }
+
+    /**
+     * Start a fresh thread — equivalent to "New chat". Clears in-memory
+     * history; if a [conversationStore] is wired, creates a new
+     * conversation row and switches [currentConversationId] to it.
+     */
+    public suspend fun newChat() {
+        history.clear()
+        val newId = conversationStore?.newConversation() ?: UUID.randomUUID().toString()
+        _conversationId.value = newId
+    }
+
+    /**
+     * Re-run the most recent user turn. Rolls back the previous
+     * user+assistant pair from both in-memory history and the conversation
+     * store, then re-sends the same user text through [send]. The visible
+     * chat looks the same except the assistant reply is fresh.
+     *
+     * Returns the new assistant reply, or `null` when there's nothing to
+     * regenerate (no USER message in the in-memory history yet).
+     *
+     * **Failure semantics**: the rollback happens *before* the new send.
+     * If the underlying [send] fails (network, quota, breaker open, etc.),
+     * the previous reply is gone with no replacement and the exception
+     * propagates to the caller. The caller can re-type the prompt and try
+     * again. This is intentionally simpler than a save-then-restore dance,
+     * which would introduce tricky race handling for negligible benefit.
+     */
+    public suspend fun regenerate(): String? {
+        val lastUserText = rollBackToLastUser() ?: return null
+        conversationStore?.deleteLastTurn(_conversationId.value)
+        return send(lastUserText)
+    }
+
+    /**
+     * Streaming variant of [regenerate]. Emits an empty Flow (completes
+     * immediately with no values) when there's nothing to regenerate;
+     * otherwise delegates to [sendStreaming] with the rolled-back user
+     * text.
+     *
+     * Same failure semantics as [regenerate]: the rollback is committed
+     * before the new send begins.
+     */
+    public fun regenerateStreaming(): Flow<StreamChunk> = flow {
+        val lastUserText = rollBackToLastUser() ?: return@flow
+        conversationStore?.deleteLastTurn(_conversationId.value)
+        emitAll(sendStreaming(lastUserText))
+    }
+
+    /**
+     * Find the last USER turn in in-memory [history], capture its text,
+     * and drop it (plus any subsequent ASSISTANT reply or other entries)
+     * from history. Returns the captured text, or null when there's no
+     * USER turn to roll back from.
+     *
+     * Shared by both [regenerate] and [regenerateStreaming] so they can't
+     * drift in their rollback semantics.
+     */
+    private fun rollBackToLastUser(): String? {
+        val lastUserIdx = history.indexOfLast { it.role == Role.USER }
+        if (lastUserIdx == -1) return null
+        val text = history[lastUserIdx].text
+        while (history.size > lastUserIdx) {
+            history.removeAt(history.size - 1)
+        }
+        return text
+    }
+
+    /**
+     * Round-trip a UI event from an LLM-rendered surface back to the
+     * agent (per ADR-007 §6). Composes a synthetic user message so the
+     * event is honest in chat history and visible in traces, then runs
+     * a normal turn so the agent can react.
+     *
+     * @param action   the `action` string declared on the tapped widget
+     * @param sourceLabel optional human-readable label (e.g., the button text)
+     * @param fieldValues snapshot of TextField values on the rendered surface,
+     *                    so forms work without the agent having to ask.
+     */
+    public suspend fun sendEvent(
+        action: String,
+        sourceLabel: String? = null,
+        fieldValues: Map<String, String> = emptyMap(),
+    ): String {
+        val message = buildString {
+            append("[UI event] User tapped")
+            if (!sourceLabel.isNullOrBlank()) append(" '$sourceLabel'")
+            append(" (action=$action) on the rendered screen.")
+            if (fieldValues.isNotEmpty()) {
+                append("\nField values: ")
+                append(fieldValues.entries.joinToString { (k, v) -> "$k=\"$v\"" })
+            }
+        }
+        return send(message)
+    }
+
+    @OptIn(kotlin.time.ExperimentalTime::class)
+    private suspend fun buildAgentForThisTurn(
+        traceId: String,
+        input: dev.weft.harness.prompt.multimodal.WeftUserInput,
+        modelTier: dev.weft.harness.agents.routing.ModelTier?,
+    ): AIAgent<dev.weft.harness.prompt.multimodal.WeftUserInput, String> {
+        val systemMsg = baseSystemPromptSupplier()
+
+        val turns: List<Turn> = history.map {
+            when (it.role) {
+                Role.USER -> Turn.User(it.text)
+                Role.ASSISTANT -> Turn.Assistant(it.text)
+            }
+        }
+        val compacted = compactor.compact(turns)
+
+        val initialPrompt: Prompt = prompt(id = "chat", params = LLMParams(maxTokens = maxOutputTokens)) {
+            cacheBinder.cachedSystem(this, systemMsg, dev.weft.harness.prompt.cache.CacheTier.STATIC)
+            emitCompactedHistory(compacted)
+        }
+
+        val llmCallMap = mutableMapOf<String, String>()
+        val toolCallMap = mutableMapOf<String, String>()
+
+        // Per-turn model routing — picks from `modelPool` based on input
+        // shape (length, attachments, coding hints) and conversation
+        // depth. Replaces what used to be a single hardcoded `model`.
+        val routedModel = modelRouter.route(
+            dev.weft.harness.agents.routing.RoutingContext(
+                userText = input.text,
+                attachments = input.attachments,
+                historyTurns = history.size,
+                availableTools = toolRegistry.tools.map { it.descriptor },
+                pool = modelPool,
+                tierHint = modelTier,
+            )
+        )
+
+        return AIAgent(
+            promptExecutor = executor,
+            agentConfig = AIAgentConfig(
+                prompt = initialPrompt,
+                model = routedModel,
+                maxAgentIterations = maxIterations,
+            ),
+            // WeftUserInput-aware strategy: emits the live user turn as a
+            // single Message.User with mixed text + attachment parts.
+            // Falls back to a plain text user message when attachments is
+            // empty (matches Koog's built-in singleRunStrategy behavior).
+            strategy = dev.weft.harness.agents.multimodal.weftSingleRunStrategy(),
+            toolRegistry = toolRegistry,
+            installFeatures = {
+                handleEvents {
+                    onLLMCallStarting { ctx ->
+                        val id = traceStore.recordLlmStart(traceId, ctx.model.id)
+                        llmCallMap[ctx.runId] = id
+                    }
+                    onLLMCallCompleted { ctx ->
+                        val id = llmCallMap[ctx.runId] ?: return@onLLMCallCompleted
+                        val meta = ctx.response?.metaInfo
+                        // Koog 1.0.0's AnthropicLLMClient surfaces cache token
+                        // counts through ResponseMetaInfo.metadata as JSON ints
+                        // (cacheCreationInputTokens / cacheReadInputTokens). Other
+                        // providers either don't report cache tokens or use
+                        // different field names — for those, these reads are null
+                        // and the binder fell back to NoOpCacheBinder anyway.
+                        val cacheReadTokens = meta?.metadata
+                            ?.get("cacheReadInputTokens")
+                            ?.let { (it as? kotlinx.serialization.json.JsonPrimitive)?.content?.toIntOrNull() }
+                        val cacheWriteTokens = meta?.metadata
+                            ?.get("cacheCreationInputTokens")
+                            ?.let { (it as? kotlinx.serialization.json.JsonPrimitive)?.content?.toIntOrNull() }
+                        traceStore.recordLlmComplete(
+                            traceId = traceId,
+                            llmCallId = id,
+                            inputTokens = meta?.inputTokensCount,
+                            outputTokens = meta?.outputTokensCount,
+                            totalTokens = meta?.totalTokensCount,
+                            cacheReadTokens = cacheReadTokens,
+                            cacheWriteTokens = cacheWriteTokens,
+                        )
+                        usageStore.record(
+                            modelId = ctx.model.id,
+                            inputTokens = meta?.inputTokensCount ?: 0,
+                            outputTokens = meta?.outputTokensCount ?: 0,
+                            cacheReadTokens = cacheReadTokens ?: 0,
+                            cacheWriteTokens = cacheWriteTokens ?: 0,
+                        )
+                    }
+                    onToolCallStarting { ctx ->
+                        // Redact BEFORE truncating so partial tokens / partial PII
+                        // can't slip through unmasked at the cut boundary.
+                        val argsPreview = redactor.redact(ctx.toolArgs.toString()).take(ARGS_PREVIEW_MAX)
+                        val id = traceStore.recordToolStart(traceId, ctx.toolName, argsPreview)
+                        toolCallMap[ctx.toolCallId ?: ctx.eventId] = id
+                        _events.tryEmit(ToolEvent.Starting(toolName = ctx.toolName, argsPreview = argsPreview))
+                    }
+                    onToolCallCompleted { ctx ->
+                        val key = ctx.toolCallId ?: ctx.eventId
+                        val id = toolCallMap[key] ?: return@onToolCallCompleted
+                        val resultPreview = ctx.toolResult?.toString()
+                            ?.let(redactor::redact)
+                            ?.take(ARGS_PREVIEW_MAX)
+                        traceStore.recordToolComplete(
+                            traceId = traceId,
+                            toolCallId = id,
+                            resultPreview = resultPreview,
+                        )
+                        _events.tryEmit(ToolEvent.Completed(toolName = ctx.toolName))
+                    }
+                    onToolCallFailed { ctx ->
+                        val key = ctx.toolCallId ?: ctx.eventId
+                        val id = toolCallMap[key] ?: return@onToolCallFailed
+                        val safeMessage = redactor.redact(ctx.message)
+                        traceStore.recordToolFailed(traceId, id, errorMessage = safeMessage)
+                        _events.tryEmit(ToolEvent.Failed(toolName = ctx.toolName, message = safeMessage))
+                    }
+                }
+            },
+        )
+    }
+
+    /**
+     * Streaming counterpart to [buildAgentForThisTurn]. Builds an AIAgent
+     * with a custom graph strategy that calls `requestLLMStreaming` and
+     * forwards text deltas + tool lifecycle events to the supplied
+     * [producerScope] (the receiver of the public `sendStreaming` Flow).
+     *
+     * The same event handler that backs [buildAgentForThisTurn] is
+     * installed — tool tracing, redaction, and `_events` emission all
+     * work identically. Token accounting fires from the new
+     * `onLLMStreamingComplete` callback in the strategy (the standard
+     * `onLLMCallCompleted` doesn't fire in streaming mode).
+     */
+    @OptIn(kotlin.time.ExperimentalTime::class)
+    private suspend fun buildStreamingAgentForThisTurn(
+        traceId: String,
+        input: dev.weft.harness.prompt.multimodal.WeftUserInput,
+        producerScope: ProducerScope<StreamChunk>,
+        replyBuilder: StringBuilder,
+        modelTier: dev.weft.harness.agents.routing.ModelTier?,
+    ): AIAgent<dev.weft.harness.prompt.multimodal.WeftUserInput, String> {
+        val systemMsg = baseSystemPromptSupplier()
+        val turns: List<Turn> = history.map {
+            when (it.role) {
+                Role.USER -> Turn.User(it.text)
+                Role.ASSISTANT -> Turn.Assistant(it.text)
+            }
+        }
+        val compacted = compactor.compact(turns)
+
+        val initialPrompt: Prompt = prompt(id = "chat-stream", params = LLMParams(maxTokens = maxOutputTokens)) {
+            cacheBinder.cachedSystem(this, systemMsg, dev.weft.harness.prompt.cache.CacheTier.STATIC)
+            emitCompactedHistory(compacted)
+        }
+
+        // Per-turn model routing — same call shape as the non-streaming
+        // path. The chosen model is also captured into local val so the
+        // trace-store recordLlmStart / usageStore.record calls below
+        // know which model is actually in use this turn.
+        val routedModel = modelRouter.route(
+            dev.weft.harness.agents.routing.RoutingContext(
+                userText = input.text,
+                attachments = input.attachments,
+                historyTurns = history.size,
+                availableTools = toolRegistry.tools.map { it.descriptor },
+                pool = modelPool,
+                tierHint = modelTier,
+            )
+        )
+
+        val toolCallMap = mutableMapOf<String, String>()
+        // Track per-streaming-call LLM trace ids so completion can wire up.
+        var pendingLlmId: String? = null
+
+        val strategy = streamingSingleRunStrategy(
+            onTextDelta = { delta ->
+                replyBuilder.append(delta)
+                producerScope.trySend(StreamChunk.TextDelta(delta))
+            },
+            onLlmStreamingStart = {
+                pendingLlmId = traceStore.recordLlmStart(traceId, routedModel.id)
+            },
+            onLlmStreamingComplete = { meta ->
+                pendingLlmId?.let { id ->
+                    traceStore.recordLlmComplete(
+                        traceId = traceId,
+                        llmCallId = id,
+                        inputTokens = meta.inputTokensCount,
+                        outputTokens = meta.outputTokensCount,
+                        totalTokens = meta.totalTokensCount,
+                    )
+                    usageStore.record(
+                        modelId = routedModel.id,
+                        inputTokens = meta.inputTokensCount ?: 0,
+                        outputTokens = meta.outputTokensCount ?: 0,
+                    )
+                }
+                pendingLlmId = null
+            },
+        )
+
+        return AIAgent(
+            promptExecutor = executor,
+            agentConfig = AIAgentConfig(
+                prompt = initialPrompt,
+                model = routedModel,
+                maxAgentIterations = maxIterations,
+            ),
+            strategy = strategy,
+            toolRegistry = toolRegistry,
+            installFeatures = {
+                handleEvents {
+                    // Tool tracing identical to the non-streaming path —
+                    // nodeExecuteTool fires these regardless of how the
+                    // upstream Message.Tool.Call was produced.
+                    onToolCallStarting { ctx ->
+                        val argsPreview = redactor.redact(ctx.toolArgs.toString()).take(ARGS_PREVIEW_MAX)
+                        val id = traceStore.recordToolStart(traceId, ctx.toolName, argsPreview)
+                        toolCallMap[ctx.toolCallId ?: ctx.eventId] = id
+                        _events.tryEmit(ToolEvent.Starting(toolName = ctx.toolName, argsPreview = argsPreview))
+                        producerScope.trySend(StreamChunk.ToolStarting(toolName = ctx.toolName, argsPreview = argsPreview))
+                    }
+                    onToolCallCompleted { ctx ->
+                        val key = ctx.toolCallId ?: ctx.eventId
+                        val id = toolCallMap[key] ?: return@onToolCallCompleted
+                        val resultPreview = ctx.toolResult?.toString()
+                            ?.let(redactor::redact)
+                            ?.take(ARGS_PREVIEW_MAX)
+                        traceStore.recordToolComplete(
+                            traceId = traceId,
+                            toolCallId = id,
+                            resultPreview = resultPreview,
+                        )
+                        _events.tryEmit(ToolEvent.Completed(toolName = ctx.toolName))
+                        producerScope.trySend(StreamChunk.ToolCompleted(toolName = ctx.toolName))
+                    }
+                    onToolCallFailed { ctx ->
+                        val key = ctx.toolCallId ?: ctx.eventId
+                        val id = toolCallMap[key] ?: return@onToolCallFailed
+                        val safeMessage = redactor.redact(ctx.message)
+                        traceStore.recordToolFailed(traceId, id, errorMessage = safeMessage)
+                        _events.tryEmit(ToolEvent.Failed(toolName = ctx.toolName, message = safeMessage))
+                        producerScope.trySend(StreamChunk.ToolFailed(toolName = ctx.toolName, message = safeMessage))
+                    }
+                }
+            },
+        )
+    }
+
+    private data class HistoryEntry(val role: Role, val text: String)
+    private enum class Role { USER, ASSISTANT }
+
+    public companion object {
+        private const val MAX_ITERATIONS_DEFAULT = 10
+        private const val EVENT_BUFFER_CAPACITY = 64
+
+        /**
+         * Default per-LLM-call `max_tokens` budget. 8192 is the practical
+         * ceiling for Claude Sonnet 4.x without extended-thinking and well
+         * above what any `ui_render` tool call legitimately needs. Bigger
+         * than necessary is fine — Anthropic only bills for tokens
+         * actually generated.
+         */
+        public const val DEFAULT_MAX_OUTPUT_TOKENS: Int = 8192
+        // 8KB is enough for typical ui_render trees + form payloads.
+        // Bigger trees still get truncated; the user can drill into the
+        // trace in the viewer and see the args.
+        private const val ARGS_PREVIEW_MAX = 8000
+
+        /**
+         * Tail of history kept VOLATILE — uncached. 2 keeps the last
+         * user+assistant pair off the cache (they change every turn);
+         * everything older is SESSION-cache eligible.
+         */
+        private const val HISTORY_VOLATILE_TAIL_TURNS = 2
+    }
+}
+
+/** Tool lifecycle event emitted by [WeftAgent]. */
+public sealed class ToolEvent {
+    public abstract val toolName: String
+
+    public data class Starting(override val toolName: String, val argsPreview: String) : ToolEvent()
+    public data class Completed(override val toolName: String) : ToolEvent()
+    public data class Failed(override val toolName: String, val message: String) : ToolEvent()
+}

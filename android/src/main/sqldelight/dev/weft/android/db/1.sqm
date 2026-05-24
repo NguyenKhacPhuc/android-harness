@@ -1,0 +1,166 @@
+-- Migration 1 → 2.
+--
+-- Two things happen here:
+--
+-- 1. **Catch up v1 baseline** — every table + index that was at any point
+--    part of "version 1" gets a `CREATE … IF NOT EXISTS`. The reason this
+--    matters: not every device's v1 looks the same. Early users installed
+--    when only `memories` + `key_value` existed. We added Conversations.sq,
+--    Traces.sq, Usage.sq later WITHOUT bumping schema version (relying on
+--    `Schema.create()` for fresh installs). Those existing installs never
+--    got the new tables. So this migration first heals their schema to
+--    the canonical v1 baseline, idempotently, before the actual v1 → v2
+--    diff runs.
+--
+--    Fresh-v2 installs come through `Schema.create()` (from the `.sq`
+--    files) instead, so the IF NOT EXISTS branches are no-ops for them.
+--
+-- 2. **FTS5 upgrade** — add `memories_fts` + `messages_fts` virtual
+--    tables, the sync triggers, and a back-fill so existing rows are
+--    searchable post-migration.
+
+-- ----------------------------------------------------------------------
+-- v1 baseline catch-up (idempotent)
+-- ----------------------------------------------------------------------
+
+CREATE TABLE IF NOT EXISTS memories (
+    id TEXT NOT NULL PRIMARY KEY,
+    content TEXT NOT NULL,
+    tags_json TEXT NOT NULL,
+    scope TEXT NOT NULL,
+    stored_at_ms INTEGER NOT NULL
+);
+CREATE INDEX IF NOT EXISTS memories_by_stored_at ON memories(stored_at_ms DESC);
+CREATE INDEX IF NOT EXISTS memories_by_scope ON memories(scope);
+
+CREATE TABLE IF NOT EXISTS key_value (
+    namespace TEXT NOT NULL,
+    key TEXT NOT NULL,
+    value TEXT NOT NULL,
+    expires_at_ms INTEGER NOT NULL DEFAULT 0,
+    PRIMARY KEY (namespace, key)
+);
+CREATE INDEX IF NOT EXISTS key_value_by_namespace ON key_value(namespace);
+
+CREATE TABLE IF NOT EXISTS traces (
+    id TEXT NOT NULL PRIMARY KEY,
+    conversation_id TEXT NOT NULL,
+    start_epoch_ms INTEGER NOT NULL,
+    end_epoch_ms INTEGER,
+    user_message TEXT NOT NULL,
+    final_assistant_message TEXT,
+    status TEXT NOT NULL,
+    error_message TEXT,
+    feedback TEXT NOT NULL DEFAULT 'NONE'
+);
+CREATE INDEX IF NOT EXISTS traces_by_start ON traces(start_epoch_ms DESC);
+CREATE INDEX IF NOT EXISTS traces_by_conversation ON traces(conversation_id);
+
+CREATE TABLE IF NOT EXISTS llm_calls (
+    id TEXT NOT NULL PRIMARY KEY,
+    trace_id TEXT NOT NULL,
+    seq INTEGER NOT NULL,
+    start_epoch_ms INTEGER NOT NULL,
+    end_epoch_ms INTEGER,
+    model TEXT NOT NULL,
+    input_tokens INTEGER,
+    output_tokens INTEGER,
+    total_tokens INTEGER
+);
+CREATE INDEX IF NOT EXISTS llm_calls_by_trace ON llm_calls(trace_id, seq);
+
+CREATE TABLE IF NOT EXISTS tool_calls (
+    id TEXT NOT NULL PRIMARY KEY,
+    trace_id TEXT NOT NULL,
+    seq INTEGER NOT NULL,
+    start_epoch_ms INTEGER NOT NULL,
+    end_epoch_ms INTEGER,
+    tool_name TEXT NOT NULL,
+    args_preview TEXT NOT NULL,
+    result_preview TEXT,
+    status TEXT NOT NULL,
+    error_message TEXT
+);
+CREATE INDEX IF NOT EXISTS tool_calls_by_trace ON tool_calls(trace_id, seq);
+
+CREATE TABLE IF NOT EXISTS usage_daily (
+    day TEXT NOT NULL PRIMARY KEY,
+    usd_total REAL NOT NULL DEFAULT 0,
+    input_tokens INTEGER NOT NULL DEFAULT 0,
+    output_tokens INTEGER NOT NULL DEFAULT 0
+);
+
+CREATE TABLE IF NOT EXISTS conversations (
+    id TEXT NOT NULL PRIMARY KEY,
+    title TEXT NOT NULL DEFAULT '',
+    created_at_ms INTEGER NOT NULL,
+    last_message_at_ms INTEGER NOT NULL
+);
+CREATE INDEX IF NOT EXISTS conversations_by_last_message ON conversations(last_message_at_ms DESC);
+
+CREATE TABLE IF NOT EXISTS messages (
+    id TEXT NOT NULL PRIMARY KEY,
+    conversation_id TEXT NOT NULL,
+    seq INTEGER NOT NULL,
+    role TEXT NOT NULL,
+    content TEXT NOT NULL,
+    created_at_ms INTEGER NOT NULL
+);
+CREATE INDEX IF NOT EXISTS messages_by_conversation ON messages(conversation_id, seq);
+
+-- ----------------------------------------------------------------------
+-- v1 → v2: FTS5 virtual tables + sync triggers + back-fill
+-- ----------------------------------------------------------------------
+
+CREATE VIRTUAL TABLE memories_fts USING fts5(
+    content,
+    tags_json,
+    content='memories',
+    content_rowid='rowid',
+    tokenize='unicode61 remove_diacritics 2'
+);
+
+CREATE TRIGGER memories_fts_ai AFTER INSERT ON memories BEGIN
+    INSERT INTO memories_fts(rowid, content, tags_json)
+    VALUES (new.rowid, new.content, new.tags_json);
+END;
+
+CREATE TRIGGER memories_fts_ad AFTER DELETE ON memories BEGIN
+    INSERT INTO memories_fts(memories_fts, rowid, content, tags_json)
+    VALUES ('delete', old.rowid, old.content, old.tags_json);
+END;
+
+CREATE TRIGGER memories_fts_au AFTER UPDATE ON memories BEGIN
+    INSERT INTO memories_fts(memories_fts, rowid, content, tags_json)
+    VALUES ('delete', old.rowid, old.content, old.tags_json);
+    INSERT INTO memories_fts(rowid, content, tags_json)
+    VALUES (new.rowid, new.content, new.tags_json);
+END;
+
+INSERT INTO memories_fts(rowid, content, tags_json)
+SELECT rowid, content, tags_json FROM memories;
+
+CREATE VIRTUAL TABLE messages_fts USING fts5(
+    content,
+    content='messages',
+    content_rowid='rowid',
+    tokenize='unicode61 remove_diacritics 2'
+);
+
+CREATE TRIGGER messages_fts_ai AFTER INSERT ON messages BEGIN
+    INSERT INTO messages_fts(rowid, content) VALUES (new.rowid, new.content);
+END;
+
+CREATE TRIGGER messages_fts_ad AFTER DELETE ON messages BEGIN
+    INSERT INTO messages_fts(messages_fts, rowid, content)
+    VALUES ('delete', old.rowid, old.content);
+END;
+
+CREATE TRIGGER messages_fts_au AFTER UPDATE ON messages BEGIN
+    INSERT INTO messages_fts(messages_fts, rowid, content)
+    VALUES ('delete', old.rowid, old.content);
+    INSERT INTO messages_fts(rowid, content) VALUES (new.rowid, new.content);
+END;
+
+INSERT INTO messages_fts(rowid, content)
+SELECT rowid, content FROM messages;

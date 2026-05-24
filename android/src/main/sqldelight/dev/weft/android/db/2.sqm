@@ -1,0 +1,15 @@
+-- Migration 2 → 3.
+--
+-- Adds cache-token columns to `usage_daily` and `llm_calls` so the
+-- Anthropic prompt-cache write/read counts (now surfaced by Koog 1.0.0
+-- via ResponseMetaInfo.metadata) can be persisted and aggregated.
+--
+-- All four columns default to 0 / null so existing rows remain valid;
+-- the SqlDelightUsageStore / SqlDelightTraceStore writes pick up the
+-- new columns going forward.
+
+ALTER TABLE usage_daily ADD COLUMN cache_read_tokens INTEGER NOT NULL DEFAULT 0;
+ALTER TABLE usage_daily ADD COLUMN cache_write_tokens INTEGER NOT NULL DEFAULT 0;
+
+ALTER TABLE llm_calls ADD COLUMN cache_read_tokens INTEGER;
+ALTER TABLE llm_calls ADD COLUMN cache_write_tokens INTEGER;

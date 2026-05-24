@@ -1,0 +1,18 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+    Paths exposed by the substrate's FileProvider.
+
+      • files-path . — Context.filesDir, used by files_save for long-term
+        storage that survives cache eviction.
+      • cache-path audio — cacheDir/audio/, used by audio_record.
+      • cache-path camera — cacheDir/camera/, used by camera_capture.
+
+    Each subpath is scoped to its tool's directory so a leaked URI from
+    one capability can't read another's files. Nothing outside Context's
+    own filesDir / cacheDir is reachable through this authority.
+-->
+<paths>
+    <files-path name="files" path="." />
+    <cache-path name="audio" path="audio/" />
+    <cache-path name="camera" path="camera/" />
+</paths>
