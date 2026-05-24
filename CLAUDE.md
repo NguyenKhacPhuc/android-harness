@@ -14,6 +14,19 @@ own tools / components on top.
 Reference app: <https://github.com/NguyenKhacPhuc/undercurrent> —
 sibling repo. Use it as the canonical example of host-app wiring.
 
+## The architectural rule (read first)
+
+> **The SDK provides everything. The app just registers.**
+
+The full split is documented in `docs/architecture-vision.md`. Headline:
+tools, memory, conversation, traces, cost, routing, prompt assembly,
+data-binding, MCP, OAuth, OS bridges, multi-agent (future), strategy
+(future) — all SDK. The app contributes identity + screens + DI wiring +
+which tools/components/data-sources/MCP-servers to register. When
+considering where new logic goes, ask: *would another Weft host need
+this same behavior?* If yes → SDK. If it's about the specific app's
+identity / UX / branding → app.
+
 ## Module layout (skim before searching)
 
 - `:contracts` — pure-Kotlin interfaces. `WeftCredentialProvider`,

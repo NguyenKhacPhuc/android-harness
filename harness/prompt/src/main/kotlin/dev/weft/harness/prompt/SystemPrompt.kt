@@ -2,6 +2,7 @@ package dev.weft.harness.prompt
 
 import dev.weft.contracts.ComponentCategory
 import dev.weft.contracts.ComponentMetadata
+import dev.weft.contracts.DataSource
 import dev.weft.tools.WeftTool
 
 /**
@@ -20,6 +21,7 @@ public fun assembleSystemPrompt(
     appPreamble: String,
     tools: List<WeftTool<*, *>>,
     components: List<ComponentMetadata> = emptyList(),
+    dataSources: List<DataSource> = emptyList(),
     extraNotes: String? = null,
 ): String = buildString {
     if (appPreamble.isNotBlank()) {
@@ -31,6 +33,23 @@ public fun assembleSystemPrompt(
         val name = tool.descriptor.name
         val description = tool.descriptor.description.trim()
         appendLine("- $name: $description")
+    }
+    if (dataSources.isNotEmpty()) {
+        appendLine()
+        appendLine("Available data collections (use with data_query / data_upsert / data_delete):")
+        for (source in dataSources) {
+            val desc = source.description.trim()
+            if (desc.isEmpty()) {
+                appendLine("- ${source.name}")
+            } else {
+                appendLine("- ${source.name}: $desc")
+            }
+        }
+        appendLine(
+            "New collection names are NOT auto-created — passing an unknown name to " +
+                "data_upsert fails. Distinguish categories within an existing collection by adding " +
+                "a `type` field to the JSON record (e.g. {\"type\":\"water_log\", ...} inside `notes`).",
+        )
     }
     if (components.isNotEmpty()) {
         appendLine()

@@ -30,6 +30,19 @@ interface DataSource {
     val name: String
 
     /**
+     * Short human-readable label for the agent's system prompt
+     * (e.g. "Free-form notes — water logs, mood entries, snippets",
+     * "To-do items"). The substrate appends every registered source's
+     * `name → description` pair into the system prompt automatically,
+     * so apps don't need to hand-document their data layer in the
+     * preamble.
+     *
+     * Empty by default — apps can ignore this on legacy sources, in
+     * which case the substrate just lists the name without a description.
+     */
+    val description: String get() = ""
+
+    /**
      * Emits one [Unit] per mutation (upsert or delete). Subscribers
      * re-query for whatever they need. Implementations should signal
      * AFTER the durable write completes — not optimistically — so

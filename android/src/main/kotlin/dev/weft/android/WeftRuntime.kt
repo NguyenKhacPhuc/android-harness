@@ -426,6 +426,11 @@ public class WeftRuntime(
         appPreamble = appPromptPreamble,
         tools = tools,
         components = componentMetadata,
+        // Pass the registered DataSources so the substrate can auto-list
+        // them in the system prompt. Apps no longer need to hand-document
+        // their data layer in the preamble — register a DataSource with
+        // a description and the SDK takes it from there.
+        dataSources = dataSources,
         // Compose the two extension points into a single `extraNotes`
         // payload: static [extraSystemNotes] first, then the per-session
         // [dynamicSystemPromptSection] (evaluated once here, stable for

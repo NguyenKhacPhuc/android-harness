@@ -3,10 +3,8 @@ package dev.weft.compose.components
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.produceState
 import androidx.compose.runtime.remember
-import androidx.compose.runtime.setValue
 import dev.weft.contracts.ComponentEvent
 import dev.weft.contracts.ComponentNode
 import dev.weft.contracts.ComponentRegistry
@@ -50,20 +48,38 @@ public fun BindingAwareRenderer(
     // bound sources rarely change between renders.
     val referencedSources = remember(tree) { collectReferencedSources(tree, sources) }
 
+    // Diagnostic — only logs once per tree change. If no sources show
+    // up here, the tree has no `$binding` props (or the walker missed
+    // them); display values won't refresh on data changes. Visible via
+    //   adb logcat -s WeftBindings
+    LaunchedEffect(tree, referencedSources) {
+        android.util.Log.d(
+            "WeftBindings",
+            "Tree composed: referencedSources=${referencedSources.map { it.name }} " +
+                "(empty list = no \$binding sentinels found in tree props)",
+        )
+    }
+
     // Subscribe to every referenced source's `changes` flow; merge into
     // one signal so a mutation on any of them triggers a fresh
     // resolution. produceState handles the launch/cancel lifecycle.
     val tick by produceState(initialValue = 0L, key1 = tree, key2 = referencedSources) {
         if (referencedSources.isEmpty()) return@produceState
         val merged = referencedSources.map { it.changes }.merge()
-        merged.collect { value = value + 1 }
+        merged.collect {
+            android.util.Log.d("WeftBindings", "Source-change tick from one of " +
+                "${referencedSources.map { s -> s.name }}; resolving tree again")
+            value = value + 1
+        }
     }
 
     // Resolve bindings on every tick (or first composition). Use
     // produceState so we don't block the UI thread on the evaluator —
     // the in-flight resolution shows the *previous* resolved tree.
     val resolvedTree by produceState(initialValue = tree, key1 = tree, key2 = tick) {
-        value = resolveTree(tree, sources)
+        val resolved = resolveTree(tree, sources)
+        android.util.Log.d("WeftBindings", "resolveTree complete (tick=$tick)")
+        value = resolved
     }
 
     TreeRenderer(tree = resolvedTree, registry = registry, onEvent = onEvent)

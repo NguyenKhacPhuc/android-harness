@@ -70,6 +70,19 @@ public fun AgentRenderedTreeScreen(
      * same registry they handed to `WeftRuntime.create`.
      */
     dataSources: dev.weft.contracts.DataSourceRegistry? = null,
+    /**
+     * Optional callback for the "Save" affordance in the top bar.
+     * When non-null, the screen renders a Save TextButton next to
+     * Back; tapping it lets the host capture the current rendered
+     * tree (plus whatever it associates with this view — typically
+     * the user prompt that produced it) for later re-invocation.
+     *
+     * Without this, mini-apps the agent renders are transient: the
+     * user sees them once and has no in-screen way to persist them.
+     * Setting it on adds a save path the user can hit without
+     * backing out to chat first.
+     */
+    onSaveAsFeature: (() -> Unit)? = null,
 ) {
     val update = uiBridge.lastUpdate
     if (update !is UIUpdate.RenderTree) {
@@ -112,6 +125,13 @@ public fun AgentRenderedTreeScreen(
                         modifier = Modifier.padding(end = 8.dp),
                         strokeWidth = 2.dp,
                     )
+                } else if (onSaveAsFeature != null) {
+                    // Save lives next to Back so the user can persist
+                    // the mini-app without first backing out to chat
+                    // and hunting for the assistant reply's "Save as
+                    // feature" link. The host opens its dialog +
+                    // captures whatever metadata it needs.
+                    TextButton(onClick = onSaveAsFeature) { Text("Save") }
                 } else {
                     Spacer(modifier = Modifier.padding(8.dp))
                 }
@@ -142,7 +162,29 @@ public fun AgentRenderedTreeScreen(
                             inFlight = true
                             scope.launch {
                                 try {
-                                    onAction(event.action, event.sourceLabel, fieldValues.toMap())
+                                    // Substrate-level $exec fast-path. When the
+                                    // agent emitted a direct-execute action, the
+                                    // ActionExecutor runs the named data tool
+                                    // against the registry — no LLM round-trip,
+                                    // sub-100ms tap-to-result. Only forwards to
+                                    // the host's onAction for legacy
+                                    // LLM-driven actions (opaque strings).
+                                    val handled = dataSources?.let { sources ->
+                                        val isExec = dev.weft.harness.prompt.bindings.ActionExecutor
+                                            .isExecAction(event.action)
+                                        if (isExec) {
+                                            android.util.Log.d(
+                                                "WeftBindings",
+                                                "\$exec intercepted: sourceLabel=${event.sourceLabel}",
+                                            )
+                                        }
+                                        dev.weft.harness.prompt.bindings.ActionExecutor
+                                            .tryExecuteAction(event.action, sources)
+                                            .handled
+                                    } ?: false
+                                    if (!handled) {
+                                        onAction(event.action, event.sourceLabel, fieldValues.toMap())
+                                    }
                                 } finally {
                                     inFlight = false
                                 }
