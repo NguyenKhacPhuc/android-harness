@@ -54,7 +54,7 @@ kotlinx-coroutines-core = { module = "org.jetbrains.kotlinx:kotlinx-coroutines-c
 kotlinx-coroutines-android = { module = "org.jetbrains.kotlinx:kotlinx-coroutines-android", version.ref = "coroutines" }
 kotlinx-coroutines-test = { module = "org.jetbrains.kotlinx:kotlinx-coroutines-test", version.ref = "coroutines" }
 kotlinx-serialization-json = { module = "org.jetbrains.kotlinx:kotlinx-serialization-json", version.ref = "serializationJson" }
-kotlinx-datetime = { module = "org.jetbrains.kotlinx:kotlinx-datetime", version = "0.6.1" }
+kotlinx-datetime = { module = "org.jetbrains.kotlinx:kotlinx-datetime", version = "0.7.1" }
 
 # Compose (Android)
 androidx-compose-bom = { module = "androidx.compose:compose-bom", version.ref = "composeBom" }
@@ -98,6 +98,10 @@ androidx-activity = { module = "androidx.activity:activity", version.ref = "acti
 # ML Kit (on-device vision)
 mlkit-text-recognition = { module = "com.google.mlkit:text-recognition", version = "16.0.1" }
 mlkit-barcode-scanning = { module = "com.google.mlkit:barcode-scanning", version = "17.3.0" }
+# Translation pulls a ~30MB model per language pair on first use;
+# language-id is ~1MB. Both run fully offline after download.
+mlkit-translate = { module = "com.google.mlkit:translate", version = "17.0.3" }
+mlkit-language-id = { module = "com.google.mlkit:language-id", version = "17.0.6" }
 
 # Google Play services
 play-services-location = { module = "com.google.android.gms:play-services-location", version = "21.3.0" }

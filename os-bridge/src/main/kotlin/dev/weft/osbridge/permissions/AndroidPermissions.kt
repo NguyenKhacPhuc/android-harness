@@ -138,4 +138,10 @@ internal fun Permission.toAndroidPermission(context: Context): String? = when (t
         } else {
             null
         }
+    Permission.ACTIVITY_RECOGNITION ->
+        if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.Q) {
+            android.Manifest.permission.ACTIVITY_RECOGNITION
+        } else {
+            null
+        }
 }

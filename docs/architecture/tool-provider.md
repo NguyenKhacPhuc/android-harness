@@ -1,12 +1,14 @@
 # Tool provider — per-agent prompt scoping + lazy materialization
 
-- **Status:** Design — approved direction, not implemented
-- **Date:** 2026-05-25
+- **Status:** Stage 1 shipped (2026-05-27). Stage 2 core shipped
+  (2026-05-27). MCP migration + sticky activation persistence still
+  outstanding — tracked as follow-up.
+- **Date:** 2026-05-25; Stage 1 + Stage 2 core landed 2026-05-27.
 - **Tracks:** Token-cost-per-turn leak in the multi-agent registry +
   forward-looking accommodation for rapidly growing tool catalogs
   (especially via MCP integrations).
-- **Estimated scope:** Stage 1 ~50 LOC. Stage 2 ~600 LOC + a Koog
-  probe (1 hour) before committing.
+- **Estimated scope:** Stage 1 ~50 LOC ✅ done. Stage 2 ~970 LOC +
+  a Koog probe (1-2 hours) before committing.
 
 ## Why this exists
 
@@ -120,10 +122,19 @@ val baseSystemPrompt = if (declaration.allowedTools.isEmpty()) {
 
 ### Tests
 
-Add `WeftRuntimeAgentScopingTest` to `:android:src/test`. Two
-agents registered, distinct `allowedTools`. Assert each agent's
-constructed `WeftAgent` was supplied a prompt that contains only
-its allowed tool names. Cheap to write; locks the contract.
+✅ Shipped in
+[`android/src/test/kotlin/dev/weft/android/WeftRuntimeAgentScopingTest.kt`](../../android/src/test/kotlin/dev/weft/android/WeftRuntimeAgentScopingTest.kt).
+Tests the underlying contract that `assembleSystemPrompt(tools =
+filtered)` produces a catalog mentioning only the filtered tools
+plus the byte-savings invariant ("every omitted tool's line of
+`- name: description` is gone, sum-of-lines = delta"). The
+conditional in `buildAgentForDeclaration` is a 4-line branch
+verified by inspection.
+
+Constructing a full `WeftRuntime` in a unit test requires an
+Android `Context`, so the test pinpoints the prompt-assembly
+contract — anything that breaks Stage 1 would have to break this
+test or the conditional itself.
 
 ## Stage 2 — `ToolProvider` + discovery meta-tool
 
@@ -249,13 +260,12 @@ available." The runtime remembers activations and applies them at
 the next `send`. UX cost: every novel tool category requires two
 user-visible turns instead of one.
 
-**Probe needed before committing.** ~1 hour to spike whether
-Koog's `AIAgent.toolRegistry` is mutable mid-loop, or whether
-`AIAgent` can be reconstructed cheaply enough mid-`run()` to do
-Path A without breaking trace IDs or streaming state. If Path A is
-clean, Stage 2 is straightforward; if it's not, Path B is the
-fallback and the LLM-facing description of find_tool must be
-honest about the two-turn cost.
+**Probe needed before committing.** Full spike spec in
+[tool-provider-koog-probe.md](tool-provider-koog-probe.md) — three
+checks to run in order (direct mutation → writeSession extension →
+abort+rebuild), with code stubs and pass/fail criteria. Budget
+~1-2 hours; if it stretches past 3, the answer is Path B and Stage
+2 design pivots to the two-turn UX.
 
 ### App-side registration
 
@@ -315,12 +325,77 @@ integrations no longer pays for 30+ tool descriptions in every prompt.
 
 ## Migration plan
 
-### Stage 1 (one PR)
+### Stage 2 core (one PR) ✅ shipped 2026-05-27
 
-1. Add `systemPromptFor(tools)` helper in `WeftRuntime`.
-2. Branch in `buildAgentForDeclaration` — full vs filtered.
-3. Test in `:android:src/test/.../WeftRuntimeAgentScopingTest.kt`
-   asserting per-agent prompt content.
+1. ✅ Contracts —
+   [`ToolProvider`](../../contracts/src/main/kotlin/dev/weft/contracts/ToolProvider.kt)
+   + `ToolMetadata` + `ResolvedTool` in `:contracts`.
+2. ✅ `:tools` impls —
+   [`EagerToolProvider`](../../tools/src/main/kotlin/dev/weft/tools/ToolProviders.kt)
+   (back-compat shim, default), `compositeToolProvider` (multi-provider
+   merge with name-collision detection),
+   [`FindToolTool`](../../tools/src/main/kotlin/dev/weft/tools/FindToolTool.kt)
+   (search + sink write).
+3. ✅ Side channel —
+   [`ToolActivationSink`](../../contracts/src/main/kotlin/dev/weft/contracts/ToolActivationSink.kt)
+   `CoroutineContext.Element`.
+4. ✅ Strategy node —
+   [`weftSingleRunStrategy(toolProvider)`](../../harness/agents/src/main/kotlin/dev/weft/harness/agents/multimodal/WeftStrategies.kt)
+   inserts a `nodeApplyActivations` between `nodeExecuteTools` and
+   `nodeSendToolResult`. Drains the sink, resolves names, mutates
+   `llm.tools` + `llm.toolRegistry`. No-op when `toolProvider == null`
+   (eager mode).
+5. ✅ Runtime wiring —
+   [`WeftRuntime.create(toolProvider = ...)`](../../android/src/main/kotlin/dev/weft/android/WeftRuntime.kt)
+   accepts the override; default auto-builds an `EagerToolProvider`
+   from prebuilts. `find_tool` registered into every agent's catalog
+   iff `hasOnDemandTools`.
+6. ✅ Tests —
+   [`ToolProviderTest.kt`](../../tools/src/test/kotlin/dev/weft/tools/ToolProviderTest.kt)
+   covers EagerToolProvider (incl. duplicate detection), composite
+   (incl. collision detection), FindToolTool ranking +
+   alwaysOn-filtering + category filter, and sink write/dedupe.
+
+### What's still outstanding for full Stage 2
+
+These were carved out of the initial Stage 2 PR to keep scope sane;
+each is independently shippable:
+
+- **MCP migration** (~½ day) — split out an
+  `McpToolProvider` that surfaces MCP discovery results as
+  `ToolMetadata` with `alwaysOn = false`. Currently MCP tools still
+  load eagerly via `mcpToolsReady`. Biggest single token win when
+  done.
+- **Substrate always-on tagging** (~½ day) — today the auto-built
+  `EagerToolProvider` tags every substrate tool as `alwaysOn = true`.
+  Hosts that pass a custom provider can already opt in to lazy
+  semantics; once we add a `SubstrateToolProvider` with explicit
+  always-on tagging (memory_*, system_user_context, find_tool, ui_ask,
+  ui_render) and on-demand for the rest, even default hosts get the
+  benefit.
+- **Sticky activation persistence** (~½ day) — currently the
+  `ToolActivationSink` is per-turn (lives only for the single
+  `agent.run()` call). Sticky activation across conversation turns
+  requires a SQLDelight column + the `ConversationStore` plumbing.
+  Need to decide: sticky-with-TTL, or sticky-forever-until-cleared?
+- **`forget_tool` companion** (~¼ day) — once sticky lands, the LLM
+  needs a way to drop tools it no longer needs from the active set.
+- **Reference-app dogfood** (~½ day) — Undercurrent switches to a
+  composite provider with at least one on-demand tool, measure
+  per-turn token reduction.
+
+### Stage 1 (one PR) ✅ shipped 2026-05-27
+
+1. ✅ Added `systemPromptFor(tools)` helper in `WeftRuntime` (lines
+   ~715-735 of `WeftRuntime.kt`).
+2. ✅ Branched in `buildAgentForDeclaration` — empty allowlist
+   reuses cached `resolvedSystemPrompt()`; non-empty rebuilds via
+   `systemPromptFor(allTools)`.
+3. ✅ Test in
+   [`android/src/test/.../WeftRuntimeAgentScopingTest.kt`](../../android/src/test/kotlin/dev/weft/android/WeftRuntimeAgentScopingTest.kt)
+   — asserts both the "filtered prompt mentions only filtered
+   tools" contract and the "byte savings ≥ sum of omitted tool
+   lines" invariant.
 4. No host-app changes required.
 
 ### Stage 2 (probe → spec → ship)

@@ -39,6 +39,11 @@ java {
 dependencies {
     api(project(":contracts"))
     api(project(":tools"))
+    // Pulled in for [FakeWeftLLM] — a scripted [PromptExecutor] suitable for
+    // hermetic agent-loop tests + replaying captured wire dumps as fixtures.
+    api(libs.koog.agents)
+    // Reader for WireDumper captures (the JSON-lines fixture format).
+    api(project(":harness:observability"))
     // Apps usually pair tests with kotlinx.coroutines.test; we don't force it
     // but expose enough hooks (FakeUiBridge.answer, etc.) that runTest works.
     api(libs.kotlinx.coroutines.core)

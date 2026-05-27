@@ -6,6 +6,7 @@ import ai.koog.agents.core.tools.ToolParameterType
 import ai.koog.serialization.typeToken
 import dev.weft.contracts.BatteryInfo
 import dev.weft.contracts.DeviceInfo
+import dev.weft.contracts.DisplayInfo
 import dev.weft.contracts.NetworkInfo
 import kotlinx.serialization.Serializable
 
@@ -148,4 +149,38 @@ public class DeviceInfoTool(ctx: WeftContext) : WeftTool<DeviceInfoTool.Args, De
     public data class Args(val context: String = "")
 
     override suspend fun executeWeft(args: Args): DeviceInfo = os.systemInfo.device()
+}
+
+/**
+ * Read display state — dark mode on/off, screen dimensions, density,
+ * refresh rate, best-effort brightness, screen-interactive flag. No
+ * permission.
+ *
+ * Use cases: "is the user in dark mode? (skip the bright pastel chart)",
+ * "can I show this 4-line layout? screen is short", "user might be
+ * driving (screen off) — speak the answer instead of rendering it."
+ */
+public class DisplayInfoTool(ctx: WeftContext) : WeftTool<DisplayInfoTool.Args, DisplayInfo>(
+    ctx = ctx,
+    argsType = typeToken<Args>(),
+    resultType = typeToken<DisplayInfo>(),
+    descriptor = ToolDescriptor(
+        name = "display_info",
+        description = "Read display state: dark-mode flag, width/height in pixels, density, " +
+            "refresh rate (Hz), brightness 0..1 (null if unknown), and whether the screen is " +
+            "currently on. No permission required.",
+        requiredParameters = listOf(
+            ToolParameterDescriptor(
+                "context",
+                "Why you're calling this tool, e.g. 'user asked'. Any short string; ignored.",
+                ToolParameterType.String,
+            ),
+        ),
+        optionalParameters = emptyList(),
+    ),
+) {
+    @Serializable
+    public data class Args(val context: String = "")
+
+    override suspend fun executeWeft(args: Args): DisplayInfo = os.systemInfo.display()
 }

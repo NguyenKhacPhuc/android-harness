@@ -26,4 +26,12 @@ enum class Permission {
      * mapper resolves the right one per SDK level.
      */
     BLUETOOTH_CONNECT,
+
+    /**
+     * Android 10+ `ACTIVITY_RECOGNITION` runtime permission — needed
+     * to read the step-counter sensor (`sensor_steps_today`). Pre-10
+     * the sensor is freely accessible; the os-bridge mapper returns
+     * null on those SDKs so the tool treats it as implicit GRANTED.
+     */
+    ACTIVITY_RECOGNITION,
 }

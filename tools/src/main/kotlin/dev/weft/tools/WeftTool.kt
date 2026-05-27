@@ -3,10 +3,19 @@ package dev.weft.tools
 import ai.koog.agents.core.tools.Tool
 import ai.koog.agents.core.tools.ToolDescriptor
 import ai.koog.serialization.TypeToken
+import dev.weft.contracts.ApprovalMode
+import dev.weft.contracts.ApprovalModeHolder
+import dev.weft.contracts.HookContext
+import dev.weft.contracts.HookDecision
+import dev.weft.contracts.HookDeniedException
+import dev.weft.contracts.HookRegistry
+import dev.weft.contracts.InMemoryPlanStore
 import dev.weft.contracts.OsCapabilities
 import dev.weft.contracts.Permission
 import dev.weft.contracts.PermissionState
+import dev.weft.contracts.PlanStore
 import dev.weft.contracts.ScriptStorage
+import dev.weft.contracts.ToolRisk
 import dev.weft.contracts.UiBridge
 
 /**
@@ -51,6 +60,35 @@ public abstract class WeftTool<TArgs, TResult>(
     public val destructive: Boolean = false,
     public val sideEffecting: Boolean = false,
     public val requiredPermissions: Set<Permission> = emptySet(),
+    /**
+     * Coarse risk classification. Defaults derive from [destructive] /
+     * [sideEffecting] so existing tools classify correctly without
+     * editing:
+     *   - [destructive] = true → [ToolRisk.Destructive]
+     *   - [sideEffecting] = true → [ToolRisk.Write]
+     *   - else → [ToolRisk.Read]
+     *
+     * Override explicitly when the defaults mis-classify — e.g. a
+     * sideEffecting `log_event` that's safe to run in [ApprovalMode.ReadOnly]
+     * should declare `risk = ToolRisk.Read`.
+     */
+    public val risk: ToolRisk = when {
+        destructive -> ToolRisk.Destructive
+        sideEffecting -> ToolRisk.Write
+        else -> ToolRisk.Read
+    },
+    /**
+     * Whether this tool is part of the plan-mode workflow. In
+     * [ApprovalMode.Plan], only [ToolRisk.Read] tools and tools with
+     * `planAware = true` may execute — everything else is blocked
+     * until the user approves the plan and the mode flips back to
+     * [ApprovalMode.Default].
+     *
+     * Substrate built-ins set this for `exit_plan_mode` and `ui_ask`.
+     * Apps that ship their own plan-mode helpers (e.g. a custom
+     * `propose_design`) set it on those tools too.
+     */
+    public val planAware: Boolean = false,
 ) : Tool<TArgs, TResult>(
     argsType = argsType,
     resultType = resultType,
@@ -69,9 +107,78 @@ public abstract class WeftTool<TArgs, TResult>(
     public abstract suspend fun executeWeft(args: TArgs): TResult
 
     final override suspend fun execute(args: TArgs): TResult {
+        runApprovalGate()
         runPermissionGate()
         runDestructiveGate()
+        runPreToolHooks(args)
         return executeWeft(args)
+    }
+
+    /**
+     * Enforce the current [ApprovalMode]. [ApprovalMode.ReadOnly] rejects
+     * [ToolRisk.Write] / [ToolRisk.Destructive] tools; [ApprovalMode.ConfirmAllWrites]
+     * routes Write tools through [UiBridge.confirmDestructive] just like
+     * Destructive tools normally would. [ApprovalMode.Yolo] is honored
+     * downstream by [runDestructiveGate]; this gate is purely about
+     * blocking and confirming additional risk classes.
+     */
+    private suspend fun runApprovalGate() {
+        when (ctx.approvalMode.current()) {
+            ApprovalMode.ReadOnly -> {
+                if (risk != ToolRisk.Read) {
+                    throw ApprovalDeniedException(
+                        toolName = name,
+                        risk = risk,
+                        mode = ApprovalMode.ReadOnly,
+                    )
+                }
+            }
+            ApprovalMode.ConfirmAllWrites -> {
+                if (risk == ToolRisk.Write) {
+                    val confirmed = ui.confirmDestructive(
+                        action = "Confirm $name",
+                        body = "The agent wants to run $name which will make a change.",
+                    )
+                    if (!confirmed) throw UserCancelledException(name)
+                }
+            }
+            ApprovalMode.Plan -> {
+                // Plan mode: read-only by default, with a carve-out for
+                // tools that ARE the plan workflow (exit_plan_mode, ui_ask).
+                // Once the user approves and the host flips the holder
+                // back to Default, normal gates resume.
+                if (risk != ToolRisk.Read && !planAware) {
+                    throw ApprovalDeniedException(
+                        toolName = name,
+                        risk = risk,
+                        mode = ApprovalMode.Plan,
+                    )
+                }
+            }
+            ApprovalMode.Default, ApprovalMode.Yolo -> Unit
+        }
+    }
+
+    /**
+     * Run the registered [HookRegistry]'s pre-tool callbacks. A
+     * [HookDecision.Deny] aborts execution and surfaces to the LLM via
+     * [HookDeniedException]. Empty registries skip the work entirely.
+     */
+    private suspend fun runPreToolHooks(args: TArgs) {
+        val hooks = ctx.hooks
+        if (hooks.isEmpty) return
+        val argsPreview = args?.toString()?.take(HOOK_ARGS_PREVIEW_MAX).orEmpty()
+        val hookCtx = HookContext.ToolStart(
+            traceId = "",
+            conversationId = "",
+            toolName = name,
+            argsPreview = argsPreview,
+            risk = risk,
+        )
+        when (val decision = hooks.onToolStart(hookCtx)) {
+            is HookDecision.Continue -> Unit
+            is HookDecision.Deny -> throw HookDeniedException(name, decision.reason)
+        }
     }
 
     private suspend fun runPermissionGate() {
@@ -109,22 +216,57 @@ public abstract class WeftTool<TArgs, TResult>(
 
     private suspend fun runDestructiveGate() {
         if (!destructive) return
+        // Yolo mode skips the destructive prompt — power-user opt-in.
+        // Read-only / Plan already rejected in runApprovalGate.
+        if (ctx.approvalMode.current() == ApprovalMode.Yolo) return
         val confirmed = ui.confirmDestructive(
             action = "Confirm $name",
             body = "The agent wants to call $name which may make a destructive change.",
         )
         if (!confirmed) throw UserCancelledException(name)
     }
+
+    private companion object {
+        const val HOOK_ARGS_PREVIEW_MAX = 512
+    }
 }
 
 /**
  * Shared context every [WeftTool] needs. Built once at app startup and
  * passed to every tool's constructor.
+ *
+ * [hooks] and [approvalMode] default to no-op / [ApprovalMode.Default]
+ * so existing host code that constructs `WeftContext(os, ui, storageFactory)`
+ * compiles unchanged. WeftRuntime passes the same [HookRegistry] instance
+ * here that it passes to the agent so tool-level and turn-level hooks
+ * fire from a unified set.
  */
 public data class WeftContext(
     val os: OsCapabilities,
     val ui: UiBridge,
     val storageFactory: (toolName: String) -> ScriptStorage,
+    /**
+     * Lifecycle interception. Tool gates consult this BEFORE
+     * [WeftTool.executeWeft]; the agent loop consults it for turn-level
+     * events. Default empty registry = zero overhead.
+     */
+    val hooks: HookRegistry = HookRegistry.EMPTY,
+    /**
+     * Session-wide approval policy holder. Mutable so the host UI can
+     * flip modes mid-session (user toggles Yolo, plan gets approved).
+     * Pass the SAME instance to [dev.weft.harness.agents.WeftAgent] so
+     * the prompt directive + gate stay in sync. Default holder starts
+     * in [ApprovalMode.Default].
+     */
+    val approvalMode: ApprovalModeHolder = ApprovalModeHolder(),
+    /**
+     * Where the `exit_plan_mode` tool writes proposed plans. The app's
+     * plan-review screen subscribes to [PlanStore.state] to render the
+     * Approve / Refine / Cancel UI. Defaults to an in-memory store —
+     * apps that want plans to survive process death implement against
+     * SQLDelight (similar to the conversation store).
+     */
+    val planStore: PlanStore = InMemoryPlanStore(),
 )
 
 public class PermissionDeniedException(
@@ -136,3 +278,16 @@ public class PermissionDeniedException(
 
 public class UserCancelledException(public val toolName: String) :
     RuntimeException("User declined to run $toolName.")
+
+/**
+ * Raised when a tool's [ToolRisk] is incompatible with the active
+ * [ApprovalMode] — [ApprovalMode.ReadOnly] rejecting a Write tool, for
+ * example. The LLM sees this as a tool failure and can react.
+ */
+public class ApprovalDeniedException(
+    public val toolName: String,
+    public val risk: ToolRisk,
+    public val mode: ApprovalMode,
+) : RuntimeException(
+    "Tool '$toolName' (risk=$risk) blocked by approval mode $mode.",
+)

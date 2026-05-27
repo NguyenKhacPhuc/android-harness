@@ -13,6 +13,7 @@ import dev.weft.contracts.ContextProvider
 import dev.weft.contracts.ContextRegistry
 import dev.weft.contracts.DataSource
 import dev.weft.contracts.DataSourceRegistry
+import dev.weft.contracts.ToolProvider
 import dev.weft.contracts.KeyVault
 import dev.weft.contracts.OsCapabilities
 import dev.weft.contracts.UiBridge
@@ -43,8 +44,35 @@ import dev.weft.android.persistence.SqlDelightUsageStore
 import dev.weft.android.persistence.WeftDatabaseFactory
 import dev.weft.android.persistence.pruneExpiredKeyValues
 import dev.weft.tools.AlarmSetTool
+import dev.weft.tools.AppInstalledTool
+import dev.weft.tools.AppListLaunchableTool
 import dev.weft.tools.AudioRecordTool
 import dev.weft.tools.BatteryStatusTool
+import dev.weft.tools.ColorConvertTool
+import dev.weft.tools.DetectLanguageTool
+import dev.weft.tools.HashTool
+import dev.weft.tools.ImageCropTool
+import dev.weft.tools.ImageResizeTool
+import dev.weft.tools.ImageRotateTool
+import dev.weft.tools.JsonQueryTool
+import dev.weft.tools.MathEvalTool
+import dev.weft.tools.PhoneDialTool
+import dev.weft.tools.PowerKeepScreenOnTool
+import dev.weft.tools.PowerSetBrightnessTool
+import dev.weft.tools.RandomChoiceTool
+import dev.weft.tools.RegexMatchTool
+import dev.weft.tools.SettingsOpenTool
+import dev.weft.tools.ShortcutListTool
+import dev.weft.tools.ShortcutPushTool
+import dev.weft.tools.ShortcutRemoveTool
+import dev.weft.tools.SmsComposeTool
+import dev.weft.tools.TelephonyInfoTool
+import dev.weft.tools.TextTransformTool
+import dev.weft.tools.TranslateTextTool
+import dev.weft.tools.UrlParseTool
+import dev.weft.tools.VolumeGetTool
+import dev.weft.tools.VolumeSetTool
+import dev.weft.tools.WifiInfoTool
 import dev.weft.tools.BiometricAuthenticateTool
 import dev.weft.tools.BluetoothDeviceBatteryTool
 import dev.weft.tools.BluetoothListPairedTool
@@ -57,10 +85,20 @@ import dev.weft.tools.CalendarUpdateTool
 import dev.weft.tools.ClipboardReadTool
 import dev.weft.tools.ClipboardWriteTool
 import dev.weft.tools.ContactsReadTool
+import dev.weft.tools.DateComputeTool
+import dev.weft.tools.DisplayInfoTool
 import dev.weft.tools.HapticsTool
 import dev.weft.tools.LocationCurrentTool
 import dev.weft.tools.LocationGeocodeTool
 import dev.weft.tools.LocationReverseGeocodeTool
+import dev.weft.tools.MediaListRecentTool
+import dev.weft.tools.MediaPickAnyTool
+import dev.weft.tools.MediaPickImageTool
+import dev.weft.tools.MediaPickVideoTool
+import dev.weft.tools.MediaQueryTool
+import dev.weft.tools.SensorAmbientLightTool
+import dev.weft.tools.SensorStepsTodayTool
+import dev.weft.tools.SpeechRecognizeTool
 import dev.weft.tools.SpeechSayTool
 import dev.weft.tools.VisionBarcodeTool
 import dev.weft.tools.VisionOcrTool
@@ -86,7 +124,11 @@ import dev.weft.tools.ScheduleCreateTool
 import dev.weft.tools.ScheduleListTool
 import dev.weft.tools.WeftContext
 import dev.weft.tools.WeftTool
+import dev.weft.tools.FindToolTool
+import dev.weft.tools.EagerToolProvider
 import dev.weft.tools.SystemUserContextTool
+import dev.weft.tools.ToolMetadataOverride
+import dev.weft.tools.compositeToolProvider
 import dev.weft.tools.UiAskTool
 import dev.weft.tools.UiDialogTool
 import dev.weft.tools.UiNavigateTool
@@ -159,6 +201,22 @@ public class WeftRuntime(
      * `ui_notify`. Apps with custom UI provide their own tools or none.
      */
     private val extraToolsFactory: (WeftContext) -> List<WeftTool<*, *>> = { _ -> emptyList() },
+    /**
+     * Stage 2 of `docs/architecture/tool-provider.md` — optional lazy
+     * tool catalog. When null (default), the runtime auto-builds an
+     * [EagerToolProvider] wrapping the substrate's prebuilt list plus
+     * anything `extraToolsFactory` produced, with the substrate's
+     * always-on subset (memory_*, system_user_context, find_tool)
+     * tagged accordingly. Existing single-provider hosts see zero
+     * behavior change.
+     *
+     * Apps that want lazy MCP / app-domain tools pass a custom
+     * provider — typically `compositeToolProvider(substrateProvider,
+     * appProvider, mcpProvider)`. The activation node in the agent
+     * strategy resolves names from `find_tool` searches against this
+     * provider mid-turn.
+     */
+    private val toolProviderOverride: ToolProvider? = null,
     /**
      * Component metadata for the system prompt's UI catalog (per ADR-007).
      * Apps using `:substrate:android-ui` pass `substrateUi.components` here.
@@ -430,7 +488,14 @@ public class WeftRuntime(
      * app's [UiBridge] impl, so the SDK doesn't know or care which UI
      * framework the app is using.
      */
-    public val tools: List<WeftTool<*, *>> = listOf<WeftTool<*, *>>(
+    /**
+     * The substrate's prebuilt tool list — substrate built-ins +
+     * [extraToolsFactory]. Does NOT include `find_tool` (which depends
+     * on [toolProvider], which depends on this list — circularity
+     * broken by separating the two). [tools] is the public view that
+     * appends `find_tool` when [hasOnDemandTools].
+     */
+    private val prebuiltTools: List<WeftTool<*, *>> = listOf<WeftTool<*, *>>(
         NotifyShowTool(toolContext),
         ScheduleCreateTool(toolContext),
         ScheduleListTool(toolContext),
@@ -463,6 +528,7 @@ public class WeftRuntime(
         LocationGeocodeTool(toolContext),
         LocationReverseGeocodeTool(toolContext),
         SpeechSayTool(toolContext),
+        SpeechRecognizeTool(toolContext),
         AudioRecordTool(toolContext),
         CameraCaptureTool(toolContext),
         FilesSaveTool(toolContext),
@@ -476,6 +542,7 @@ public class WeftRuntime(
         BatteryStatusTool(toolContext),
         NetworkStatusTool(toolContext),
         DeviceInfoTool(toolContext),
+        DisplayInfoTool(toolContext),
         // Intent-launching tools — hand off to user-installed apps.
         MapsDirectionsTool(toolContext),
         AlarmSetTool(toolContext),
@@ -489,7 +556,95 @@ public class WeftRuntime(
         BluetoothListPairedTool(toolContext),
         BluetoothOpenSettingsTool(toolContext),
         BluetoothDeviceBatteryTool(toolContext),
+        // Gallery — read-only MediaStore queries. Returns content:// URIs
+        // the agent can hand to vision_ocr / external_share / files_read.
+        // Needs READ_MEDIA_* permissions; Play scrutinizes these. For
+        // "user picks the file" flows prefer the picker tools below.
+        MediaListRecentTool(toolContext),
+        MediaQueryTool(toolContext),
+        // Photo Picker — system-mediated, NO permission. Preferred over
+        // the MediaLibrary tools whenever the user is the one choosing.
+        MediaPickImageTool(toolContext),
+        MediaPickVideoTool(toolContext),
+        MediaPickAnyTool(toolContext),
+        // Installed-apps discovery — useful for routing decisions
+        // (which music app is installed? which maps?).
+        AppInstalledTool(toolContext),
+        AppListLaunchableTool(toolContext),
+        // Lightweight sensors — step counter, ambient light. Both
+        // returnable as "available=false" when the device lacks them.
+        SensorStepsTodayTool(toolContext),
+        SensorAmbientLightTool(toolContext),
+        // Pure date arithmetic — no I/O. Eliminates LLM date-math errors.
+        DateComputeTool(toolContext),
+        // Telephony — Intent-handoff dial / SMS compose, plus carrier
+        // info read. No permission for any of these.
+        PhoneDialTool(toolContext),
+        SmsComposeTool(toolContext),
+        TelephonyInfoTool(toolContext),
+        // Wifi state read. SSID needs LOCATION on Android 9+.
+        WifiInfoTool(toolContext),
+        // Volume control — per-stream get/set, normalized 0..1.
+        VolumeGetTool(toolContext),
+        VolumeSetTool(toolContext),
+        // Power — keep screen on, per-window brightness. Scoped to
+        // the foreground Activity; no permission needed.
+        PowerKeepScreenOnTool(toolContext),
+        PowerSetBrightnessTool(toolContext),
+        // Settings deep-link — one tool, many panels via enum.
+        SettingsOpenTool(toolContext),
+        // App shortcuts — pin / remove / list dynamic launcher shortcuts.
+        ShortcutPushTool(toolContext),
+        ShortcutRemoveTool(toolContext),
+        ShortcutListTool(toolContext),
+        // Translation + language ID via ML Kit (~30MB model per pair).
+        TranslateTextTool(toolContext),
+        DetectLanguageTool(toolContext),
+        // Image transforms — resize / crop / rotate via Bitmap APIs.
+        ImageResizeTool(toolContext),
+        ImageCropTool(toolContext),
+        ImageRotateTool(toolContext),
+        // Pure utility tools — no OS, no permissions. Reduce LLM
+        // arithmetic / string / regex mistakes by routing through code.
+        MathEvalTool(toolContext),
+        TextTransformTool(toolContext),
+        HashTool(toolContext),
+        RegexMatchTool(toolContext),
+        UrlParseTool(toolContext),
+        ColorConvertTool(toolContext),
+        RandomChoiceTool(toolContext),
+        JsonQueryTool(toolContext),
     ) + extraToolsFactory(toolContext)
+
+    /**
+     * Stage 2 of `docs/architecture/tool-provider.md`. The runtime's
+     * effective [ToolProvider] — either the host-supplied override or
+     * an [EagerToolProvider] auto-wrapping [prebuiltTools]. Exposed
+     * publicly so apps can introspect the catalog (e.g., devtools
+     * showing what `find_tool` would surface) without reaching for
+     * runtime internals.
+     */
+    public val toolProvider: ToolProvider = toolProviderOverride
+        ?: EagerToolProvider(tools = prebuiltTools, defaultAlwaysOn = true)
+
+    /**
+     * True when [toolProvider] advertises any on-demand
+     * (`alwaysOn = false`) tool. Drives whether `find_tool` is
+     * auto-registered into every agent's catalog. With the default
+     * auto-built [EagerToolProvider] this is always false (everything
+     * eager) — back-compat preserved.
+     */
+    private val hasOnDemandTools: Boolean =
+        toolProvider.available.any { !it.alwaysOn }
+
+    /**
+     * The public tool list = [prebuiltTools] plus `find_tool` when
+     * the [toolProvider] has any on-demand tool. Hosts running the
+     * default eager provider see exactly today's pre-Stage-2 list.
+     */
+    public val tools: List<WeftTool<*, *>> =
+        if (hasOnDemandTools) prebuiltTools + FindToolTool(toolContext, toolProvider)
+        else prebuiltTools
 
     /**
      * Pre-computed `extraNotes` payload for the system prompt — reused
@@ -615,6 +770,29 @@ public class WeftRuntime(
     /** Substrate + extra + MCP tools, in the order they reach the agent. */
     public suspend fun resolvedTools(): List<WeftTool<*, *>> =
         tools + mcpToolsReady.await()
+
+    /**
+     * Per-agent variant of [resolvedSystemPrompt]: rebuilds the system
+     * prompt against [agentTools] (the filtered catalog) instead of the
+     * full one. Called only from [buildAgentForDeclaration] when an
+     * agent declares a non-empty [dev.weft.harness.agents.AgentDeclaration.allowedTools],
+     * so the agent's prompt describes exactly the tools it can call —
+     * not the substrate-wide ~50 + N-MCP catalog.
+     *
+     * Stage 1 of the [docs/architecture/tool-provider.md] design.
+     * Not cached across calls: builds fresh each [buildAgent] invocation
+     * for whichever agent is being constructed. Acceptable because
+     * [buildAgent] is the slow path (provider / model change events);
+     * the turn-loop hot path uses the closure captured at build time.
+     */
+    private fun systemPromptFor(agentTools: List<WeftTool<*, *>>): String =
+        assembleSystemPrompt(
+            appPreamble = appPromptPreamble,
+            tools = agentTools,
+            components = componentMetadata,
+            dataSources = rawDataSources,
+            extraNotes = systemPromptExtraNotes,
+        )
 
     /**
      * Build a Koog-backed [WeftAgent] using a [WeftCredentialProvider].
@@ -767,13 +945,29 @@ public class WeftRuntime(
         val toolRegistry = ToolRegistry { cachedTools.forEach { tool(it) } }
 
         // Compose the effective system prompt for this declaration:
-        // substrate's resolved prompt + the agent's role fragment. For
-        // the default declaration (empty fragment, allowlist) this is
-        // identical to today's prompt. For declared agents with role
-        // fragments, the fragment is appended as a "Role" section so
-        // the LLM can tell it apart from the substrate's standard
-        // notes.
-        val baseSystemPrompt = resolvedSystemPrompt()
+        // substrate's resolved prompt + the agent's role fragment.
+        //
+        // Catalog scoping (Stage 1 of docs/architecture/tool-provider.md):
+        //   - Empty allowlist (default agent) → reuse the cached full
+        //     catalog from resolvedSystemPrompt(). Identical to today.
+        //   - Non-empty allowlist → rebuild the prompt against agentTools
+        //     so it describes only the tools this agent can call. A
+        //     writer agent with two allowed tools no longer pays tokens
+        //     for ~50 unreachable tool descriptions.
+        //
+        // Cache trade-off: per-agent prompts don't share Anthropic's
+        // cache prefix with each other or with the default. For multi-
+        // agent hosts the catalog savings dominate the cache loss; for
+        // single-agent hosts the default branch keeps today's caching
+        // bit-for-bit.
+        val baseSystemPrompt = if (declaration.allowedTools.isEmpty()) {
+            resolvedSystemPrompt()
+        } else {
+            // Use allTools (filtered + delegate_to_agent if present)
+            // so the prompt-catalog matches what the wire registry
+            // actually accepts.
+            systemPromptFor(allTools)
+        }
         val effectiveSystemPrompt = if (declaration.systemFragment.isBlank()) {
             baseSystemPrompt
         } else {
@@ -813,6 +1007,12 @@ public class WeftRuntime(
             // AgentDeclaration data class).
             strategy = strategyOverride ?: declaration.strategy,
             agentName = declaration.name,
+            // Stage 2: pass the runtime's lazy ToolProvider so the
+            // agent's strategy can resolve names from find_tool searches
+            // mid-turn. Pass null when the host is in pure eager mode
+            // (no on-demand tools) — saves the activation node from
+            // doing work it'd skip anyway.
+            toolProvider = if (hasOnDemandTools) toolProvider else null,
         )
     }
 
@@ -1069,6 +1269,17 @@ public class WeftRuntime(
             networkPolicy: NetworkPolicy = NetworkPolicy(coreAllowlist = emptySet()),
             extraContextProviders: List<ContextProvider> = emptyList(),
             extraToolsFactory: (WeftContext) -> List<WeftTool<*, *>> = { _ -> emptyList() },
+            /**
+             * Stage 2 of `docs/architecture/tool-provider.md` — optional
+             * lazy tool provider. Null (default) auto-wraps the
+             * substrate's prebuilt list as an [EagerToolProvider] with
+             * everything `alwaysOn`, preserving today's behavior.
+             * Pass a custom provider (typically
+             * `compositeToolProvider(substrateProvider, mcpProvider,
+             * appProvider)`) when you want `find_tool` discovery + lazy
+             * MCP/app-domain tool materialization.
+             */
+            toolProvider: ToolProvider? = null,
             componentMetadata: List<ComponentMetadata> = emptyList(),
             extraSystemNotes: String? = null,
             dynamicSystemPromptSection: (() -> String)? = null,
@@ -1113,6 +1324,7 @@ public class WeftRuntime(
                 networkPolicy = networkPolicy,
                 extraContextProviders = extraContextProviders,
                 extraToolsFactory = extraToolsFactory,
+                toolProviderOverride = toolProvider,
                 componentMetadata = componentMetadata,
                 extraSystemNotes = extraSystemNotes,
                 dynamicSystemPromptSection = dynamicSystemPromptSection,

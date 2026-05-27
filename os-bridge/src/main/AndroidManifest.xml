@@ -1,8 +1,40 @@
 <?xml version="1.0" encoding="utf-8"?>
 <manifest xmlns:android="http://schemas.android.com/apk/res/android">
 
-    <!-- Notifications: required on API 33+ (Android 13). -->
-    <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
+    <!--
+        ============================================================
+        NORMAL permissions — declared here, granted at install.
+        No runtime prompt.
+        ============================================================
+    -->
+
+    <!-- HTTP networking — LLM calls, network_fetch tool, ML Kit model
+         downloads (translate_text). -->
+    <uses-permission android:name="android.permission.INTERNET" />
+
+    <!-- Connectivity state — backs SystemInfo.network() / network_status. -->
+    <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
+
+    <!-- WiFi state — backs Wifi.info() / wifi_info. -->
+    <uses-permission android:name="android.permission.ACCESS_WIFI_STATE" />
+
+    <!-- Volume.set on some streams. Normal-permission audio API access. -->
+    <uses-permission android:name="android.permission.MODIFY_AUDIO_SETTINGS" />
+
+    <!-- Vibration for haptics_feedback. -->
+    <uses-permission android:name="android.permission.VIBRATE" />
+
+    <!-- Biometric authentication for biometric_authenticate. -->
+    <uses-permission android:name="android.permission.USE_BIOMETRIC" />
+
+    <!--
+        Pre-API-31 Bluetooth. API 31+ uses the runtime BLUETOOTH_CONNECT
+        below. maxSdkVersion="30" prevents AOSP-strict permission reviewers
+        from flagging it on newer SDKs where it has no effect.
+    -->
+    <uses-permission
+        android:name="android.permission.BLUETOOTH"
+        android:maxSdkVersion="30" />
 
     <!--
         Exact alarm scheduling. Required for time-precise reminders on API 31+.
@@ -12,26 +44,54 @@
     <uses-permission android:name="android.permission.SCHEDULE_EXACT_ALARM" />
     <uses-permission android:name="android.permission.USE_EXACT_ALARM" />
 
-    <!-- Contacts read (contacts_read tool). Runtime-requested on API 23+. -->
+    <!--
+        ============================================================
+        DANGEROUS permissions — declared here AND runtime-prompted by
+        the substrate's permission gate on API 23+.
+        ============================================================
+    -->
+
+    <!-- Notifications: runtime on API 33+ (Android 13). -->
+    <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
+
+    <!-- Contacts read (contacts_read tool). -->
     <uses-permission android:name="android.permission.READ_CONTACTS" />
 
-    <!-- Calendar read/write (calendar_read, calendar_create, calendar_update, calendar_delete). Runtime-requested on API 23+. -->
+    <!-- Calendar read/write. -->
     <uses-permission android:name="android.permission.READ_CALENDAR" />
     <uses-permission android:name="android.permission.WRITE_CALENDAR" />
 
-    <!-- Vibration for haptics_feedback. "Normal" permission — no runtime prompt. -->
-    <uses-permission android:name="android.permission.VIBRATE" />
-
-    <!-- Biometric authentication for biometric_authenticate. "Normal" permission since API 28. -->
-    <uses-permission android:name="android.permission.USE_BIOMETRIC" />
-
-    <!-- Location for location_current. Runtime-requested on API 23+. We declare both
-         fine and coarse so the user can grant the lower-precision option if they prefer. -->
+    <!-- Location for location_current. Both fine + coarse so user can
+         grant the lower-precision option. -->
     <uses-permission android:name="android.permission.ACCESS_FINE_LOCATION" />
     <uses-permission android:name="android.permission.ACCESS_COARSE_LOCATION" />
 
-    <!-- Microphone for audio_record. Runtime-requested on API 23+. -->
+    <!-- Microphone for audio_record + speech_recognize. -->
     <uses-permission android:name="android.permission.RECORD_AUDIO" />
+
+    <!--
+        Media library reads. On API 33+ the per-type READ_MEDIA_* permissions
+        replaced READ_EXTERNAL_STORAGE; the maxSdkVersion attribute on
+        READ_EXTERNAL_STORAGE keeps Play Store policy reviewers happy.
+    -->
+    <uses-permission android:name="android.permission.READ_MEDIA_IMAGES" />
+    <uses-permission android:name="android.permission.READ_MEDIA_VIDEO" />
+    <uses-permission android:name="android.permission.READ_MEDIA_AUDIO" />
+    <uses-permission
+        android:name="android.permission.READ_EXTERNAL_STORAGE"
+        android:maxSdkVersion="32" />
+
+    <!--
+        Step counter sensor (sensor_steps_today). Runtime on API 29+; pre-29
+        the TYPE_STEP_COUNTER sensor is freely accessible.
+    -->
+    <uses-permission android:name="android.permission.ACTIVITY_RECOGNITION" />
+
+    <!--
+        Bluetooth on API 31+ for bluetooth_list_paired / bluetooth_device_battery.
+        Pre-API-31 the legacy BLUETOOTH permission (declared above) covers this.
+    -->
+    <uses-permission android:name="android.permission.BLUETOOTH_CONNECT" />
 
     <!--
         camera_capture delegates to the system camera via ACTION_IMAGE_CAPTURE,
@@ -73,12 +133,33 @@
             <action android:name="android.intent.action.VIEW" />
             <data android:scheme="sms" />
         </intent>
+        <!-- phone_dial uses ACTION_DIAL with tel: which is covered above;
+             ACTION_SENDTO for sms_compose uses the smsto: scheme. -->
+        <intent>
+            <action android:name="android.intent.action.SENDTO" />
+            <data android:scheme="smsto" />
+        </intent>
         <intent>
             <action android:name="android.intent.action.SEND" />
             <data android:mimeType="text/plain" />
         </intent>
         <intent>
             <action android:name="android.media.action.IMAGE_CAPTURE" />
+        </intent>
+        <!--
+            app_list_launchable queries MAIN/LAUNCHER intents. Android 11+
+            requires the matching <queries> entry; without it the call
+            returns only this app itself. We declare it explicitly so the
+            tool works without forcing host apps to declare it.
+
+            NOTE: app_installed with arbitrary package names is still
+            limited by Android 11+ package visibility — apps must add
+            their own `<queries><package android:name="…">` entries for
+            specific packages they want to check.
+        -->
+        <intent>
+            <action android:name="android.intent.action.MAIN" />
+            <category android:name="android.intent.category.LAUNCHER" />
         </intent>
     </queries>
 

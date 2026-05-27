@@ -50,6 +50,57 @@ interface UiBridge {
      */
     suspend fun validateTree(tree: ComponentNode): TreeValidationResult =
         TreeValidationResult.Ok
+
+    /**
+     * Surface a proposed [Plan] to the user and suspend until they
+     * decide. Called by the `exit_plan_mode` tool when the agent is
+     * running in [ApprovalMode.Plan].
+     *
+     * Hosts with a richer plan-review screen (steps, expandable
+     * rationale, per-step Refine chips) override this. The default
+     * implementation degrades to a prose-text [askUser] prompt with
+     * three options — "Approve", "Refine", "Cancel" — and on "Refine"
+     * follows up with a free-text [askUser] to collect feedback.
+     * Adequate for early prototypes; not great UX for production.
+     */
+    suspend fun confirmPlan(plan: Plan): PlanDecision {
+        val summary = buildString {
+            appendLine("Proposed plan: ${plan.title}")
+            appendLine()
+            plan.steps.forEachIndexed { i, step ->
+                appendLine("${i + 1}. ${step.title}")
+                if (step.rationale.isNotBlank()) appendLine("   ${step.rationale}")
+            }
+            if (plan.openQuestions.isNotEmpty()) {
+                appendLine()
+                appendLine("Open questions:")
+                plan.openQuestions.forEach { appendLine("- $it") }
+            }
+        }
+        val choice = askUser(
+            question = summary,
+            kind = AskKind.CHOICE,
+            options = listOf("Approve", "Refine", "Cancel"),
+        )
+        return when (choice) {
+            is UserAnswer.Choice -> when (choice.value) {
+                "Approve" -> PlanDecision.Approved
+                "Refine" -> {
+                    val fb = askUser(
+                        question = "What should change?",
+                        kind = AskKind.FREE_TEXT,
+                    )
+                    PlanDecision.Refine(
+                        feedback = (fb as? UserAnswer.Text)?.value.orEmpty().ifBlank {
+                            "No specifics provided — try a different approach."
+                        },
+                    )
+                }
+                else -> PlanDecision.Cancelled
+            }
+            else -> PlanDecision.Cancelled
+        }
+    }
 }
 
 /**

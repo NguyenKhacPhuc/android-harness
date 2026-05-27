@@ -157,6 +157,43 @@ public class WeftAgent(
      * by agent.
      */
     private val agentName: String = AgentDeclaration.DEFAULT_AGENT_NAME,
+    /**
+     * Lifecycle interception. Fires [dev.weft.contracts.HookContext.UserMessage]
+     * before any LLM work, [dev.weft.contracts.HookContext.TurnStart] after
+     * trace/quota setup, and [dev.weft.contracts.HookContext.TurnEnd] /
+     * [dev.weft.contracts.HookContext.TurnFailed] at the boundary. Pre-tool
+     * hooks fire from inside [dev.weft.tools.WeftTool.execute] — wire the
+     * same registry there via [dev.weft.tools.WeftContext.hooks] so a
+     * single set of hooks sees both surfaces.
+     *
+     * Default empty registry = zero overhead.
+     */
+    private val hooks: dev.weft.contracts.HookRegistry = dev.weft.contracts.HookRegistry.EMPTY,
+    /**
+     * Approval-mode holder. Read each turn to decide whether to inject
+     * a plan-mode directive into the volatile prefix. Pass the SAME
+     * instance to [dev.weft.tools.WeftContext.approvalMode] so the
+     * tool gate and the prompt directive stay in sync. Default is a
+     * fresh holder pinned to [dev.weft.contracts.ApprovalMode.Default].
+     */
+    private val approvalMode: dev.weft.contracts.ApprovalModeHolder =
+        dev.weft.contracts.ApprovalModeHolder(),
+    /**
+     * Lazy tool catalog — Stage 2 of `docs/architecture/tool-provider.md`.
+     *
+     * When non-null, the strategy's activation graph node drains the
+     * per-turn [dev.weft.contracts.ToolActivationSink] after every tool
+     * batch and uses this provider to resolve names returned by
+     * `find_tool` into [dev.weft.tools.ResolvedWeftTool] instances. The
+     * resolved tools are added to the LLM's tool descriptor list AND
+     * to the Koog `ToolRegistry` for the remainder of the same
+     * `agent.run()` call.
+     *
+     * Null = eager mode. The activation node is a no-op; all tools must
+     * already be in [toolRegistry] at agent-build time. Back-compat
+     * default; existing single-provider hosts see zero behavior change.
+     */
+    private val toolProvider: dev.weft.contracts.ToolProvider? = null,
 ) {
     private val compactor = Compactor(behaviorConfig)
     private val history: MutableList<HistoryEntry> = mutableListOf()
@@ -253,6 +290,14 @@ public class WeftAgent(
         if (quotaState is QuotaState.Blocked) {
             throw QuotaExceededException(quotaState.usdToday, quotaState.thresholdUsd)
         }
+        hooks.onUserMessage(
+            dev.weft.contracts.HookContext.UserMessage(
+                traceId = "",
+                conversationId = _conversationId.value,
+                text = userText,
+                hasAttachments = attachments.isNotEmpty(),
+            ),
+        )
         // Read parent trace id from the coroutine context. Null on
         // user-initiated turns (no enclosing TraceContext); set when this
         // `send` is called from inside a SubAgentRunner that itself runs
@@ -269,7 +314,7 @@ public class WeftAgent(
         // identical behaviour to before this hook existed.
         val memoryHits = memoryRegistry.retrieveAll(userText)
         val effectiveText = composeEffectiveText(
-            volatilePrefix = volatilePrefixSupplier(),
+            volatilePrefix = composeVolatilePrefixWithMode(),
             memoryHits = memoryHits,
             userText = userText,
         )
@@ -282,6 +327,14 @@ public class WeftAgent(
         return kotlinx.coroutines.withContext(
             dev.weft.harness.observability.TraceContext(traceId, _conversationId.value),
         ) {
+        hooks.onTurnStart(
+            dev.weft.contracts.HookContext.TurnStart(
+                traceId = traceId,
+                conversationId = _conversationId.value,
+                userText = userText,
+                modelId = modelPool.standard.id,
+            ),
+        )
         try {
             val reply = withRetry(
                 policy = strategy.retry,
@@ -296,7 +349,15 @@ public class WeftAgent(
                 },
             ) {
                 val agent = buildAgentForThisTurn(traceId, effectiveInput, modelTier)
-                agent.run(effectiveInput)
+                // Stage 2: a fresh ToolActivationSink attached to this
+                // turn's coroutine context. find_tool writes activations
+                // to it (via currentCoroutineContext) and the strategy's
+                // nodeApplyActivations drains+applies them. When
+                // toolProvider is null the sink is still present but the
+                // node short-circuits — harmless overhead.
+                kotlinx.coroutines.withContext(dev.weft.contracts.ToolActivationSink()) {
+                    agent.run(effectiveInput)
+                }
             }
             history += HistoryEntry(Role.USER, userText)
             history += HistoryEntry(Role.ASSISTANT, reply)
@@ -312,9 +373,24 @@ public class WeftAgent(
             // the caller is unchanged so the chat UI shows the model's actual
             // words. (User typed their own data; they're fine seeing it back.)
             traceStore.completeTrace(traceId, redactor.redact(reply))
+            hooks.onTurnEnd(
+                dev.weft.contracts.HookContext.TurnEnd(
+                    traceId = traceId,
+                    conversationId = _conversationId.value,
+                    assistantText = reply,
+                    modelId = modelPool.standard.id,
+                ),
+            )
             reply
         } catch (t: Throwable) {
             traceStore.failTrace(traceId, redactor.redact(t.message ?: t::class.simpleName.orEmpty()))
+            hooks.onTurnFailed(
+                dev.weft.contracts.HookContext.TurnFailed(
+                    traceId = traceId,
+                    conversationId = _conversationId.value,
+                    cause = t,
+                ),
+            )
             throw t
         }
         }  // close withContext(TraceContext)
@@ -361,6 +437,14 @@ public class WeftAgent(
         if (quotaState is QuotaState.Blocked) {
             throw QuotaExceededException(quotaState.usdToday, quotaState.thresholdUsd)
         }
+        hooks.onUserMessage(
+            dev.weft.contracts.HookContext.UserMessage(
+                traceId = "",
+                conversationId = _conversationId.value,
+                text = userText,
+                hasAttachments = attachments.isNotEmpty(),
+            ),
+        )
         // Same parent-trace-id propagation logic as `send` — see comment
         // there. channelFlow's block inherits the collector's coroutine
         // context, so an enclosing TraceContext (from a sub-agent's
@@ -376,7 +460,7 @@ public class WeftAgent(
         // identical behaviour to before this hook existed.
         val memoryHits = memoryRegistry.retrieveAll(userText)
         val effectiveText = composeEffectiveText(
-            volatilePrefix = volatilePrefixSupplier(),
+            volatilePrefix = composeVolatilePrefixWithMode(),
             memoryHits = memoryHits,
             userText = userText,
         )
@@ -390,6 +474,14 @@ public class WeftAgent(
         kotlinx.coroutines.withContext(
             dev.weft.harness.observability.TraceContext(traceId, _conversationId.value),
         ) {
+        hooks.onTurnStart(
+            dev.weft.contracts.HookContext.TurnStart(
+                traceId = traceId,
+                conversationId = _conversationId.value,
+                userText = userText,
+                modelId = modelPool.standard.id,
+            ),
+        )
         try {
             val reply = withRetry(
                 policy = strategy.retry,
@@ -411,7 +503,11 @@ public class WeftAgent(
                     replyBuilder,
                     modelTier,
                 )
-                agent.run(effectiveInput)
+                // Same ToolActivationSink injection as the non-streaming
+                // path — see WeftAgent.send for the rationale.
+                kotlinx.coroutines.withContext(dev.weft.contracts.ToolActivationSink()) {
+                    agent.run(effectiveInput)
+                }
             }
             history += HistoryEntry(Role.USER, userText)
             history += HistoryEntry(Role.ASSISTANT, reply)
@@ -421,10 +517,25 @@ public class WeftAgent(
                 cs.append(convId, PersistedRole.ASSISTANT, reply, agentName)
             }
             traceStore.completeTrace(traceId, redactor.redact(reply))
+            hooks.onTurnEnd(
+                dev.weft.contracts.HookContext.TurnEnd(
+                    traceId = traceId,
+                    conversationId = _conversationId.value,
+                    assistantText = reply,
+                    modelId = modelPool.standard.id,
+                ),
+            )
             trySend(StreamChunk.Done(reply))
         } catch (t: Throwable) {
             val redactedMsg = redactor.redact(t.message ?: t::class.simpleName.orEmpty())
             traceStore.failTrace(traceId, redactedMsg)
+            hooks.onTurnFailed(
+                dev.weft.contracts.HookContext.TurnFailed(
+                    traceId = traceId,
+                    conversationId = _conversationId.value,
+                    cause = t,
+                ),
+            )
             trySend(StreamChunk.Failed(redactedMsg))
             throw t
         }
@@ -614,7 +725,7 @@ public class WeftAgent(
             // single Message.User with mixed text + attachment parts.
             // Falls back to a plain text user message when attachments is
             // empty (matches Koog's built-in singleRunStrategy behavior).
-            strategy = dev.weft.harness.agents.multimodal.weftSingleRunStrategy(),
+            strategy = dev.weft.harness.agents.multimodal.weftSingleRunStrategy(toolProvider),
             toolRegistry = toolRegistry,
             installFeatures = {
                 handleEvents {
@@ -827,6 +938,27 @@ public class WeftAgent(
         )
     }
 
+    /**
+     * Compose the volatile prefix for the upcoming turn. When the
+     * session is in [dev.weft.contracts.ApprovalMode.Plan] this prepends
+     * a directive so the model knows it can't run writes and should
+     * propose a plan via the substrate's `exit_plan_mode` tool. Other
+     * modes pass through to the existing supplier untouched.
+     */
+    private fun composeVolatilePrefixWithMode(): String {
+        val basePrefix = volatilePrefixSupplier()
+        return when (approvalMode.current()) {
+            dev.weft.contracts.ApprovalMode.Plan -> buildString {
+                append(PLAN_MODE_DIRECTIVE)
+                if (basePrefix.isNotBlank()) {
+                    append("\n\n")
+                    append(basePrefix)
+                }
+            }
+            else -> basePrefix
+        }
+    }
+
     private data class HistoryEntry(val role: Role, val text: String)
     private enum class Role { USER, ASSISTANT }
 
@@ -846,6 +978,24 @@ public class WeftAgent(
         // Bigger trees still get truncated; the user can drill into the
         // trace in the viewer and see the args.
         private const val ARGS_PREVIEW_MAX = 8000
+
+        /**
+         * Directive prepended to the volatile prefix when the session is
+         * in [dev.weft.contracts.ApprovalMode.Plan]. Loud + specific by
+         * design — models otherwise tend to "helpfully" proceed with the
+         * task and emit write tool calls anyway.
+         */
+        private val PLAN_MODE_DIRECTIVE: String = """
+            |[Plan mode is active.]
+            |You may read, search, and ask clarifying questions, but you
+            |MUST NOT call any tool that writes, sends, schedules, or
+            |otherwise mutates state. When you are ready, call the
+            |`exit_plan_mode` tool with a structured plan (title + steps
+            |+ optional open questions + assumptions). The user will
+            |approve, request refinements, or cancel — only after
+            |approval will writes be re-enabled. Do not narrate the plan
+            |before calling the tool; the tool's args ARE the plan.
+        """.trimMargin()
     }
 }
 

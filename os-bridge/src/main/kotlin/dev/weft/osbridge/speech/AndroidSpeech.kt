@@ -1,11 +1,22 @@
 package dev.weft.osbridge.speech
 
+import android.Manifest
 import android.content.Context
+import android.content.Intent
+import android.content.pm.PackageManager
+import android.os.Bundle
+import android.speech.RecognitionListener
+import android.speech.RecognizerIntent
+import android.speech.SpeechRecognizer
 import android.speech.tts.TextToSpeech
 import android.speech.tts.UtteranceProgressListener
+import androidx.core.content.ContextCompat
 import dev.weft.contracts.Speech
+import dev.weft.contracts.SpeechRecognitionResult
 import kotlinx.coroutines.CompletableDeferred
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.suspendCancellableCoroutine
+import kotlinx.coroutines.withContext
 import kotlinx.coroutines.withTimeoutOrNull
 import java.util.Locale
 import java.util.concurrent.ConcurrentHashMap
@@ -98,7 +109,88 @@ public class AndroidSpeech(context: Context) : Speech {
         pending.clear()
     }
 
+    override suspend fun recognize(
+        locale: String?,
+        maxDurationMs: Long,
+    ): SpeechRecognitionResult? {
+        if (!hasMicPermission()) return null
+        if (!SpeechRecognizer.isRecognitionAvailable(appContext)) return null
+
+        // SpeechRecognizer must be created on the main thread and the
+        // listener callbacks fire there too. We hop onto Main, wire
+        // everything up, then await the completion deferred on whatever
+        // dispatcher the caller is on.
+        return withContext(Dispatchers.Main) {
+            val recognizer = SpeechRecognizer.createSpeechRecognizer(appContext)
+            val result = CompletableDeferred<SpeechRecognitionResult?>()
+
+            recognizer.setRecognitionListener(object : RecognitionListener {
+                override fun onReadyForSpeech(params: Bundle?) {}
+                override fun onBeginningOfSpeech() {}
+                override fun onRmsChanged(rmsdB: Float) {}
+                override fun onBufferReceived(buffer: ByteArray?) {}
+                override fun onEndOfSpeech() {}
+                override fun onError(error: Int) {
+                    result.complete(null)
+                }
+                override fun onResults(bundle: Bundle?) {
+                    val matches = bundle?.getStringArrayList(
+                        SpeechRecognizer.RESULTS_RECOGNITION,
+                    ).orEmpty()
+                    val scores = bundle?.getFloatArray(
+                        SpeechRecognizer.CONFIDENCE_SCORES,
+                    )
+                    val best = matches.firstOrNull()
+                    if (best.isNullOrBlank()) {
+                        result.complete(null)
+                    } else {
+                        result.complete(
+                            SpeechRecognitionResult(
+                                text = best,
+                                confidence = scores?.firstOrNull(),
+                                alternatives = matches.drop(1),
+                            ),
+                        )
+                    }
+                }
+                override fun onPartialResults(bundle: Bundle?) {}
+                override fun onEvent(eventType: Int, params: Bundle?) {}
+            })
+
+            val intent = Intent(RecognizerIntent.ACTION_RECOGNIZE_SPEECH).apply {
+                putExtra(
+                    RecognizerIntent.EXTRA_LANGUAGE_MODEL,
+                    RecognizerIntent.LANGUAGE_MODEL_FREE_FORM,
+                )
+                putExtra(RecognizerIntent.EXTRA_PARTIAL_RESULTS, false)
+                putExtra(RecognizerIntent.EXTRA_MAX_RESULTS, RECOGNITION_MAX_RESULTS)
+                val tag = locale ?: Locale.getDefault().toLanguageTag()
+                putExtra(RecognizerIntent.EXTRA_LANGUAGE, tag)
+                putExtra(RecognizerIntent.EXTRA_PREFER_OFFLINE, true)
+            }
+
+            try {
+                recognizer.startListening(intent)
+            } catch (t: Throwable) {
+                runCatching { recognizer.destroy() }
+                return@withContext null
+            }
+
+            val outcome = withTimeoutOrNull(maxDurationMs) { result.await() }
+            // Stop + tear down regardless of outcome. destroy() also
+            // releases the bound system service.
+            runCatching { recognizer.stopListening() }
+            runCatching { recognizer.destroy() }
+            outcome
+        }
+    }
+
+    private fun hasMicPermission(): Boolean =
+        ContextCompat.checkSelfPermission(appContext, Manifest.permission.RECORD_AUDIO) ==
+            PackageManager.PERMISSION_GRANTED
+
     private companion object {
         const val INIT_TIMEOUT_MS = 3_000L
+        const val RECOGNITION_MAX_RESULTS = 3
     }
 }

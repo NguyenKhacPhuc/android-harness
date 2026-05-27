@@ -147,4 +147,8 @@ dependencies {
     testImplementation(libs.sqldelight.sqlite.driver)
     testImplementation(libs.kotlinx.coroutines.test)
     testImplementation(kotlin("test"))
+    // Fake OsCapabilities + UiBridge + weftToolContext() — used by
+    // prompt-scoping tests that need to construct a real WeftTool
+    // without bringing up an Android Context.
+    testImplementation(project(":harness:testing"))
 }

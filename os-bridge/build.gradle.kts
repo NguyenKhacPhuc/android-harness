@@ -56,6 +56,8 @@ dependencies {
     // download on Play-services-enabled devices, then runs fully offline.
     implementation(libs.mlkit.text.recognition)
     implementation(libs.mlkit.barcode.scanning)
+    implementation(libs.mlkit.translate)
+    implementation(libs.mlkit.language.id)
 
     // FusedLocationProviderClient for the Location capability. Geocoder
     // is in android.location and needs no extra dep.

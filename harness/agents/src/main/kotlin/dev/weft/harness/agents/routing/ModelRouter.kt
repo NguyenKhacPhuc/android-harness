@@ -75,7 +75,27 @@ public data class ModelPool(
     public val standard: LLModel,
     public val vision: LLModel = standard,
     public val heavy: LLModel = standard,
-)
+    /**
+     * Optional per-model capability overrides keyed by [LLModel.id]. Pool
+     * builders can stash provider-specific quirks (Gemini's lack of
+     * parallel tools, custom context windows) here. When a model id isn't
+     * present, [capabilitiesOf] falls back to
+     * [ModelCapabilities.derivedFrom] reading Koog's native flags.
+     *
+     * Default empty map = pure derivation from Koog. Existing callers
+     * unaffected.
+     */
+    public val capabilities: Map<String, ModelCapabilities> = emptyMap(),
+) {
+    /**
+     * Resolve [ModelCapabilities] for [model]. Looks up [capabilities] by
+     * [LLModel.id] first; falls back to deriving from the model's own
+     * Koog capability list. Result is suitable for routing decisions —
+     * never null, never throws.
+     */
+    public fun capabilitiesOf(model: LLModel): ModelCapabilities =
+        capabilities[model.id] ?: ModelCapabilities.derivedFrom(model)
+}
 
 /** Trivial [ModelRouter] that always returns the same model. */
 public class StaticModelRouter(private val model: LLModel) : ModelRouter {

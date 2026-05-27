@@ -28,7 +28,14 @@ theme:
 markdown_extensions:
   - admonition
   - pymdownx.highlight
-  - pymdownx.superfences
+  # Custom superfences so ```mermaid blocks in architecture-diagrams.md
+  # render via Material for MkDocs' built-in mermaid.js loader. No extra
+  # Python plugin needed — just the fence registration below.
+  - pymdownx.superfences:
+      custom_fences:
+        - name: mermaid
+          class: mermaid
+          format: !!python/name:pymdownx.superfences.fence_code_format
   - pymdownx.tabbed:
       alternate_style: true
   - pymdownx.tasklist:
@@ -41,6 +48,18 @@ markdown_extensions:
 
 nav:
   - Home: 00-README.md
+  - Architecture:
+    - Vision (prose): architecture-vision.md
+    - Diagrams: architecture-diagrams.md
+    - Tool provider (Stage 1 + 2): architecture/tool-provider.md
+    - Koog probe (Stage 2 prereq): architecture/tool-provider-koog-probe.md
+    - Multi-agent registry: architecture/multi-agent-registry.md
+    - Strategy hook: architecture/strategy-hook.md
+    - Runtime factory async: architecture/runtime-factory-async.md
+  - Production:
+    - Play policy: PLAY-POLICY.md
+    - Privacy / Data Safety: PRIVACY.md
+    - Manifest merging: manifest-merging.md
   - Plan:
     - Vision & Scope: 01-vision-and-scope.md
     - Architecture: 02-architecture.md

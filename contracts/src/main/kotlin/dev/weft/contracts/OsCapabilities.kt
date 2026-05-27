@@ -36,6 +36,18 @@ interface OsCapabilities {
     val systemInfo: SystemInfo
     val pdf: Pdf
     val bluetooth: Bluetooth
+    val mediaLibrary: MediaLibrary
+    val apps: Apps
+    val sensors: Sensors
+    val telephony: Telephony
+    val wifi: Wifi
+    val volume: Volume
+    val power: Power
+    val settings: SystemSettings
+    val shortcuts: AppShortcuts
+    val translation: Translation
+    val imageOps: ImageOps
+    val mediaPicker: MediaPicker
 }
 
 /** Permission grant/check. Backed by Android runtime permissions or iOS authorization APIs. */
@@ -494,7 +506,36 @@ interface Speech {
 
     /** Interrupt any in-flight utterance and clear the queue. */
     suspend fun stop()
+
+    /**
+     * Listen on the microphone and return the transcribed text. Backed
+     * by [android.speech.SpeechRecognizer] (free, on-device on modern
+     * Pixels; otherwise routed through Google's cloud STT service).
+     * Suspends until the recognizer reports a final result or
+     * [maxDurationMs] elapses with no speech.
+     *
+     * Requires [Permission.MICROPHONE]. Caller is responsible for
+     * granting/checking before the tool gate fires.
+     *
+     * Returns null if the recognizer is unavailable, the user said
+     * nothing, or recognition failed. Otherwise returns the best-guess
+     * transcription as a single string.
+     */
+    suspend fun recognize(
+        locale: String? = null,
+        maxDurationMs: Long = 10_000L,
+    ): SpeechRecognitionResult?
 }
+
+@Serializable
+data class SpeechRecognitionResult(
+    /** Best-guess transcription. */
+    val text: String,
+    /** Confidence 0..1 if the engine reports it, else null. */
+    val confidence: Float? = null,
+    /** Alternate hypotheses, best-first. May be empty. */
+    val alternatives: List<String> = emptyList(),
+)
 
 /**
  * Audio capture — fixed-duration recording to a file. Backed by
@@ -567,6 +608,15 @@ interface SystemInfo {
     suspend fun battery(): BatteryInfo
     suspend fun network(): NetworkInfo
     suspend fun device(): DeviceInfo
+
+    /**
+     * Snapshot the device's display state — dark-mode flag, screen
+     * dimensions, refresh rate, and best-effort brightness 0..1. No
+     * permission required. Brightness reads the system default via
+     * `Settings.System.SCREEN_BRIGHTNESS`; per-window overrides aren't
+     * visible, so the value reflects what the user set in Quick Settings.
+     */
+    suspend fun display(): DisplayInfo
 }
 
 @Serializable
@@ -594,6 +644,28 @@ data class NetworkInfo(
 
 @Serializable
 enum class NetworkTransport { WIFI, CELLULAR, ETHERNET, BLUETOOTH, VPN, NONE }
+
+@Serializable
+data class DisplayInfo(
+    /** True when the OS night-mode flag is on. Independent of the app's theme. */
+    val darkMode: Boolean,
+    /** Width × height in physical pixels. */
+    val widthPx: Int,
+    val heightPx: Int,
+    /** Logical density (px / dp). */
+    val density: Float,
+    /** Refresh rate of the primary display, Hz. */
+    val refreshRateHz: Float,
+    /**
+     * Best-effort system brightness 0..1. Null when the platform doesn't
+     * expose the value (e.g. user has auto-brightness on and the read
+     * returns a stale base value). The agent should treat null as
+     * "unknown — don't reason about it".
+     */
+    val brightness: Float? = null,
+    /** True when the screen is currently on (interactive). */
+    val screenOn: Boolean,
+)
 
 @Serializable
 data class DeviceInfo(
@@ -727,3 +799,445 @@ data class BluetoothDeviceInfo(
 
 @Serializable
 enum class BluetoothDeviceType { CLASSIC, LE, DUAL, UNKNOWN }
+
+/**
+ * Read-only access to the user's photo / video / audio gallery. Backed
+ * by the Android [android.provider.MediaStore] content providers.
+ *
+ * Permissions: [Permission.READ_MEDIA_IMAGES] / `_VIDEO` / `_AUDIO`
+ * depending on which kinds the caller queries. Android 13+ requires
+ * the per-type permissions; pre-13 falls back to legacy READ_EXTERNAL_STORAGE
+ * (the os-bridge mapper handles the SDK split).
+ *
+ * Returns content:// URIs the agent can hand to `external_share`,
+ * `vision_ocr`, `vision_barcode`, or `files_read` (with as_base64=true)
+ * for further processing.
+ */
+interface MediaLibrary {
+    /**
+     * Most recent items in the gallery, newest first. Caps at [limit]
+     * (default 20, max 200). [kinds] picks which media types to include —
+     * empty set returns nothing.
+     */
+    suspend fun listRecent(
+        kinds: Set<MediaKind> = setOf(MediaKind.IMAGE),
+        limit: Int = LIST_LIMIT_DEFAULT,
+    ): List<MediaItem>
+
+    /**
+     * Filtered query. [sinceEpochMs] / [untilEpochMs] bound the
+     * `DATE_ADDED` range; null means open-ended. [nameContains] is a
+     * substring match against display name (case-insensitive).
+     */
+    suspend fun query(filter: MediaFilter): List<MediaItem>
+
+    companion object {
+        const val LIST_LIMIT_DEFAULT = 20
+        const val LIST_LIMIT_MAX = 200
+    }
+}
+
+@Serializable
+enum class MediaKind { IMAGE, VIDEO, AUDIO }
+
+@Serializable
+data class MediaFilter(
+    val kinds: Set<MediaKind> = setOf(MediaKind.IMAGE),
+    val sinceEpochMs: Long? = null,
+    val untilEpochMs: Long? = null,
+    val nameContains: String? = null,
+    val limit: Int = MediaLibrary.LIST_LIMIT_DEFAULT,
+)
+
+@Serializable
+data class MediaItem(
+    /** content:// URI usable with files_read, external_share, vision_*. */
+    val uri: String,
+    val kind: MediaKind,
+    /** Display name without extension on Android (MediaStore.DISPLAY_NAME). */
+    val displayName: String? = null,
+    val mimeType: String? = null,
+    val sizeBytes: Long? = null,
+    /** Epoch ms when the file was added to the gallery. */
+    val dateAddedEpochMs: Long? = null,
+    /** Width × height for images/videos, null for audio. */
+    val widthPx: Int? = null,
+    val heightPx: Int? = null,
+    /** Duration in milliseconds for video/audio, null for images. */
+    val durationMs: Long? = null,
+)
+
+/**
+ * Query the device's installed-apps catalog. Read-only; no permission
+ * required on Android 11+ for the launchable subset (the system filters
+ * `MAIN/LAUNCHER` queries even without the broad QUERY_ALL_PACKAGES
+ * permission). Apps that need the full installed list must add
+ * `QUERY_ALL_PACKAGES` themselves and accept Play Store review scrutiny.
+ *
+ * Use cases:
+ *   - "Is Spotify installed? If so use it; otherwise YouTube Music."
+ *   - "Open the user's preferred map app" — combine with [Intents.launchApp].
+ *   - Disambiguate routing when multiple apps handle the same intent.
+ */
+interface Apps {
+    /**
+     * True when [packageName] is installed and visible to this app.
+     * Returns false for apps the OS hides from us (Android 11+ package
+     * visibility rules) — treat false as "not usable from here", not
+     * as ground truth about whether the app exists.
+     */
+    suspend fun isInstalled(packageName: String): Boolean
+
+    /**
+     * List apps that have a launchable activity (the kind the user sees
+     * in the launcher drawer). Excludes pre-installed system stubs the
+     * user can't actually open. Capped at [limit] (default 50, max 500).
+     */
+    suspend fun listLaunchable(limit: Int = LAUNCHABLE_LIMIT_DEFAULT): List<AppInfo>
+
+    companion object {
+        const val LAUNCHABLE_LIMIT_DEFAULT = 50
+        const val LAUNCHABLE_LIMIT_MAX = 500
+    }
+}
+
+@Serializable
+data class AppInfo(
+    val packageName: String,
+    val label: String,
+    /** Version string from the manifest (`versionName`), null if absent. */
+    val versionName: String? = null,
+    /** True for apps shipped with the OS / vendor image. */
+    val systemApp: Boolean = false,
+)
+
+/**
+ * Lightweight sensor reads — step count, ambient light. Backed by
+ * [android.hardware.SensorManager]. Not all sensors exist on every
+ * device; missing sensors return null.
+ *
+ * Step counter: [stepsToday] reads `TYPE_STEP_COUNTER` (cumulative
+ * steps since the last reboot) and subtracts a midnight baseline
+ * persisted in app storage. First call after midnight establishes the
+ * baseline and returns 0 — subsequent calls return the delta. No
+ * runtime permission on API ≥29.
+ *
+ * Ambient light: [ambientLightLux] returns a one-shot reading from
+ * `TYPE_LIGHT`, or null when the sensor isn't present (most tablets,
+ * many low-end phones). Useful for "is the user in a dark room? maybe
+ * dim the response colors."
+ */
+interface Sensors {
+    /**
+     * Steps walked today, as best the device can tell. Null when the
+     * step-counter sensor isn't present.
+     */
+    suspend fun stepsToday(): Int?
+
+    /**
+     * One-shot lux reading from the ambient light sensor. Suspends up
+     * to ~500ms waiting for a sample, then returns. Null when the
+     * sensor isn't present or didn't fire in time.
+     */
+    suspend fun ambientLightLux(): Float?
+}
+
+/**
+ * Telephony — phone-app handoff plus read-only carrier / SIM metadata.
+ * The handoff methods (dial, composeSms) launch system apps via Intent
+ * and need no runtime permission. [info] reads from `TelephonyManager`
+ * — most fields are public and need no permission; the few that do
+ * (subscriber id, line number) are intentionally not exposed.
+ *
+ * Notably absent: send-SMS, read-SMS, read-call-log. All require
+ * special Play-Store-scrutinized permissions and are out of scope for
+ * a generic substrate. Apps that need them implement against
+ * `SmsManager` / `Telephony.Sms` directly.
+ */
+interface Telephony {
+    /**
+     * Pre-fills the system dialer with [phoneNumber]. The user must
+     * tap the call button — we never auto-place a call. Returns false
+     * when no dialer is installed (rare on phones, common on tablets).
+     */
+    suspend fun dial(phoneNumber: String): Boolean
+
+    /**
+     * Pre-fills the default SMS app with [body] to [phoneNumber]. The
+     * user reviews and taps send. Returns false when the device has
+     * no SMS-handling app.
+     */
+    suspend fun composeSms(phoneNumber: String, body: String? = null): Boolean
+
+    /**
+     * Snapshot of carrier / SIM info. No permission. Returns a
+     * defensive default with null fields when no SIM or no telephony
+     * hardware (tablets, foldables in tablet mode).
+     */
+    suspend fun info(): TelephonyInfo
+}
+
+@Serializable
+data class TelephonyInfo(
+    /** Operator name as shown in the status bar ("Verizon", "T-Mobile"). */
+    val carrierName: String? = null,
+    /** ISO 3166-1 alpha-2 country code from the SIM, e.g. "US". */
+    val simCountryIso: String? = null,
+    /** Network operator's MCC+MNC, e.g. "310260". */
+    val networkOperator: String? = null,
+    /** Phone type: NONE, GSM, CDMA, SIP. */
+    val phoneType: String = "NONE",
+    /** True when device is in airplane mode. Read from system settings. */
+    val airplaneMode: Boolean = false,
+)
+
+/**
+ * WiFi state reader. Returns the *active* WiFi connection's metadata —
+ * SSID, link speed, signal level. No scan API exposed; modern Android
+ * gates WiFi scans behind LOCATION + WIFI_SCAN throttling that isn't
+ * worth a generic surface.
+ *
+ * SSID is null unless [Permission.LOCATION] is granted on Android 9+
+ * (the OS censors it otherwise). All other fields are always available.
+ */
+interface Wifi {
+    suspend fun info(): WifiInfo
+}
+
+@Serializable
+data class WifiInfo(
+    /** True when WiFi radio is on. */
+    val enabled: Boolean,
+    /** True when connected to any WiFi network. */
+    val connected: Boolean,
+    /** Network SSID without surrounding quotes. Null when LOCATION not granted on Android 9+. */
+    val ssid: String? = null,
+    /** Link speed in Mbps. */
+    val linkSpeedMbps: Int? = null,
+    /** Signal strength in dBm; closer to 0 is stronger. */
+    val rssi: Int? = null,
+    /** Frequency in MHz (2400ish = 2.4GHz, 5000ish = 5GHz, 6000ish = 6GHz). */
+    val frequencyMhz: Int? = null,
+)
+
+/**
+ * Read / set audio stream volumes. Backed by [android.media.AudioManager].
+ * Volume values are normalized 0..1 floats so callers don't have to ask
+ * for max-volume per stream.
+ *
+ * Setting [VolumeStream.RING] to 0 silences the ringer — apps that
+ * expect "silent" should also call this for NOTIFICATION. Setting MEDIA
+ * during playback affects the currently-playing app.
+ */
+interface Volume {
+    /** Current 0..1 volume for [stream]. */
+    suspend fun get(stream: VolumeStream): Float
+
+    /**
+     * Set [stream] to [normalized] (clamped to 0..1). Returns false
+     * when the stream is locked by DND policy and the system silently
+     * ignored the change.
+     */
+    suspend fun set(stream: VolumeStream, normalized: Float): Boolean
+}
+
+@Serializable
+enum class VolumeStream { MEDIA, RING, NOTIFICATION, ALARM, VOICE_CALL, SYSTEM }
+
+/**
+ * Power / display controls. [keepScreenOn] toggles a window flag on the
+ * foreground Activity (no permission); useful for read-aloud, video, or
+ * navigation flows where dimming is hostile. [setBrightness] is a
+ * per-window override (also no permission) — system brightness writes
+ * require WRITE_SETTINGS and are out of scope.
+ *
+ * Foreground-activity dependence: when no Activity is foregrounded
+ * these return false. The Application-lifecycle tracker shared with
+ * [Camera] / [Permissions] keeps a reference; backgrounded apps just
+ * see false.
+ */
+interface Power {
+    /** Pin the screen on as long as the foreground Activity is alive. */
+    suspend fun keepScreenOn(enabled: Boolean): Boolean
+
+    /**
+     * Per-window screen brightness override, 0..1. Use -1f to release
+     * the override (back to system default). Returns false when no
+     * foreground Activity to attach to.
+     */
+    suspend fun setBrightness(normalized: Float): Boolean
+}
+
+/**
+ * Deep-link into system Settings panels. One [open] call, [SettingsPanel]
+ * picks which screen. Useful when a tool needs the user to flip a
+ * setting we can't change ourselves (Wi-Fi on/off, accessibility
+ * service enable, app notification permission revoked).
+ *
+ * Returns false when the panel doesn't exist on this device (e.g.
+ * BATTERY_SAVER on AOSP-without-Settings-overrides).
+ */
+interface SystemSettings {
+    suspend fun open(panel: SettingsPanel): Boolean
+}
+
+@Serializable
+enum class SettingsPanel {
+    /** This app's per-app settings (notifications, storage, perms). */
+    APP_DETAILS,
+    /** This app's notification channels. */
+    APP_NOTIFICATIONS,
+    /** Global notification settings. */
+    NOTIFICATIONS,
+    /** WiFi panel. */
+    WIFI,
+    /** Bluetooth panel. */
+    BLUETOOTH,
+    /** Cellular / mobile data. */
+    DATA_USAGE,
+    /** Location services master switch. */
+    LOCATION,
+    /** Date & time. */
+    DATE,
+    /** Accessibility settings. */
+    ACCESSIBILITY,
+    /** Battery saver / battery usage. */
+    BATTERY,
+    /** Display brightness, font scale. */
+    DISPLAY,
+    /** Sound — volumes, ringtones, DND. */
+    SOUND,
+    /** Storage manager. */
+    STORAGE,
+    /** Default apps (browser, dialer, etc.). */
+    DEFAULT_APPS,
+    /** Top-level Settings. */
+    ROOT,
+}
+
+/**
+ * Push dynamic launcher shortcuts. Backed by [android.content.pm.ShortcutManager]
+ * (API 25+; lower SDKs no-op). Lets the app surface frequently-used
+ * intents at the launcher level — long-press the app icon to see them.
+ *
+ * Shortcuts are scoped to the app; the OS caps the total at ~4-5
+ * visible at once. Calling [push] with an existing id replaces it.
+ */
+interface AppShortcuts {
+    /**
+     * Add or replace a dynamic shortcut. [target] is what the shortcut
+     * tap launches — same shape as [Intents.launchApp]'s `target`
+     * (URI scheme or package id). Returns false on devices where
+     * shortcuts aren't supported.
+     */
+    suspend fun push(spec: ShortcutSpec): Boolean
+
+    /** Remove a dynamic shortcut by id. No-op if missing. */
+    suspend fun remove(id: String): Boolean
+
+    /** List the currently-pushed dynamic shortcuts. */
+    suspend fun list(): List<ShortcutSpec>
+}
+
+@Serializable
+data class ShortcutSpec(
+    /** Stable id (alphanumeric + underscore). */
+    val id: String,
+    /** Short label shown under the icon. */
+    val shortLabel: String,
+    /** Optional longer label shown in some surfaces. */
+    val longLabel: String? = null,
+    /** Tap action — URI ("tel:1234", "myapp://path") or package name. */
+    val target: String,
+)
+
+/**
+ * On-device text translation. Backed by Google ML Kit's free
+ * translation models. Models download lazily on first use of a given
+ * language pair (~30MB each) and then run fully offline.
+ *
+ * Language codes are ISO 639-1 two-letter codes (en, es, fr, ja, zh,
+ * …). [translateableLanguages] returns the list ML Kit supports.
+ *
+ * [detectLanguage] uses the smaller language-id model (~1MB) and
+ * returns the BCP-47 tag of the best guess, or "und" (undetermined)
+ * when confidence is below threshold.
+ */
+interface Translation {
+    /**
+     * Translate [text] from [source] to [target]. When [source] is
+     * null, [detectLanguage] runs first. Returns null when the model
+     * can't be downloaded (offline + first call), the language pair
+     * isn't supported, or the text is empty.
+     */
+    suspend fun translate(text: String, target: String, source: String? = null): String?
+
+    /**
+     * Detect the language of [text]. Returns the ISO 639-1 code
+     * ("en", "fr", …) or "und" when undetermined.
+     */
+    suspend fun detectLanguage(text: String): String
+
+    /** List of supported ISO 639-1 codes. */
+    suspend fun supportedLanguages(): List<String>
+}
+
+/**
+ * Image transforms — resize, crop, rotate. Backed by Android's Bitmap
+ * APIs. All operations write a new file to the app's cache directory
+ * exposed via FileProvider; the input file is untouched.
+ *
+ * Use for: shrinking a too-big photo before OCR, cropping out the
+ * subject before share, rotating a sideways scan to upright.
+ */
+/**
+ * Photo Picker — the system-provided "pick a photo / video" UI. Backed
+ * by [androidx.activity.result.contract.ActivityResultContracts.PickVisualMedia]
+ * which the OS supplies on Android 13+ and Google Play services
+ * backports to Android 11/12. Always works on supported APIs.
+ *
+ * **No permission required.** The OS picker mediates access — the
+ * user explicitly picks the items, so apps need neither
+ * `READ_MEDIA_IMAGES` nor any other media permission. Prefer this
+ * over [MediaLibrary] whenever the user is meant to choose, not the
+ * agent enumerating.
+ *
+ * Suspends across user UI — like [Camera.captureImage], expect
+ * wall-clock latency that includes a human-in-the-loop step.
+ */
+interface MediaPicker {
+    /**
+     * Open the photo picker. [kind] picks which kinds appear; [maxItems]
+     * is 1 for single-pick (default) or >1 for multi-pick (capped at
+     * what the OS allows — typically up to 100 on Android 13+).
+     *
+     * Returns the selected URIs. Empty list = user cancelled.
+     */
+    suspend fun pick(
+        kind: MediaPickerKind = MediaPickerKind.IMAGE,
+        maxItems: Int = 1,
+    ): List<String>
+}
+
+@Serializable
+enum class MediaPickerKind { IMAGE, VIDEO, IMAGE_OR_VIDEO }
+
+interface ImageOps {
+    /**
+     * Resize the image at [uri] so the longest edge is [maxEdgePx].
+     * Maintains aspect ratio. Returns the new file URI on success.
+     */
+    suspend fun resize(uri: String, maxEdgePx: Int, namePrefix: String = "resized"): FileRef?
+
+    /**
+     * Crop the image at [uri] to the given pixel rectangle. Returns
+     * null when the rect is outside the image bounds.
+     */
+    suspend fun crop(uri: String, rect: RectPx, namePrefix: String = "cropped"): FileRef?
+
+    /**
+     * Rotate the image at [uri] by [degrees] (90/180/270). Other
+     * values are coerced to the nearest multiple of 90.
+     */
+    suspend fun rotate(uri: String, degrees: Int, namePrefix: String = "rotated"): FileRef?
+}

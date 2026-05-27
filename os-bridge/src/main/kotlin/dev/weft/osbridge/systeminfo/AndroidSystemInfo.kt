@@ -3,14 +3,19 @@ package dev.weft.osbridge.systeminfo
 import android.content.Context
 import android.content.Intent
 import android.content.IntentFilter
+import android.content.res.Configuration
 import android.net.ConnectivityManager
 import android.net.NetworkCapabilities
 import android.os.BatteryManager
 import android.os.Build
 import android.os.PowerManager
 import android.os.StatFs
+import android.provider.Settings
+import android.view.Display
+import android.view.WindowManager
 import dev.weft.contracts.BatteryInfo
 import dev.weft.contracts.DeviceInfo
+import dev.weft.contracts.DisplayInfo
 import dev.weft.contracts.NetworkInfo
 import dev.weft.contracts.NetworkTransport
 import dev.weft.contracts.PowerSource
@@ -115,5 +120,55 @@ public class AndroidSystemInfo(private val context: Context) : SystemInfo {
             storageFreeBytes = freeBytes,
             storageTotalBytes = totalBytes,
         )
+    }
+
+    @Suppress("DEPRECATION")
+    override suspend fun display(): DisplayInfo {
+        val metrics = context.resources.displayMetrics
+        val nightMode = context.resources.configuration.uiMode and
+            Configuration.UI_MODE_NIGHT_MASK == Configuration.UI_MODE_NIGHT_YES
+
+        val display: Display? = runCatching {
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
+                context.display
+            } else {
+                val wm = context.getSystemService(Context.WINDOW_SERVICE) as? WindowManager
+                wm?.defaultDisplay
+            }
+        }.getOrNull()
+
+        val refresh = runCatching { display?.refreshRate ?: 60f }.getOrDefault(60f)
+
+        // SCREEN_BRIGHTNESS is 0..255 in System settings. We normalize
+        // to 0..1. When auto-brightness is on the stored value reflects
+        // the user's last manual setting, not the actual screen state —
+        // we surface it anyway, the model can correlate with the auto
+        // flag if needed.
+        val brightness: Float? = runCatching {
+            val raw = Settings.System.getInt(
+                context.contentResolver,
+                Settings.System.SCREEN_BRIGHTNESS,
+            )
+            (raw / BRIGHTNESS_MAX_RAW).coerceIn(0f, 1f)
+        }.getOrNull()
+
+        val screenOn = runCatching {
+            val pm = context.getSystemService(Context.POWER_SERVICE) as? PowerManager
+            pm?.isInteractive == true
+        }.getOrDefault(false)
+
+        return DisplayInfo(
+            darkMode = nightMode,
+            widthPx = metrics.widthPixels,
+            heightPx = metrics.heightPixels,
+            density = metrics.density,
+            refreshRateHz = refresh,
+            brightness = brightness,
+            screenOn = screenOn,
+        )
+    }
+
+    private companion object {
+        const val BRIGHTNESS_MAX_RAW = 255f
     }
 }

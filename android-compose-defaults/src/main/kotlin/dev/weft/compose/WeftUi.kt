@@ -33,12 +33,33 @@ import dev.weft.compose.components.defaultWeftComponents
  */
 public class WeftUi(
     context: Context,
+    /**
+     * App-specific components to register on top of (or instead of) the
+     * substrate's built-in palette. With [includeDefaults] = true
+     * (default) these are appended to the defaults; with
+     * [includeDefaults] = false the registry contains ONLY these.
+     */
     extraComponents: List<WeftComponent<*>> = emptyList(),
+    /**
+     * Whether to register the substrate's built-in component palette
+     * (Display / Layout / Action / Input / Macro / Embed — 33 components
+     * via [defaultWeftComponents]). Default `true` preserves
+     * pre-existing behaviour. Set `false` when the app wants a fully
+     * curated component set — only [extraComponents] are registered and
+     * advertised to the model.
+     *
+     * When `false` and [extraComponents] is empty, `ui_render` becomes
+     * inert (no components for the model to call). That's intentional —
+     * apps opting out of defaults usually do so to lock down the
+     * surface area; an empty list is a valid configuration.
+     */
+    includeDefaults: Boolean = true,
 ) {
     public val imageLoader: ImageLoader = buildWeftImageLoader(context.applicationContext)
 
     public val components: List<WeftComponent<*>> =
-        defaultWeftComponents(imageLoader) + extraComponents
+        if (includeDefaults) defaultWeftComponents(imageLoader) + extraComponents
+        else extraComponents
 
     // Typed as the concrete impl so callers (ComposeUiBridge) can use the
     // typed `get()` for Compose-specific validation. The interface form

@@ -5,7 +5,16 @@ package dev.weft.harness.behavior
  * [BehaviorConfig.compactionStrategy]. Applies once per turn inside
  * WeftAgent.send().
  */
-public class Compactor(private val config: BehaviorConfig) {
+public class Compactor(
+    private val config: BehaviorConfig,
+    /**
+     * Token estimator used by [estimateInputTokens]. Defaults to the
+     * 4-chars/token heuristic — accurate to within ~10% for English on
+     * Claude and GPT. Swap in a provider-native tokenizer when the
+     * compaction trigger needs to track real usage.
+     */
+    private val tokenCounter: TokenCounter = HeuristicTokenCounter(),
+) {
 
     /**
      * Trim or summarize [history] for the next turn. Returns the
@@ -24,12 +33,12 @@ public class Compactor(private val config: BehaviorConfig) {
     }
 
     /**
-     * Estimate input tokens for the given history. Rough heuristic — 4 chars
-     * per token. Good enough to decide whether to compact; a real tokenizer
-     * lands when we wire `harness-cost`.
+     * Estimate input tokens for the given history via the injected
+     * [TokenCounter]. Default counter is the 4-chars/token heuristic;
+     * apps that bill per-token should inject a real tokenizer.
      */
     public fun estimateInputTokens(history: List<Turn>): Int =
-        history.sumOf { it.text.length / CHARS_PER_TOKEN_APPROX }
+        history.sumOf { tokenCounter.estimate(it.text) }
 
     private fun dropOldest(history: List<Turn>): List<Turn> {
         // Drop oldest user/assistant pairs until under the trigger.
@@ -60,9 +69,6 @@ public class Compactor(private val config: BehaviorConfig) {
         return listOf(note) + kept
     }
 
-    public companion object {
-        private const val CHARS_PER_TOKEN_APPROX = 4
-    }
 }
 
 /**

@@ -19,6 +19,9 @@ java {
 
 dependencies {
     api(project(":contracts"))
+    // Koog's PromptExecutor surface — needed by [WireDumper] which wraps a
+    // delegate executor and records every wire-level request/response.
+    api(libs.koog.agents)
 
     testImplementation(libs.kotest.runner.junit5)
     testImplementation(libs.kotest.assertions.core)
