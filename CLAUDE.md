@@ -106,8 +106,13 @@ skipped.
   type that should be reachable from `:android` or further, mark it
   `public`.
 - **No emojis in code or commits** unless the user explicitly asks.
-- **No KMP today.** Root build declares `kotlin.multiplatform` plugin
-  aliases for future use; every module is currently JVM or Android.
+- **KMP status — partial.** Three modules are now KMP-published
+  (jvm + androidTarget + iosArm64 + iosSimulatorArm64):
+  `:contracts`, `:security`, `:harness:skills`. All other modules
+  remain JVM or Android-only — the rest of `:harness:*` + `:tools` +
+  `:mcp` block on Koog 1.0.0 publishing only JVM + Android variants.
+  Wider KMP-ification (the full agent loop on iOS) needs either
+  upstream Koog iOS targets or a Ktor-based LLM client rewrite.
 - **SQLDelight** for any persistent storage. See `:harness:memory`
   and `:harness:conversation` for the pattern.
 - **Permissions live in two places.** The `Permission` enum lives in

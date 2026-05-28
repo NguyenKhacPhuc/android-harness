@@ -1,9 +1,9 @@
 // Skills — user-typed input the app handles directly, bypassing the LLM.
 // Slash-commands like `/note buy milk`, `/help`, app-defined shortcuts.
 //
-// Pure Kotlin, zero dependencies (not even :contracts). Lives in :harness/
-// because skills are a substrate concept — apps register them once, the
-// chat surface dispatches them — but they have no Android-specific bits.
+// Pure Kotlin, zero deps (not even :contracts). Now KMP-published so
+// commonMain consumers (undercurrent's :composeApp/commonMain via :feature:chat)
+// can use Skill / SkillRegistry / SkillResult without going through a mirror.
 //
 // Contents:
 //   - `Skill` — a single named handler with `name`, `aliases`, `description`,
@@ -14,27 +14,34 @@
 //      enumerating the rest of the registry.
 
 plugins {
-    alias(libs.plugins.kotlin.jvm)
+    alias(libs.plugins.kotlin.multiplatform)
+    alias(libs.plugins.android.library)
 }
 
 base { archivesName.set("weft-harness-skills") }
 
 kotlin {
     jvmToolchain(17)
-    compilerOptions {
-        jvmTarget.set(org.jetbrains.kotlin.gradle.dsl.JvmTarget.JVM_17)
+    applyDefaultHierarchyTemplate()
+
+    jvm()
+    androidTarget {
+        compilerOptions {
+            jvmTarget.set(org.jetbrains.kotlin.gradle.dsl.JvmTarget.JVM_17)
+        }
+    }
+    iosArm64()
+    iosSimulatorArm64()
+}
+
+android {
+    namespace = "dev.weft.harness.skills"
+    compileSdk = libs.versions.compileSdk.get().toInt()
+    defaultConfig {
+        minSdk = libs.versions.minSdk.get().toInt()
+    }
+    compileOptions {
+        sourceCompatibility = JavaVersion.VERSION_17
+        targetCompatibility = JavaVersion.VERSION_17
     }
 }
-
-java {
-    sourceCompatibility = JavaVersion.VERSION_17
-    targetCompatibility = JavaVersion.VERSION_17
-}
-
-dependencies {
-    testImplementation(libs.kotest.runner.junit5)
-    testImplementation(libs.kotest.assertions.core)
-    testImplementation(libs.kotlinx.coroutines.test)
-}
-
-tasks.test { useJUnitPlatform() }
