@@ -83,8 +83,14 @@ public class WebViewComponent : WeftComponent<WebViewProps>(
 public data class HtmlProps(
     /** The HTML content to render. Supports basic tags + inline CSS. */
     val html: String,
-    /** Token: "wrap" (200dp default), "md" (300dp), "lg" (500dp), "xl" (700dp), "fill" (600dp full-width). */
-    val height: String = "wrap",
+    /**
+     * Token: "wrap" (200dp), "md" (300dp), "lg" (500dp), "xl" (700dp),
+     * "fill" (600dp full-width). Default is content-aware: "wrap" for
+     * the rich-text path (200dp suits a paragraph or two), "xl" for the
+     * interactive path (`runScripts = true`) where a 200dp widget would
+     * always crush its own controls. Set explicitly to override.
+     */
+    val height: String = "default",
     val title: String = "",
     /**
      * If true, JavaScript runs inside this HTML — enables self-contained
@@ -123,7 +129,13 @@ public class HtmlComponent : WeftComponent<HtmlProps>(
 ) {
     @Composable
     override fun Render(props: HtmlProps, children: @Composable () -> Unit, onEvent: (ComponentEvent) -> Unit) {
-        val heightMod = when (props.height.lowercase()) {
+        // Resolve "default" against runScripts — interactive widgets need
+        // room for canvas + controls; rich-text snippets do not.
+        val resolvedHeight = when (props.height.lowercase()) {
+            "default" -> if (props.runScripts) "xl" else "wrap"
+            else -> props.height.lowercase()
+        }
+        val heightMod = when (resolvedHeight) {
             "md" -> Modifier.height(HTML_MD_DP.dp)
             "lg" -> Modifier.height(HTML_LG_DP.dp)
             "xl" -> Modifier.height(HTML_XL_DP.dp)
