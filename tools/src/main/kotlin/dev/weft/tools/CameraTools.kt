@@ -20,7 +20,7 @@ import kotlinx.serialization.Serializable
  * camera UI). Not destructive — produces a new file rather than mutating
  * existing state.
  */
-public class CameraCaptureTool(ctx: WeftContext) :
+class CameraCaptureTool(ctx: WeftContext) :
     WeftTool<CameraCaptureTool.Args, CameraCaptureTool.Result>(
         ctx = ctx,
         argsType = typeToken<Args>(),
@@ -55,13 +55,13 @@ public class CameraCaptureTool(ctx: WeftContext) :
     ) {
 
     @Serializable
-    public data class Args(
+    data class Args(
         val context: String = "",
         val namePrefix: String = "photo",
     )
 
     @Serializable
-    public data class Result(
+    data class Result(
         val hasFile: Boolean,
         val uri: String? = null,
         val sizeBytes: Long? = null,

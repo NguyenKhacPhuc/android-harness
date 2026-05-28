@@ -13,7 +13,7 @@ import ai.koog.serialization.typeToken
 /**
  * Open a URL in the browser (or an in-app Custom Tab if `inApp=true`).
  */
-public class ExternalOpenUrlTool(ctx: WeftContext) : WeftTool<ExternalOpenUrlTool.Args, String>(
+class ExternalOpenUrlTool(ctx: WeftContext) : WeftTool<ExternalOpenUrlTool.Args, String>(
     ctx = ctx,
     argsType = typeToken<Args>(),
     resultType = typeToken<String>(),
@@ -31,7 +31,7 @@ public class ExternalOpenUrlTool(ctx: WeftContext) : WeftTool<ExternalOpenUrlToo
 ) {
 
     @Serializable
-    public data class Args(val url: String, val inApp: Boolean = false)
+    data class Args(val url: String, val inApp: Boolean = false)
 
     override suspend fun executeWeft(args: Args): String {
         val opened = os.intents.openUrl(url = args.url, inApp = args.inApp)
@@ -43,7 +43,7 @@ public class ExternalOpenUrlTool(ctx: WeftContext) : WeftTool<ExternalOpenUrlToo
  * Launch another installed app via package id (e.g. "com.whatsapp") or a
  * URI scheme (e.g. "tel:+15551234", "mailto:user@example.com").
  */
-public class ExternalLaunchAppTool(ctx: WeftContext) : WeftTool<ExternalLaunchAppTool.Args, String>(
+class ExternalLaunchAppTool(ctx: WeftContext) : WeftTool<ExternalLaunchAppTool.Args, String>(
     ctx = ctx,
     argsType = typeToken<Args>(),
     resultType = typeToken<String>(),
@@ -61,7 +61,7 @@ public class ExternalLaunchAppTool(ctx: WeftContext) : WeftTool<ExternalLaunchAp
 ) {
 
     @Serializable
-    public data class Args(val target: String)
+    data class Args(val target: String)
 
     override suspend fun executeWeft(args: Args): String {
         val launched = os.intents.launchApp(args.target, payload = null)
@@ -73,7 +73,7 @@ public class ExternalLaunchAppTool(ctx: WeftContext) : WeftTool<ExternalLaunchAp
  * Share text and/or a URL via the system share sheet (or to a specific app
  * by package id).
  */
-public class ExternalShareTool(ctx: WeftContext) : WeftTool<ExternalShareTool.Args, String>(
+class ExternalShareTool(ctx: WeftContext) : WeftTool<ExternalShareTool.Args, String>(
     ctx = ctx,
     argsType = typeToken<Args>(),
     resultType = typeToken<String>(),
@@ -101,7 +101,7 @@ public class ExternalShareTool(ctx: WeftContext) : WeftTool<ExternalShareTool.Ar
 ) {
 
     @Serializable
-    public data class Args(
+    data class Args(
         val context: String = "",
         val text: String? = null,
         val url: String? = null,

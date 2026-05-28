@@ -16,7 +16,7 @@ import ai.koog.serialization.typeToken
 /**
  * Read calendar events in a time window. Requires CALENDAR_READ.
  */
-public class CalendarReadTool(ctx: WeftContext) : WeftTool<CalendarReadTool.Args, CalendarReadTool.Result>(
+class CalendarReadTool(ctx: WeftContext) : WeftTool<CalendarReadTool.Args, CalendarReadTool.Result>(
     ctx = ctx,
     argsType = typeToken<Args>(),
     resultType = typeToken<Result>(),
@@ -37,10 +37,10 @@ public class CalendarReadTool(ctx: WeftContext) : WeftTool<CalendarReadTool.Args
 ) {
 
     @Serializable
-    public data class Args(val startIso: String, val endIso: String, val search: String? = null)
+    data class Args(val startIso: String, val endIso: String, val search: String? = null)
 
     @Serializable
-    public data class Event(
+    data class Event(
         val id: String?,
         val title: String,
         val startIso: String,
@@ -50,7 +50,7 @@ public class CalendarReadTool(ctx: WeftContext) : WeftTool<CalendarReadTool.Args
     )
 
     @Serializable
-    public data class Result(val events: List<Event>)
+    data class Result(val events: List<Event>)
 
     override suspend fun executeWeft(args: Args): Result {
         val events = os.calendar.read(
@@ -77,7 +77,7 @@ public class CalendarReadTool(ctx: WeftContext) : WeftTool<CalendarReadTool.Args
  * sideEffecting = true. Not flagged destructive (creating is additive); use
  * a separate `calendar_delete` for destructive operations (not in v1).
  */
-public class CalendarCreateTool(ctx: WeftContext) : WeftTool<CalendarCreateTool.Args, String>(
+class CalendarCreateTool(ctx: WeftContext) : WeftTool<CalendarCreateTool.Args, String>(
     ctx = ctx,
     argsType = typeToken<Args>(),
     resultType = typeToken<String>(),
@@ -100,7 +100,7 @@ public class CalendarCreateTool(ctx: WeftContext) : WeftTool<CalendarCreateTool.
 ) {
 
     @Serializable
-    public data class Args(
+    data class Args(
         val title: String,
         val startIso: String,
         val endIso: String,
@@ -129,7 +129,7 @@ public class CalendarCreateTool(ctx: WeftContext) : WeftTool<CalendarCreateTool.
  * generally reversible (re-update with the old values); a `calendar_delete`
  * separate tool handles the actually-destructive case.
  */
-public class CalendarUpdateTool(ctx: WeftContext) : WeftTool<CalendarUpdateTool.Args, String>(
+class CalendarUpdateTool(ctx: WeftContext) : WeftTool<CalendarUpdateTool.Args, String>(
     ctx = ctx,
     argsType = typeToken<Args>(),
     resultType = typeToken<String>(),
@@ -154,7 +154,7 @@ public class CalendarUpdateTool(ctx: WeftContext) : WeftTool<CalendarUpdateTool.
 ) {
 
     @Serializable
-    public data class Args(
+    data class Args(
         val id: String,
         val title: String? = null,
         val startIso: String? = null,
@@ -187,7 +187,7 @@ public class CalendarUpdateTool(ctx: WeftContext) : WeftTool<CalendarUpdateTool.
  * dialog before executing — irreversible operations should always
  * cross a confirmation surface.
  */
-public class CalendarDeleteTool(ctx: WeftContext) : WeftTool<CalendarDeleteTool.Args, String>(
+class CalendarDeleteTool(ctx: WeftContext) : WeftTool<CalendarDeleteTool.Args, String>(
     ctx = ctx,
     argsType = typeToken<Args>(),
     resultType = typeToken<String>(),
@@ -206,7 +206,7 @@ public class CalendarDeleteTool(ctx: WeftContext) : WeftTool<CalendarDeleteTool.
 ) {
 
     @Serializable
-    public data class Args(val id: String)
+    data class Args(val id: String)
 
     override suspend fun executeWeft(args: Args): String {
         val ok = os.calendar.delete(CalendarEventId(args.id))

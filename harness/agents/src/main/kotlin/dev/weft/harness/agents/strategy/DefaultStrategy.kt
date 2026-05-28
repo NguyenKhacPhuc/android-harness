@@ -20,7 +20,7 @@ import dev.weft.harness.reliability.RetryPolicy
  * most fields, the `maxIterationsValue` constructor arg keeps the
  * scalar tuning ergonomic.
  */
-public data class DefaultStrategy(
+data class DefaultStrategy(
     /**
      * Configurable iter cap. Default 10 matches
      * `WeftAgent.MAX_ITERATIONS_DEFAULT` (the per-agent default). When
@@ -28,7 +28,7 @@ public data class DefaultStrategy(
      * 25), construct `DefaultStrategy(maxIterationsValue = 25)` to
      * mirror that.
      */
-    public val maxIterationsValue: Int = DEFAULT_MAX_ITERATIONS,
+    val maxIterationsValue: Int = DEFAULT_MAX_ITERATIONS,
     override val retry: RetryPolicy = RetryPolicy(),
     override val cacheTiers: Map<String, CacheTier> = DEFAULT_CACHE_TIERS,
     override val historyVolatileTailTurns: Int = 2,
@@ -38,10 +38,10 @@ public data class DefaultStrategy(
 
     override fun maxIterations(input: WeftUserInput): Int = maxIterationsValue
 
-    public companion object {
-        public const val DEFAULT_MAX_ITERATIONS: Int = 10
+    companion object {
+        const val DEFAULT_MAX_ITERATIONS: Int = 10
 
-        public val DEFAULT_CACHE_TIERS: Map<String, CacheTier> = mapOf(
+        val DEFAULT_CACHE_TIERS: Map<String, CacheTier> = mapOf(
             "system" to CacheTier.STATIC,
             "history-older" to CacheTier.SESSION,
             "history-tail" to CacheTier.VOLATILE,

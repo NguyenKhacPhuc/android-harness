@@ -38,7 +38,7 @@ import kotlinx.serialization.json.buildJsonObject
  * UI to let users add domains lives in Phase 5+ (see docs/05-script-catalog.md
  * "network.fetch").
  */
-public class NetworkFetchTool(
+class NetworkFetchTool(
     ctx: WeftContext,
     private val client: HttpClient,
 ) : WeftTool<NetworkFetchTool.Args, NetworkFetchTool.Result>(
@@ -68,7 +68,7 @@ public class NetworkFetchTool(
 ) {
 
     @Serializable
-    public data class Args(
+    data class Args(
         val url: String,
         val method: String = "GET",
         val headers: JsonObject = JsonObject(emptyMap()),
@@ -78,7 +78,7 @@ public class NetworkFetchTool(
     )
 
     @Serializable
-    public data class Result(
+    data class Result(
         val status: Int = 0,
         val headers: JsonObject = JsonObject(emptyMap()),
         val body: JsonElement = JsonNull,

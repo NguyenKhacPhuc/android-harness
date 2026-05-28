@@ -37,7 +37,7 @@ import kotlinx.serialization.json.JsonPrimitive
  * forwards to the LLM path. The SDK can grow this set as additional
  * direct-execute tools earn their own fast-path.
  */
-public object ActionExecutor {
+object ActionExecutor {
 
     /**
      * Outcome of an attempted direct-execute dispatch.
@@ -53,10 +53,10 @@ public object ActionExecutor {
      *   user (e.g. as a chat error bubble) without re-running through
      *   the LLM.
      */
-    public data class Result(
-        public val handled: Boolean,
-        public val tool: String? = null,
-        public val errorMessage: String? = null,
+    data class Result(
+        val handled: Boolean,
+        val tool: String? = null,
+        val errorMessage: String? = null,
     )
 
     /**
@@ -68,7 +68,7 @@ public object ActionExecutor {
      * dispatched, regardless of whether the dispatch itself
      * succeeded; the error (if any) is on [Result.errorMessage].
      */
-    public suspend fun tryExecuteAction(
+    suspend fun tryExecuteAction(
         action: String,
         sources: DataSourceRegistry,
     ): Result {
@@ -92,7 +92,7 @@ public object ActionExecutor {
      * Public so callers (e.g. UI surfaces other than `AgentRenderedTreeScreen`)
      * can detect the format without actually dispatching it.
      */
-    public fun isExecAction(action: String): Boolean = parseExec(action) != null
+    fun isExecAction(action: String): Boolean = parseExec(action) != null
 
     private fun parseExec(action: String): ExecAction? {
         val parsed = runCatching { Json.parseToJsonElement(action) }.getOrNull()

@@ -22,7 +22,7 @@ import kotlinx.coroutines.withContext
  * [ShortcutInfo] directly. The substrate's job is the LLM-facing
  * "push a shortcut for X" use case, not full shortcut design.
  */
-public class AndroidAppShortcuts(context: Context) : AppShortcuts {
+class AndroidAppShortcuts(context: Context) : AppShortcuts {
     private val appContext: Context = context.applicationContext
 
     @Suppress("NewApi")

@@ -15,7 +15,7 @@ import kotlinx.serialization.Serializable
  * NOT for SMS — use `sms_compose`. NOT for placing a call without
  * user confirmation (substrate intentionally won't do that).
  */
-public class PhoneDialTool(ctx: WeftContext) : WeftTool<PhoneDialTool.Args, PhoneDialTool.Result>(
+class PhoneDialTool(ctx: WeftContext) : WeftTool<PhoneDialTool.Args, PhoneDialTool.Result>(
     ctx = ctx,
     argsType = typeToken<Args>(),
     resultType = typeToken<Result>(),
@@ -37,10 +37,10 @@ public class PhoneDialTool(ctx: WeftContext) : WeftTool<PhoneDialTool.Args, Phon
 ) {
 
     @Serializable
-    public data class Args(val phoneNumber: String)
+    data class Args(val phoneNumber: String)
 
     @Serializable
-    public data class Result(val opened: Boolean)
+    data class Result(val opened: Boolean)
 
     override suspend fun executeWeft(args: Args): Result =
         Result(opened = os.telephony.dial(args.phoneNumber))
@@ -53,7 +53,7 @@ public class PhoneDialTool(ctx: WeftContext) : WeftTool<PhoneDialTool.Args, Phon
  * NOT for placing calls (use `phone_dial`). NOT for sending without
  * user confirmation. NOT for reading SMS (intentionally out of scope).
  */
-public class SmsComposeTool(ctx: WeftContext) :
+class SmsComposeTool(ctx: WeftContext) :
     WeftTool<SmsComposeTool.Args, SmsComposeTool.Result>(
         ctx = ctx,
         argsType = typeToken<Args>(),
@@ -78,10 +78,10 @@ public class SmsComposeTool(ctx: WeftContext) :
     ) {
 
     @Serializable
-    public data class Args(val phoneNumber: String, val body: String? = null)
+    data class Args(val phoneNumber: String, val body: String? = null)
 
     @Serializable
-    public data class Result(val opened: Boolean)
+    data class Result(val opened: Boolean)
 
     override suspend fun executeWeft(args: Args): Result =
         Result(opened = os.telephony.composeSms(args.phoneNumber, args.body))
@@ -93,7 +93,7 @@ public class SmsComposeTool(ctx: WeftContext) :
  * for: "what carrier?", "is airplane mode on?", country-aware
  * routing.
  */
-public class TelephonyInfoTool(ctx: WeftContext) : WeftTool<TelephonyInfoTool.Args, TelephonyInfo>(
+class TelephonyInfoTool(ctx: WeftContext) : WeftTool<TelephonyInfoTool.Args, TelephonyInfo>(
     ctx = ctx,
     argsType = typeToken<Args>(),
     resultType = typeToken<TelephonyInfo>(),
@@ -112,7 +112,7 @@ public class TelephonyInfoTool(ctx: WeftContext) : WeftTool<TelephonyInfoTool.Ar
     ),
 ) {
     @Serializable
-    public data class Args(val context: String = "")
+    data class Args(val context: String = "")
 
     override suspend fun executeWeft(args: Args): TelephonyInfo = os.telephony.info()
 }

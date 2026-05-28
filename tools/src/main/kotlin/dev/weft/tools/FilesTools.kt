@@ -17,7 +17,7 @@ import ai.koog.serialization.typeToken
  * can read. No filesystem permissions required — everything stays in the
  * app sandbox.
  */
-public class FilesSaveTool(ctx: WeftContext) : WeftTool<FilesSaveTool.Args, FilesSaveTool.Result>(
+class FilesSaveTool(ctx: WeftContext) : WeftTool<FilesSaveTool.Args, FilesSaveTool.Result>(
     ctx = ctx,
     argsType = typeToken<Args>(),
     resultType = typeToken<Result>(),
@@ -41,7 +41,7 @@ public class FilesSaveTool(ctx: WeftContext) : WeftTool<FilesSaveTool.Args, File
 ) {
 
     @Serializable
-    public data class Args(
+    data class Args(
         val mimeType: String,
         val text: String? = null,
         val contentBase64: String? = null,
@@ -50,7 +50,7 @@ public class FilesSaveTool(ctx: WeftContext) : WeftTool<FilesSaveTool.Args, File
     )
 
     @Serializable
-    public data class Result(val uri: String, val sizeBytes: Long)
+    data class Result(val uri: String, val sizeBytes: Long)
 
     override suspend fun executeWeft(args: Args): Result {
         if (args.text == null && args.contentBase64 == null) {
@@ -72,7 +72,7 @@ public class FilesSaveTool(ctx: WeftContext) : WeftTool<FilesSaveTool.Args, File
 /**
  * Read a file written by files_save (or any content:// URI granted to this app).
  */
-public class FilesReadTool(ctx: WeftContext) : WeftTool<FilesReadTool.Args, FilesReadTool.Result>(
+class FilesReadTool(ctx: WeftContext) : WeftTool<FilesReadTool.Args, FilesReadTool.Result>(
     ctx = ctx,
     argsType = typeToken<Args>(),
     resultType = typeToken<Result>(),
@@ -90,10 +90,10 @@ public class FilesReadTool(ctx: WeftContext) : WeftTool<FilesReadTool.Args, File
 ) {
 
     @Serializable
-    public data class Args(val uri: String, val asBase64: Boolean = false)
+    data class Args(val uri: String, val asBase64: Boolean = false)
 
     @Serializable
-    public data class Result(
+    data class Result(
         val text: String? = null,
         val base64: String? = null,
         val mimeType: String,
@@ -114,7 +114,7 @@ public class FilesReadTool(ctx: WeftContext) : WeftTool<FilesReadTool.Args, File
 /**
  * Share a previously-saved file via the system share sheet (or to a specific app).
  */
-public class FilesShareTool(ctx: WeftContext) : WeftTool<FilesShareTool.Args, String>(
+class FilesShareTool(ctx: WeftContext) : WeftTool<FilesShareTool.Args, String>(
     ctx = ctx,
     argsType = typeToken<Args>(),
     resultType = typeToken<String>(),
@@ -133,7 +133,7 @@ public class FilesShareTool(ctx: WeftContext) : WeftTool<FilesShareTool.Args, St
 ) {
 
     @Serializable
-    public data class Args(val uri: String, val appId: String? = null)
+    data class Args(val uri: String, val appId: String? = null)
 
     override suspend fun executeWeft(args: Args): String {
         val target: ShareTarget = args.appId?.let { ShareTarget.SpecificApp(it) } ?: ShareTarget.SystemSheet

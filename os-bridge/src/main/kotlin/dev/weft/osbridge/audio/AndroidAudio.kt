@@ -23,7 +23,7 @@ import java.io.File
  * Good enough for voice (the dominant assistant use case) without bloating
  * file size.
  */
-public class AndroidAudio(context: Context) : Audio {
+class AndroidAudio(context: Context) : Audio {
 
     private val appContext: Context = context.applicationContext
     private val authority: String = "${appContext.packageName}.fileprovider"

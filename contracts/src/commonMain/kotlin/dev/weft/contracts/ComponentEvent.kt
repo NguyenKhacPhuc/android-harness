@@ -15,10 +15,10 @@ import kotlinx.serialization.Serializable
  * SwiftUI, server-rendered HTML, headless tests — fires the same set.
  */
 @Serializable
-public sealed class ComponentEvent {
+sealed class ComponentEvent {
     /** A meaningful user action — typically a button tap. */
     @Serializable
-    public data class Action(
+    data class Action(
         val action: String,
         val sourceType: String,
         val sourceLabel: String? = null,
@@ -26,14 +26,14 @@ public sealed class ComponentEvent {
 
     /** Free-text value entered into a text field (debounced or on-submit). */
     @Serializable
-    public data class TextChanged(
+    data class TextChanged(
         val sourceId: String,
         val value: String,
     ) : ComponentEvent()
 
     /** Toggle (switch, checkbox) flipped. */
     @Serializable
-    public data class ToggleChanged(
+    data class ToggleChanged(
         val sourceId: String,
         val value: Boolean,
     ) : ComponentEvent()

@@ -11,7 +11,7 @@ import kotlinx.serialization.Serializable
 import kotlinx.serialization.json.JsonElement
 import kotlinx.serialization.json.JsonObject
 
-public class DataQueryTool(
+class DataQueryTool(
     ctx: WeftContext,
     private val sources: DataSourceRegistry,
 ) : WeftTool<DataQueryTool.Args, DataQueryTool.Result>(
@@ -45,14 +45,14 @@ public class DataQueryTool(
 ) {
 
     @Serializable
-    public data class Args(
+    data class Args(
         val source: String,
         val filter: JsonObject = JsonObject(emptyMap()),
         val limit: Int = 50,
     )
 
     @Serializable
-    public data class Result(
+    data class Result(
         val items: List<JsonElement>,
         val total: Int,
         val hasMore: Boolean,
@@ -66,7 +66,7 @@ public class DataQueryTool(
     }
 }
 
-public class DataUpsertTool(
+class DataUpsertTool(
     ctx: WeftContext,
     private val sources: DataSourceRegistry,
 ) : WeftTool<DataUpsertTool.Args, DataUpsertTool.Result>(
@@ -98,14 +98,14 @@ public class DataUpsertTool(
 ) {
 
     @Serializable
-    public data class Args(
+    data class Args(
         val source: String,
         val record: JsonObject,
         val idempotencyKey: String? = null,
     )
 
     @Serializable
-    public data class Result(val id: String, val created: Boolean)
+    data class Result(val id: String, val created: Boolean)
 
     override suspend fun executeWeft(args: Args): Result {
         val ds = sources.get(args.source)

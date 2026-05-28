@@ -19,7 +19,7 @@ import kotlinx.coroutines.withContext
  * No-ops on devices with no vibrator or with vibration disabled in
  * settings — same posture as `View.performHapticFeedback`.
  */
-public class AndroidHaptics(context: Context) : Haptics {
+class AndroidHaptics(context: Context) : Haptics {
 
     private val appContext: Context = context.applicationContext
 

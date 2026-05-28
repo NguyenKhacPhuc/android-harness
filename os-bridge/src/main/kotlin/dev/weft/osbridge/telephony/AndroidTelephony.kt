@@ -15,7 +15,7 @@ import kotlinx.coroutines.withContext
  * Intent-based handoffs (no permission). [info] reads the public,
  * permissionless subset of [TelephonyManager] state.
  */
-public class AndroidTelephony(context: Context) : Telephony {
+class AndroidTelephony(context: Context) : Telephony {
     private val appContext: Context = context.applicationContext
 
     override suspend fun dial(phoneNumber: String): Boolean = withContext(Dispatchers.Default) {

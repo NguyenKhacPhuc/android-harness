@@ -21,7 +21,7 @@ import java.lang.ref.WeakReference
  * would need WRITE_SETTINGS, a permission Play Store flags for
  * generic apps).
  */
-public class AndroidPower(context: Context) : Power {
+class AndroidPower(context: Context) : Power {
     private val app: Application = context.applicationContext as Application
 
     @Volatile

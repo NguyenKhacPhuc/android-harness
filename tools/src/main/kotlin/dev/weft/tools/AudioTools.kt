@@ -16,7 +16,7 @@ import kotlinx.serialization.Serializable
  * sideEffecting = true. Not destructive — it only creates a new file in
  * the app's cache directory.
  */
-public class AudioRecordTool(ctx: WeftContext) :
+class AudioRecordTool(ctx: WeftContext) :
     WeftTool<AudioRecordTool.Args, AudioRecordTool.Result>(
         ctx = ctx,
         argsType = typeToken<Args>(),
@@ -56,14 +56,14 @@ public class AudioRecordTool(ctx: WeftContext) :
     ) {
 
     @Serializable
-    public data class Args(
+    data class Args(
         val context: String = "",
         val maxDurationSeconds: Int = DEFAULT_SECONDS,
         val namePrefix: String = "recording",
     )
 
     @Serializable
-    public data class Result(
+    data class Result(
         val hasFile: Boolean,
         val uri: String? = null,
         val sizeBytes: Long? = null,

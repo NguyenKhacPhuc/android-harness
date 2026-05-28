@@ -9,7 +9,7 @@ package dev.weft.contracts
  * mis-classify (e.g. a sideEffecting "log_event" that's actually
  * harmless).
  */
-public enum class ToolRisk {
+enum class ToolRisk {
     /** No mutation, no external side-effects. `data_read`, `system_user_context`. */
     Read,
     /** Mutates persistent state or has user-visible side effects. `data_update`, `notify_show`. */

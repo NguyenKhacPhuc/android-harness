@@ -24,7 +24,7 @@ import kotlin.random.Random
  * Use to avoid LLM string-manipulation errors on structured text
  * (phone numbers, emails, codes).
  */
-public class RegexMatchTool(ctx: WeftContext) :
+class RegexMatchTool(ctx: WeftContext) :
     WeftTool<RegexMatchTool.Args, RegexMatchTool.Result>(
         ctx = ctx,
         argsType = typeToken<Args>(),
@@ -55,10 +55,10 @@ public class RegexMatchTool(ctx: WeftContext) :
     ) {
 
     @Serializable
-    public data class Match(val match: String, val groups: List<String?> = emptyList(), val start: Int, val end: Int)
+    data class Match(val match: String, val groups: List<String?> = emptyList(), val start: Int, val end: Int)
 
     @Serializable
-    public data class Args(
+    data class Args(
         val op: String,
         val pattern: String,
         val text: String,
@@ -67,7 +67,7 @@ public class RegexMatchTool(ctx: WeftContext) :
     )
 
     @Serializable
-    public data class Result(
+    data class Result(
         val ok: Boolean,
         val matches: List<Match>? = null,
         val replaced: String? = null,
@@ -111,7 +111,7 @@ public class RegexMatchTool(ctx: WeftContext) :
  * params, fragment. Use for: deciding which app handles a link,
  * extracting a tracking parameter, building a canonical form.
  */
-public class UrlParseTool(ctx: WeftContext) :
+class UrlParseTool(ctx: WeftContext) :
     WeftTool<UrlParseTool.Args, UrlParseTool.Result>(
         ctx = ctx,
         argsType = typeToken<Args>(),
@@ -129,10 +129,10 @@ public class UrlParseTool(ctx: WeftContext) :
     ) {
 
     @Serializable
-    public data class Args(val url: String)
+    data class Args(val url: String)
 
     @Serializable
-    public data class Result(
+    data class Result(
         val ok: Boolean,
         val scheme: String? = null,
         val host: String? = null,
@@ -176,7 +176,7 @@ public class UrlParseTool(ctx: WeftContext) :
  * user-provided color name, generate a darker/lighter variant,
  * answer "what's the hex for cornflower blue?".
  */
-public class ColorConvertTool(ctx: WeftContext) :
+class ColorConvertTool(ctx: WeftContext) :
     WeftTool<ColorConvertTool.Args, ColorConvertTool.Result>(
         ctx = ctx,
         argsType = typeToken<Args>(),
@@ -199,10 +199,10 @@ public class ColorConvertTool(ctx: WeftContext) :
     ) {
 
     @Serializable
-    public data class Args(val from: String, val to: String, val value: String)
+    data class Args(val from: String, val to: String, val value: String)
 
     @Serializable
-    public data class Result(val ok: Boolean, val value: String? = null, val error: String? = null)
+    data class Result(val ok: Boolean, val value: String? = null, val error: String? = null)
 
     override suspend fun executeWeft(args: Args): Result = runCatching {
         val rgb = when (args.from.lowercase()) {
@@ -320,7 +320,7 @@ public class ColorConvertTool(ctx: WeftContext) :
  * Use for: dice rolls, pick-a-card, name a random thing, generate a
  * fresh ID without crypto.
  */
-public class RandomChoiceTool(ctx: WeftContext) :
+class RandomChoiceTool(ctx: WeftContext) :
     WeftTool<RandomChoiceTool.Args, RandomChoiceTool.Result>(
         ctx = ctx,
         argsType = typeToken<Args>(),
@@ -347,7 +347,7 @@ public class RandomChoiceTool(ctx: WeftContext) :
     ) {
 
     @Serializable
-    public data class Args(
+    data class Args(
         val op: String,
         val min: Int? = null,
         val max: Int? = null,
@@ -356,7 +356,7 @@ public class RandomChoiceTool(ctx: WeftContext) :
     )
 
     @Serializable
-    public data class Result(
+    data class Result(
         val ok: Boolean,
         val intValue: Int? = null,
         val pickValue: String? = null,
@@ -392,7 +392,7 @@ public class RandomChoiceTool(ctx: WeftContext) :
  * the value as a JSON-encoded string (or null when path doesn't
  * resolve).
  */
-public class JsonQueryTool(ctx: WeftContext) :
+class JsonQueryTool(ctx: WeftContext) :
     WeftTool<JsonQueryTool.Args, JsonQueryTool.Result>(
         ctx = ctx,
         argsType = typeToken<Args>(),
@@ -415,10 +415,10 @@ public class JsonQueryTool(ctx: WeftContext) :
     ) {
 
     @Serializable
-    public data class Args(val json: String, val path: String)
+    data class Args(val json: String, val path: String)
 
     @Serializable
-    public data class Result(val ok: Boolean, val value: String? = null, val error: String? = null)
+    data class Result(val ok: Boolean, val value: String? = null, val error: String? = null)
 
     private val parser = Json { ignoreUnknownKeys = true }
 

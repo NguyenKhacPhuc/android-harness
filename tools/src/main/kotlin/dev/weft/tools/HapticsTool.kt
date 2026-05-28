@@ -13,7 +13,7 @@ import kotlinx.serialization.Serializable
  * confirmation message, after a destructive operation, on a successful
  * background task, etc. No permission required.
  */
-public class HapticsTool(ctx: WeftContext) : WeftTool<HapticsTool.Args, String>(
+class HapticsTool(ctx: WeftContext) : WeftTool<HapticsTool.Args, String>(
     ctx = ctx,
     argsType = typeToken<Args>(),
     resultType = typeToken<String>(),
@@ -36,7 +36,7 @@ public class HapticsTool(ctx: WeftContext) : WeftTool<HapticsTool.Args, String>(
 ) {
 
     @Serializable
-    public data class Args(val effect: String)
+    data class Args(val effect: String)
 
     override suspend fun executeWeft(args: Args): String {
         val parsed = parse(args.effect)

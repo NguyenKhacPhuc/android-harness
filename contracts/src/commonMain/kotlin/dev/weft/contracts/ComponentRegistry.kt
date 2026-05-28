@@ -16,13 +16,13 @@ package dev.weft.contracts
  * must be unique across the registry; impls should reject duplicates
  * at construction time.
  */
-public interface ComponentRegistry {
+interface ComponentRegistry {
     /** Find a component by exact name. Returns null if unregistered. */
-    public fun get(name: String): ComponentMetadata?
+    fun get(name: String): ComponentMetadata?
 
     /** All registered names (for "did you mean" / debug listings). */
-    public fun names(): Set<String>
+    fun names(): Set<String>
 
     /** Every component in registration order. Used by the system-prompt catalog. */
-    public fun all(): List<ComponentMetadata>
+    fun all(): List<ComponentMetadata>
 }

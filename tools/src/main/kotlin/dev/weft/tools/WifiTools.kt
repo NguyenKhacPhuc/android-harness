@@ -17,7 +17,7 @@ import kotlinx.serialization.Serializable
  * censorship). All other fields are always available when WiFi is
  * connected.
  */
-public class WifiInfoTool(ctx: WeftContext) : WeftTool<WifiInfoTool.Args, WifiInfo>(
+class WifiInfoTool(ctx: WeftContext) : WeftTool<WifiInfoTool.Args, WifiInfo>(
     ctx = ctx,
     argsType = typeToken<Args>(),
     resultType = typeToken<WifiInfo>(),
@@ -42,7 +42,7 @@ public class WifiInfoTool(ctx: WeftContext) : WeftTool<WifiInfoTool.Args, WifiIn
     requiredPermissions = emptySet<Permission>(),
 ) {
     @Serializable
-    public data class Args(val context: String = "")
+    data class Args(val context: String = "")
 
     override suspend fun executeWeft(args: Args): WifiInfo = os.wifi.info()
 }

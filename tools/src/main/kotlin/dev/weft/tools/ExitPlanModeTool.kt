@@ -30,7 +30,7 @@ import kotlinx.serialization.Serializable
  * Tagged `planAware = true` so it's the one Write-class tool allowed
  * to run while in Plan mode.
  */
-public class ExitPlanModeTool(ctx: WeftContext) : WeftTool<ExitPlanModeTool.Args, String>(
+class ExitPlanModeTool(ctx: WeftContext) : WeftTool<ExitPlanModeTool.Args, String>(
     ctx = ctx,
     argsType = typeToken<Args>(),
     resultType = typeToken<String>(),
@@ -74,7 +74,7 @@ public class ExitPlanModeTool(ctx: WeftContext) : WeftTool<ExitPlanModeTool.Args
 ) {
 
     @Serializable
-    public data class Args(
+    data class Args(
         val title: String,
         val steps: List<PlanStep>,
         val openQuestions: List<String> = emptyList(),

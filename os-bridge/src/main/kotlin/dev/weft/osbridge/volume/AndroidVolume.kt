@@ -14,7 +14,7 @@ import kotlinx.coroutines.withContext
  * use the per-stream max as the 1.0 reference so callers don't have
  * to know that ALARM maxes at 7 while MUSIC maxes at 15.
  */
-public class AndroidVolume(context: Context) : Volume {
+class AndroidVolume(context: Context) : Volume {
     private val appContext: Context = context.applicationContext
     private val am: AudioManager? = appContext.getSystemService(Context.AUDIO_SERVICE) as? AudioManager
 

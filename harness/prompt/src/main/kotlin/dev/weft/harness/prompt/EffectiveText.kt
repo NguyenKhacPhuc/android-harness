@@ -19,7 +19,7 @@ import dev.weft.contracts.MemoryHit
  * `dev.weft.harness.agents.WeftAgent.send` / `sendStreaming` after
  * gathering the inputs.
  */
-public fun composeEffectiveText(
+fun composeEffectiveText(
     volatilePrefix: String,
     memoryHits: List<MemoryHit>,
     userText: String,

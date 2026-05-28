@@ -19,7 +19,7 @@ import kotlinx.serialization.json.JsonObject
  * just records the navigation request. The agent's intent is preserved in
  * the trace; rendering becomes real once templates exist.
  */
-public class UiNavigateTool(ctx: WeftContext) : WeftTool<UiNavigateTool.Args, String>(
+class UiNavigateTool(ctx: WeftContext) : WeftTool<UiNavigateTool.Args, String>(
     ctx = ctx,
     argsType = typeToken<Args>(),
     resultType = typeToken<String>(),
@@ -42,7 +42,7 @@ public class UiNavigateTool(ctx: WeftContext) : WeftTool<UiNavigateTool.Args, St
 ) {
 
     @Serializable
-    public data class Args(
+    data class Args(
         val template: String,
         val props: JsonObject = JsonObject(emptyMap()),
     )
@@ -59,7 +59,7 @@ public class UiNavigateTool(ctx: WeftContext) : WeftTool<UiNavigateTool.Args, St
  * For YES/NO or text input, use ui_ask. For destructive confirmations, the
  * substrate runs its own gate — don't call ui_dialog for that.
  */
-public class UiDialogTool(ctx: WeftContext) : WeftTool<UiDialogTool.Args, String>(
+class UiDialogTool(ctx: WeftContext) : WeftTool<UiDialogTool.Args, String>(
     ctx = ctx,
     argsType = typeToken<Args>(),
     resultType = typeToken<String>(),
@@ -77,7 +77,7 @@ public class UiDialogTool(ctx: WeftContext) : WeftTool<UiDialogTool.Args, String
 ) {
 
     @Serializable
-    public data class Args(val title: String, val body: String? = null)
+    data class Args(val title: String, val body: String? = null)
 
     override suspend fun executeWeft(args: Args): String {
         ui.showInfo(title = args.title, body = args.body)
@@ -93,7 +93,7 @@ public class UiDialogTool(ctx: WeftContext) : WeftTool<UiDialogTool.Args, String
  * (that needs an Activity-hosted ActivityResultLauncher). For now this
  * returns the current state; an Activity-level prompt flow lands later.
  */
-public class UiRequestPermissionTool(ctx: WeftContext) : WeftTool<UiRequestPermissionTool.Args, UiRequestPermissionTool.Result>(
+class UiRequestPermissionTool(ctx: WeftContext) : WeftTool<UiRequestPermissionTool.Args, UiRequestPermissionTool.Result>(
     ctx = ctx,
     argsType = typeToken<Args>(),
     resultType = typeToken<Result>(),
@@ -116,10 +116,10 @@ public class UiRequestPermissionTool(ctx: WeftContext) : WeftTool<UiRequestPermi
 ) {
 
     @Serializable
-    public data class Args(val permission: String, val rationale: String? = null)
+    data class Args(val permission: String, val rationale: String? = null)
 
     @Serializable
-    public data class Result(val state: String)
+    data class Result(val state: String)
 
     override suspend fun executeWeft(args: Args): Result {
         val perm = Permission.entries.firstOrNull { it.name == args.permission.uppercase() }

@@ -23,7 +23,7 @@ import kotlinx.coroutines.withContext
  * lets the tool layer surface a clean "no media accessible" message
  * instead of a stack trace.
  */
-public class AndroidMediaLibrary(context: Context) : MediaLibrary {
+class AndroidMediaLibrary(context: Context) : MediaLibrary {
     private val appContext: Context = context.applicationContext
 
     override suspend fun listRecent(kinds: Set<MediaKind>, limit: Int): List<MediaItem> =

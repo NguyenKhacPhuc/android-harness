@@ -11,7 +11,7 @@ import dev.weft.tools.WeftTool
 import kotlinx.serialization.Serializable
 import ai.koog.serialization.typeToken
 
-public class ScheduleCreateTool(ctx: WeftContext) : WeftTool<ScheduleCreateTool.Args, String>(
+class ScheduleCreateTool(ctx: WeftContext) : WeftTool<ScheduleCreateTool.Args, String>(
     ctx = ctx,
     argsType = typeToken<Args>(),
     resultType = typeToken<String>(),
@@ -42,7 +42,7 @@ public class ScheduleCreateTool(ctx: WeftContext) : WeftTool<ScheduleCreateTool.
 ) {
 
     @Serializable
-    public data class Args(
+    data class Args(
         val title: String,
         val whenExpr: String,
         val body: String? = null,

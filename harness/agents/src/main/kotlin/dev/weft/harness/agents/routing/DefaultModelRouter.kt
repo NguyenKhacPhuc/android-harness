@@ -21,7 +21,7 @@ import ai.koog.prompt.message.MessagePart
  * [shortTextThreshold] / [freshChatTurnsThreshold] knobs if your
  * workload has different shape.
  */
-public class DefaultModelRouter(
+class DefaultModelRouter(
     /**
      * User messages shorter than this (in characters) are eligible for
      * [ModelPool.cheap]. 200 chars ≈ 1-2 short sentences; longer than

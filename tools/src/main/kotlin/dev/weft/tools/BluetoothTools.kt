@@ -17,7 +17,7 @@ import kotlinx.serialization.Serializable
  * Returns empty when Bluetooth is off or nothing is paired. Does NOT
  * scan for nearby unpaired devices — that's a separate, heavier API.
  */
-public class BluetoothListPairedTool(ctx: WeftContext) : WeftTool<BluetoothListPairedTool.Args, BluetoothListPairedTool.Result>(
+class BluetoothListPairedTool(ctx: WeftContext) : WeftTool<BluetoothListPairedTool.Args, BluetoothListPairedTool.Result>(
     ctx = ctx,
     argsType = typeToken<Args>(),
     resultType = typeToken<Result>(),
@@ -41,10 +41,10 @@ public class BluetoothListPairedTool(ctx: WeftContext) : WeftTool<BluetoothListP
     requiredPermissions = setOf(Permission.BLUETOOTH_CONNECT),
 ) {
     @Serializable
-    public data class Args(val context: String = "")
+    data class Args(val context: String = "")
 
     @Serializable
-    public data class Result(val devices: List<BluetoothDeviceInfo>)
+    data class Result(val devices: List<BluetoothDeviceInfo>)
 
     override suspend fun executeWeft(args: Args): Result = Result(os.bluetooth.listPaired())
 }
@@ -55,7 +55,7 @@ public class BluetoothListPairedTool(ctx: WeftContext) : WeftTool<BluetoothListP
  * anything else that needs the user's hands — Android 12+ blocks
  * apps from toggling Bluetooth programmatically, so we hand off.
  */
-public class BluetoothOpenSettingsTool(ctx: WeftContext) : WeftTool<BluetoothOpenSettingsTool.Args, String>(
+class BluetoothOpenSettingsTool(ctx: WeftContext) : WeftTool<BluetoothOpenSettingsTool.Args, String>(
     ctx = ctx,
     argsType = typeToken<Args>(),
     resultType = typeToken<String>(),
@@ -80,7 +80,7 @@ public class BluetoothOpenSettingsTool(ctx: WeftContext) : WeftTool<BluetoothOpe
     sideEffecting = true,
 ) {
     @Serializable
-    public data class Args(val context: String = "")
+    data class Args(val context: String = "")
 
     override suspend fun executeWeft(args: Args): String {
         val ok = os.bluetooth.openSettings()
@@ -98,7 +98,7 @@ public class BluetoothOpenSettingsTool(ctx: WeftContext) : WeftTool<BluetoothOpe
  * The agent should call `bluetooth_list_paired` first to discover the
  * MAC address, then pass it here.
  */
-public class BluetoothDeviceBatteryTool(ctx: WeftContext) : WeftTool<BluetoothDeviceBatteryTool.Args, BluetoothDeviceBatteryTool.Result>(
+class BluetoothDeviceBatteryTool(ctx: WeftContext) : WeftTool<BluetoothDeviceBatteryTool.Args, BluetoothDeviceBatteryTool.Result>(
     ctx = ctx,
     argsType = typeToken<Args>(),
     resultType = typeToken<Result>(),
@@ -119,10 +119,10 @@ public class BluetoothDeviceBatteryTool(ctx: WeftContext) : WeftTool<BluetoothDe
     requiredPermissions = setOf(Permission.BLUETOOTH_CONNECT),
 ) {
     @Serializable
-    public data class Args(val address: String)
+    data class Args(val address: String)
 
     @Serializable
-    public data class Result(val percent: Int?, val address: String)
+    data class Result(val percent: Int?, val address: String)
 
     override suspend fun executeWeft(args: Args): Result =
         Result(percent = os.bluetooth.deviceBattery(args.address), address = args.address)

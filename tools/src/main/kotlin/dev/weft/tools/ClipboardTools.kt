@@ -15,7 +15,7 @@ import ai.koog.serialization.typeToken
  * modify state. Not flagged destructive — the user can always clear or
  * overwrite themselves.
  */
-public class ClipboardReadTool(ctx: WeftContext) : WeftTool<ClipboardReadTool.Args, ClipboardReadTool.Result>(
+class ClipboardReadTool(ctx: WeftContext) : WeftTool<ClipboardReadTool.Args, ClipboardReadTool.Result>(
     ctx = ctx,
     argsType = typeToken<Args>(),
     resultType = typeToken<Result>(),
@@ -37,10 +37,10 @@ public class ClipboardReadTool(ctx: WeftContext) : WeftTool<ClipboardReadTool.Ar
     ),
 ) {
     @Serializable
-    public data class Args(val context: String = "")
+    data class Args(val context: String = "")
 
     @Serializable
-    public data class Result(val text: String)
+    data class Result(val text: String)
 
     override suspend fun executeWeft(args: Args): Result =
         Result(text = os.clipboard.read() ?: "")
@@ -50,7 +50,7 @@ public class ClipboardReadTool(ctx: WeftContext) : WeftTool<ClipboardReadTool.Ar
  * Write text to the system clipboard, replacing the previous primary clip.
  * sideEffecting = true because it overwrites user state.
  */
-public class ClipboardWriteTool(ctx: WeftContext) : WeftTool<ClipboardWriteTool.Args, String>(
+class ClipboardWriteTool(ctx: WeftContext) : WeftTool<ClipboardWriteTool.Args, String>(
     ctx = ctx,
     argsType = typeToken<Args>(),
     resultType = typeToken<String>(),
@@ -67,7 +67,7 @@ public class ClipboardWriteTool(ctx: WeftContext) : WeftTool<ClipboardWriteTool.
     sideEffecting = true,
 ) {
     @Serializable
-    public data class Args(val text: String)
+    data class Args(val text: String)
 
     override suspend fun executeWeft(args: Args): String {
         if (args.text.isEmpty()) {

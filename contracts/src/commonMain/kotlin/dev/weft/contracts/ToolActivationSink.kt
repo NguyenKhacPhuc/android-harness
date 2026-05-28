@@ -38,7 +38,7 @@ import kotlin.coroutines.CoroutineContext
  * `agent.run()` call but on potentially different dispatchers.
  * Mutations are serialized through a [Mutex].
  */
-public class ToolActivationSink : CoroutineContext.Element {
+class ToolActivationSink : CoroutineContext.Element {
     override val key: CoroutineContext.Key<*> = Key
 
     private val mutex = Mutex()
@@ -50,7 +50,7 @@ public class ToolActivationSink : CoroutineContext.Element {
      * de-duplicated against what's already pending so a noisy LLM
      * calling find_tool twice doesn't double-activate.
      */
-    public suspend fun record(toolNames: Collection<String>) {
+    suspend fun record(toolNames: Collection<String>) {
         if (toolNames.isEmpty()) return
         mutex.withLock {
             for (name in toolNames) {
@@ -65,10 +65,10 @@ public class ToolActivationSink : CoroutineContext.Element {
      * Returning an empty list means "no activations this batch" —
      * the node short-circuits.
      */
-    public suspend fun drain(): List<String> = mutex.withLock {
+    suspend fun drain(): List<String> = mutex.withLock {
         if (pending.isEmpty()) emptyList()
         else pending.toList().also { pending.clear() }
     }
 
-    public companion object Key : CoroutineContext.Key<ToolActivationSink>
+    companion object Key : CoroutineContext.Key<ToolActivationSink>
 }

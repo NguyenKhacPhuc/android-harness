@@ -25,7 +25,7 @@ package dev.weft.harness.skills
  *   - **Future extensibility.** Adding fuzzy match, "did you mean" suggestions,
  *     subcommand dispatch, etc. happens once in the registry, not once per app.
  */
-public data class Skill(
+data class Skill(
     /** Lowercase, no leading `/`. The canonical form shown in `/help`. */
     val name: String,
     /** Optional shorthands. `/n` for `/note`, `/t` for `/task`, etc. */
@@ -57,12 +57,12 @@ public data class Skill(
  * Outcome of a [Skill] execution. Translated into chat bubbles by the
  * substrate's `ChatScreen` (and any other UI host).
  */
-public sealed class SkillResult {
+sealed class SkillResult {
     /** Skill succeeded. [message] becomes a tool-done bubble. */
-    public data class Ok(val message: String) : SkillResult()
+    data class Ok(val message: String) : SkillResult()
 
     /** Skill failed. [message] becomes a tool-fail bubble. */
-    public data class Fail(val message: String) : SkillResult()
+    data class Fail(val message: String) : SkillResult()
 }
 
 /**
@@ -81,8 +81,8 @@ public sealed class SkillResult {
  * SkillRegistry(mySkills).withHelp()
  * ```
  */
-public class SkillRegistry(
-    public val skills: List<Skill>,
+class SkillRegistry(
+    val skills: List<Skill>,
 ) {
     private val byName: Map<String, Skill> = buildIndex(skills)
 
@@ -94,7 +94,7 @@ public class SkillRegistry(
      * can override by registering a catch-all if they want different
      * behavior.
      */
-    public fun resolve(input: String): Match? {
+    fun resolve(input: String): Match? {
         if (!input.startsWith("/")) return null
         val rest = input.drop(1)
         if (rest.isEmpty()) return null
@@ -106,9 +106,9 @@ public class SkillRegistry(
     }
 
     /** Every registered skill, including the synthesized `/help` if enabled. */
-    public fun all(): List<Skill> = skills
+    fun all(): List<Skill> = skills
 
-    public data class Match(val skill: Skill, val payload: String)
+    data class Match(val skill: Skill, val payload: String)
 
     private companion object {
         fun buildIndex(skills: List<Skill>): Map<String, Skill> {
@@ -138,7 +138,7 @@ public class SkillRegistry(
  * CLI-style discoverability chain `.withHelp()` at the end of their
  * builder.
  */
-public fun SkillRegistry.withHelp(): SkillRegistry {
+fun SkillRegistry.withHelp(): SkillRegistry {
     val existing = this.skills
     val helpSkill = Skill(
         name = "help",

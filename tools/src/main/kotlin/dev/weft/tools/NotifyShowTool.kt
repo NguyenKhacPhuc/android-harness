@@ -8,7 +8,7 @@ import dev.weft.contracts.NotificationSpec
 import dev.weft.contracts.Permission
 import kotlinx.serialization.Serializable
 
-public class NotifyShowTool(ctx: WeftContext) : WeftTool<NotifyShowTool.Args, String>(
+class NotifyShowTool(ctx: WeftContext) : WeftTool<NotifyShowTool.Args, String>(
     ctx = ctx,
     argsType = typeToken<Args>(),
     resultType = typeToken<String>(),
@@ -37,7 +37,7 @@ public class NotifyShowTool(ctx: WeftContext) : WeftTool<NotifyShowTool.Args, St
 ) {
 
     @Serializable
-    public data class Args(val title: String, val body: String? = null)
+    data class Args(val title: String, val body: String? = null)
 
     override suspend fun executeWeft(args: Args): String {
         val handle = os.notifications.showNow(NotificationSpec(title = args.title, body = args.body))

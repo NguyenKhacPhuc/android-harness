@@ -11,9 +11,9 @@ package dev.weft.harness.behavior
  * count-tokens endpoint, OpenAI's `tiktoken`, Gemini's `count_tokens`)
  * when accurate budget tracking matters.
  */
-public fun interface TokenCounter {
+fun interface TokenCounter {
     /** Estimate the token count of [text] for this counter's target model. */
-    public fun estimate(text: String): Int
+    fun estimate(text: String): Int
 }
 
 /**
@@ -26,7 +26,7 @@ public fun interface TokenCounter {
  * substrate; production deployments that bill per-token should replace
  * with a real tokenizer.
  */
-public class HeuristicTokenCounter(
+class HeuristicTokenCounter(
     private val charsPerToken: Double = DEFAULT_CHARS_PER_TOKEN,
 ) : TokenCounter {
     init {
@@ -36,7 +36,7 @@ public class HeuristicTokenCounter(
     override fun estimate(text: String): Int =
         (text.length / charsPerToken).toInt().coerceAtLeast(0)
 
-    public companion object {
-        public const val DEFAULT_CHARS_PER_TOKEN: Double = 4.0
+    companion object {
+        const val DEFAULT_CHARS_PER_TOKEN: Double = 4.0
     }
 }

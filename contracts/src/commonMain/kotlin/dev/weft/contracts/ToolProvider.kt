@@ -28,7 +28,7 @@ package dev.weft.contracts
  * find_tool itself) are always-on; everything else (camera, file,
  * BLE, MCP, app-domain tools) is on-demand.
  */
-public interface ToolProvider {
+interface ToolProvider {
     /**
      * Lightweight metadata for every tool this provider can produce.
      * Reading this is O(catalog) and side-effect-free — it runs on
@@ -37,7 +37,7 @@ public interface ToolProvider {
      * Implementations should cache aggressively: callers expect this
      * property to be free-or-cheap to read repeatedly.
      */
-    public val available: List<ToolMetadata>
+    val available: List<ToolMetadata>
 
     /**
      * Materialize a tool by descriptor name. Called once per (agent,
@@ -50,7 +50,7 @@ public interface ToolProvider {
      *
      * @param name the [ToolMetadata.name] from [available]
      */
-    public suspend fun resolve(name: String): ResolvedTool?
+    suspend fun resolve(name: String): ResolvedTool?
 }
 
 /**
@@ -62,19 +62,19 @@ public interface ToolProvider {
  * The full execution surface is materialized only when
  * [ToolProvider.resolve] is called.
  */
-public data class ToolMetadata(
+data class ToolMetadata(
     /** Stable name. Same as the eventual `ToolDescriptor.name`. */
-    public val name: String,
+    val name: String,
 
     /** One-paragraph description, lead-with-the-action style. */
-    public val description: String,
+    val description: String,
 
     /**
      * Optional grouping label used by `find_tool` for category-filtered
      * search ("show me memory tools"). Free-form string; suggested
      * taxonomy is documented in `docs/writing-a-custom-tool.md`.
      */
-    public val category: String? = null,
+    val category: String? = null,
 
     /**
      * Whether this tool's full descriptor goes into every prompt
@@ -85,7 +85,7 @@ public data class ToolMetadata(
      * memory_compact, system_user_context, find_tool, plus
      * app-author-tagged "core" tools.
      */
-    public val alwaysOn: Boolean = false,
+    val alwaysOn: Boolean = false,
 )
 
 /**
@@ -97,7 +97,7 @@ public data class ToolMetadata(
  * which wraps a `WeftTool<*, *>` and exposes both the descriptor
  * (for LLM advertising) and the dispatch entry point (for execution).
  */
-public interface ResolvedTool {
+interface ResolvedTool {
     /** The descriptor name. Must match the [ToolMetadata.name]. */
-    public val name: String
+    val name: String
 }

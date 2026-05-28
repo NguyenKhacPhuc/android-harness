@@ -15,7 +15,7 @@ import kotlinx.serialization.Serializable
  * Shortcuts are scoped to this app; the OS shows about 4-5 at a
  * time. Pushing a shortcut with an existing id replaces it.
  */
-public class ShortcutPushTool(ctx: WeftContext) :
+class ShortcutPushTool(ctx: WeftContext) :
     WeftTool<ShortcutPushTool.Args, ShortcutPushTool.Result>(
         ctx = ctx,
         argsType = typeToken<Args>(),
@@ -54,7 +54,7 @@ public class ShortcutPushTool(ctx: WeftContext) :
     ) {
 
     @Serializable
-    public data class Args(
+    data class Args(
         val id: String,
         val shortLabel: String,
         val target: String,
@@ -62,7 +62,7 @@ public class ShortcutPushTool(ctx: WeftContext) :
     )
 
     @Serializable
-    public data class Result(val success: Boolean)
+    data class Result(val success: Boolean)
 
     override suspend fun executeWeft(args: Args): Result {
         val spec = ShortcutSpec(
@@ -78,7 +78,7 @@ public class ShortcutPushTool(ctx: WeftContext) :
 /**
  * Remove a dynamic launcher shortcut by id. No-op if missing.
  */
-public class ShortcutRemoveTool(ctx: WeftContext) :
+class ShortcutRemoveTool(ctx: WeftContext) :
     WeftTool<ShortcutRemoveTool.Args, ShortcutRemoveTool.Result>(
         ctx = ctx,
         argsType = typeToken<Args>(),
@@ -96,10 +96,10 @@ public class ShortcutRemoveTool(ctx: WeftContext) :
     ) {
 
     @Serializable
-    public data class Args(val id: String)
+    data class Args(val id: String)
 
     @Serializable
-    public data class Result(val success: Boolean)
+    data class Result(val success: Boolean)
 
     override suspend fun executeWeft(args: Args): Result =
         Result(success = os.shortcuts.remove(args.id))
@@ -110,7 +110,7 @@ public class ShortcutRemoveTool(ctx: WeftContext) :
  * pushing a new one to avoid id collisions, or to show "your saved
  * actions" to the user.
  */
-public class ShortcutListTool(ctx: WeftContext) :
+class ShortcutListTool(ctx: WeftContext) :
     WeftTool<ShortcutListTool.Args, ShortcutListTool.Result>(
         ctx = ctx,
         argsType = typeToken<Args>(),
@@ -131,10 +131,10 @@ public class ShortcutListTool(ctx: WeftContext) :
     ) {
 
     @Serializable
-    public data class Args(val context: String = "")
+    data class Args(val context: String = "")
 
     @Serializable
-    public data class Result(val shortcuts: List<ShortcutSpec>)
+    data class Result(val shortcuts: List<ShortcutSpec>)
 
     override suspend fun executeWeft(args: Args): Result = Result(os.shortcuts.list())
 }

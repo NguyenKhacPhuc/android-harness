@@ -176,33 +176,33 @@ private suspend fun ai.koog.agents.core.agent.session.AIAgentLLMWriteSession.col
  * smaller call. [dev.weft.harness.agents.WeftAgent.sendStreaming] propagates this
  * through its Flow as [StreamChunk.Failed].
  */
-public class StreamingTruncatedException(message: String) : RuntimeException(message)
+class StreamingTruncatedException(message: String) : RuntimeException(message)
 
 /**
  * Sealed event surface returned by `WeftAgent.sendStreaming`. Mirrors
  * the existing `ToolEvent` flow for tool activity and adds per-token text
  * deltas plus a terminal [Done] carrying the full final reply.
  */
-public sealed class StreamChunk {
+sealed class StreamChunk {
     /** Incremental token of the assistant's reply. Append to the visible bubble. */
-    public data class TextDelta(val text: String) : StreamChunk()
+    data class TextDelta(val text: String) : StreamChunk()
 
     /** A tool is about to fire. Same semantic as `ToolEvent.Starting`. */
-    public data class ToolStarting(val toolName: String, val argsPreview: String) : StreamChunk()
+    data class ToolStarting(val toolName: String, val argsPreview: String) : StreamChunk()
 
     /** Tool returned. Same semantic as `ToolEvent.Completed`. */
-    public data class ToolCompleted(val toolName: String) : StreamChunk()
+    data class ToolCompleted(val toolName: String) : StreamChunk()
 
     /** Tool failed. Same semantic as `ToolEvent.Failed`. */
-    public data class ToolFailed(val toolName: String, val message: String) : StreamChunk()
+    data class ToolFailed(val toolName: String, val message: String) : StreamChunk()
 
     /**
      * Terminal event — the agent finished and produced [finalReply]. The
      * caller can use this to flip "in flight" state off; persistence /
      * trace completion already happened by the time this fires.
      */
-    public data class Done(val finalReply: String) : StreamChunk()
+    data class Done(val finalReply: String) : StreamChunk()
 
     /** Terminal event for failure — `sendStreaming` will also throw, but this is the in-flow signal. */
-    public data class Failed(val message: String) : StreamChunk()
+    data class Failed(val message: String) : StreamChunk()
 }

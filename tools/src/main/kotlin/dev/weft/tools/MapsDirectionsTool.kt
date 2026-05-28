@@ -17,7 +17,7 @@ import kotlinx.serialization.Serializable
  * call this for "where is X?" style queries — there's no built-in
  * places-search tool yet.
  */
-public class MapsDirectionsTool(ctx: WeftContext) : WeftTool<MapsDirectionsTool.Args, String>(
+class MapsDirectionsTool(ctx: WeftContext) : WeftTool<MapsDirectionsTool.Args, String>(
     ctx = ctx,
     argsType = typeToken<Args>(),
     resultType = typeToken<String>(),
@@ -51,7 +51,7 @@ public class MapsDirectionsTool(ctx: WeftContext) : WeftTool<MapsDirectionsTool.
 ) {
 
     @Serializable
-    public data class Args(
+    data class Args(
         val to: String,
         val from: String? = null,
         val mode: String = "driving",

@@ -13,7 +13,7 @@ import kotlinx.serialization.json.JsonObject
  * Apps that want richer context (user profile, subscription tier, etc.)
  * register additional providers alongside this one.
  */
-public class DeviceContextProvider(
+class DeviceContextProvider(
     private val os: OsCapabilities,
     private val fields: Set<UserContextField> = DEFAULT_FIELDS,
 ) : ContextProvider {
@@ -24,8 +24,8 @@ public class DeviceContextProvider(
 
     override suspend fun snapshot(): JsonObject = os.userContext.snapshot(fields)
 
-    public companion object {
-        public val DEFAULT_FIELDS: Set<UserContextField> = setOf(
+    companion object {
+        val DEFAULT_FIELDS: Set<UserContextField> = setOf(
             UserContextField.TIME,
             UserContextField.TIMEZONE,
             UserContextField.LOCALE,

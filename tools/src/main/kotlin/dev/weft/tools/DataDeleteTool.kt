@@ -16,7 +16,7 @@ import ai.koog.serialization.typeToken
  * the actual delete. Even if the LLM "decided" to delete, the user gets the
  * "are you sure?" prompt automatically.
  */
-public class DataDeleteTool(
+class DataDeleteTool(
     ctx: WeftContext,
     private val sources: DataSourceRegistry,
 ) : WeftTool<DataDeleteTool.Args, String>(
@@ -38,7 +38,7 @@ public class DataDeleteTool(
 ) {
 
     @Serializable
-    public data class Args(val source: String, val id: String)
+    data class Args(val source: String, val id: String)
 
     override suspend fun executeWeft(args: Args): String {
         val ds = sources.get(args.source)

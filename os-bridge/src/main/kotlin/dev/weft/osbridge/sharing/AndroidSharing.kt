@@ -22,7 +22,7 @@ import kotlinx.coroutines.withContext
  * [ShareTarget.SpecificApp] passes the package id via `Intent.setPackage`;
  * if the app doesn't handle the MIME type, the share fails silently.
  */
-public class AndroidSharing(private val context: Context) : Sharing {
+class AndroidSharing(private val context: Context) : Sharing {
 
     override suspend fun share(content: ShareContent, target: ShareTarget): Boolean = withContext(Dispatchers.Default) {
         val text = listOfNotNull(content.text, content.url).joinToString(separator = "\n").takeIf { it.isNotBlank() }

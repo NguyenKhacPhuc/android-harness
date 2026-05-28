@@ -20,26 +20,26 @@ import kotlin.time.Duration.Companion.seconds
  * Suitable for guarding against extended Anthropic outages — if 3 calls in a
  * row fail, the next 60s of calls fast-fail instead of pounding the API.
  */
-public class CircuitBreaker(
+class CircuitBreaker(
     private val failureThreshold: Int = DEFAULT_FAILURE_THRESHOLD,
     /**
      * How long the breaker stays in [State.Open] before allowing a single
      * HALF_OPEN probe. Exposed so UI surfaces (banners, retry timers) can
      * compute "retry in Xs" without re-reading config from elsewhere.
      */
-    public val openDuration: Duration = DEFAULT_OPEN_DURATION,
+    val openDuration: Duration = DEFAULT_OPEN_DURATION,
     private val nowEpochMs: () -> Long = System::currentTimeMillis,
 ) {
     private val _state: MutableStateFlow<State> = MutableStateFlow(State.Closed(failureCount = 0))
 
-    public val state: StateFlow<State> = _state.asStateFlow()
+    val state: StateFlow<State> = _state.asStateFlow()
 
     /**
      * Check whether a call should be allowed through. If the breaker is
      * OPEN and the cooldown has elapsed, transitions to HALF_OPEN and
      * permits a single probe.
      */
-    public fun allowCall(): Boolean = when (val s = _state.value) {
+    fun allowCall(): Boolean = when (val s = _state.value) {
         is State.Closed -> true
         is State.HalfOpen -> false                                // only one probe at a time
         is State.Open -> {
@@ -52,11 +52,11 @@ public class CircuitBreaker(
         }
     }
 
-    public fun recordSuccess() {
+    fun recordSuccess() {
         _state.value = State.Closed(failureCount = 0)
     }
 
-    public fun recordFailure() {
+    fun recordFailure() {
         _state.value = when (val s = _state.value) {
             is State.HalfOpen -> State.Open(openedAtEpochMs = nowEpochMs())
             is State.Open -> s
@@ -67,16 +67,16 @@ public class CircuitBreaker(
         }
     }
 
-    public sealed class State {
-        public data class Closed(val failureCount: Int) : State()
-        public data class Open(val openedAtEpochMs: Long) : State()
-        public data object HalfOpen : State()
+    sealed class State {
+        data class Closed(val failureCount: Int) : State()
+        data class Open(val openedAtEpochMs: Long) : State()
+        data object HalfOpen : State()
     }
 
-    public companion object {
-        public const val DEFAULT_FAILURE_THRESHOLD: Int = 3
-        public val DEFAULT_OPEN_DURATION: Duration = 60.seconds
+    companion object {
+        const val DEFAULT_FAILURE_THRESHOLD: Int = 3
+        val DEFAULT_OPEN_DURATION: Duration = 60.seconds
     }
 }
 
-public class CircuitBreakerOpenException(message: String = "Circuit breaker is open") : RuntimeException(message)
+class CircuitBreakerOpenException(message: String = "Circuit breaker is open") : RuntimeException(message)

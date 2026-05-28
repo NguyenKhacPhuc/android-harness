@@ -17,7 +17,7 @@ import dev.weft.tools.WeftTool
  * Apps add tools via `extraToolsFactory` and components via
  * `extraComponentsFactory`; both are advertised automatically.
  */
-public fun assembleSystemPrompt(
+fun assembleSystemPrompt(
     appPreamble: String,
     tools: List<WeftTool<*, *>>,
     components: List<ComponentMetadata> = emptyList(),

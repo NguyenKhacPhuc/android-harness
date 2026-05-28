@@ -9,7 +9,7 @@ package dev.weft.contracts
  * Tools consult the current mode via [WeftCredentialProvider]'s sibling
  * supplier on `WeftContext.approvalMode`. Default = [Default].
  */
-public enum class ApprovalMode {
+enum class ApprovalMode {
     /**
      * Normal behaviour: [ToolRisk.Destructive] tools prompt via
      * [UiBridge.confirmDestructive]; [ToolRisk.Read] and [ToolRisk.Write]

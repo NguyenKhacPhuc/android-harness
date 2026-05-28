@@ -36,7 +36,7 @@ package dev.weft.harness.prompt
  * concatenation in their preamble; future versions of the substrate
  * may also inject this automatically via `assembleSystemPrompt`.
  */
-public object WeftSystemPromptDefaults {
+object WeftSystemPromptDefaults {
 
     /**
      * Universal LLM-tool-integration behavioral rules. Combats the
@@ -47,7 +47,7 @@ public object WeftSystemPromptDefaults {
      * Empirically load-bearing. Removing or weakening these rules
      * brings the failures back; apps should always include them.
      */
-    public const val BEHAVIORAL_RULES: String = """
+    const val BEHAVIORAL_RULES: String = """
 Critical behavioral rules — these prevent the most common failure modes:
 
   1. Never narrate a tool call you don't make. If you say "opening
@@ -77,7 +77,7 @@ Critical behavioral rules — these prevent the most common failure modes:
      * Apps without that wiring should omit this section — including
      * it would teach the agent a pattern it can't actually exercise.
      */
-    public val DATA_BINDING_GUIDE: String = """
+    val DATA_BINDING_GUIDE: String = """
 Data bindings (fast-path: no LLM in the tap loop)
 
 For any UI you render with `ui_render`, use these two sentinels in
@@ -163,7 +163,7 @@ journal entries") — not for displaying a number in a mini-app.
      * pattern. Each is keyed off a tool name, so apps that don't
      * register the corresponding tool just get unused guidance.
      */
-    public val COMMON_TOOL_CHAINS: String = """
+    val COMMON_TOOL_CHAINS: String = """
 Common tool chains worth knowing
 
   - "Show me my location on a map" → `location_current` for
@@ -206,7 +206,7 @@ Defaults to use without asking:
      * Apps that want to omit a section can build their own combination
      * by referencing the individual constants directly.
      */
-    public val STANDARD: String = BEHAVIORAL_RULES +
+    val STANDARD: String = BEHAVIORAL_RULES +
         COMMON_TOOL_CHAINS +
         DATA_BINDING_GUIDE
 }

@@ -24,7 +24,7 @@ import java.time.Instant
  *     calendar (first calendar with `CAL_ACCESS_OWNER`). Recurrence rules
  *     are not yet supported (Phase 5+).
  */
-public class AndroidCalendar(private val context: Context) : Calendar {
+class AndroidCalendar(private val context: Context) : Calendar {
 
     override suspend fun read(filter: CalendarFilter): List<CalendarEvent> = withContext(Dispatchers.IO) {
         val resolver = context.contentResolver

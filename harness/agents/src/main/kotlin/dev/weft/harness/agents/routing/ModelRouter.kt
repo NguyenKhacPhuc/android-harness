@@ -19,9 +19,9 @@ import ai.koog.prompt.message.MessagePart
  * based routers). The default [DefaultModelRouter] uses only free
  * deterministic signals.
  */
-public interface ModelRouter {
+interface ModelRouter {
     /** Pick a model for the upcoming turn. */
-    public suspend fun route(context: RoutingContext): LLModel
+    suspend fun route(context: RoutingContext): LLModel
 }
 
 /**
@@ -41,12 +41,12 @@ public interface ModelRouter {
  * @property pool the provider's model pool — the only set of models
  *   the router is allowed to return from.
  */
-public data class RoutingContext(
-    public val userText: String,
-    public val attachments: List<MessagePart.Attachment>,
-    public val historyTurns: Int,
-    public val availableTools: List<ToolDescriptor>,
-    public val pool: ModelPool,
+data class RoutingContext(
+    val userText: String,
+    val attachments: List<MessagePart.Attachment>,
+    val historyTurns: Int,
+    val availableTools: List<ToolDescriptor>,
+    val pool: ModelPool,
     /**
      * Optional per-call tier override. Set by the caller via
      * [dev.weft.harness.agents.WeftAgent.send]'s `modelTier` parameter.
@@ -55,7 +55,7 @@ public data class RoutingContext(
      * around the override (e.g., a "force Opus" chip) will then be
      * silently overridden — usually not what you want.
      */
-    public val tierHint: ModelTier? = null,
+    val tierHint: ModelTier? = null,
 )
 
 /**
@@ -70,11 +70,11 @@ public data class RoutingContext(
  * Returning anything else is a bug (the substrate has no other models
  * configured for the active provider's executor).
  */
-public data class ModelPool(
-    public val cheap: LLModel,
-    public val standard: LLModel,
-    public val vision: LLModel = standard,
-    public val heavy: LLModel = standard,
+data class ModelPool(
+    val cheap: LLModel,
+    val standard: LLModel,
+    val vision: LLModel = standard,
+    val heavy: LLModel = standard,
     /**
      * Optional per-model capability overrides keyed by [LLModel.id]. Pool
      * builders can stash provider-specific quirks (Gemini's lack of
@@ -85,7 +85,7 @@ public data class ModelPool(
      * Default empty map = pure derivation from Koog. Existing callers
      * unaffected.
      */
-    public val capabilities: Map<String, ModelCapabilities> = emptyMap(),
+    val capabilities: Map<String, ModelCapabilities> = emptyMap(),
 ) {
     /**
      * Resolve [ModelCapabilities] for [model]. Looks up [capabilities] by
@@ -93,11 +93,11 @@ public data class ModelPool(
      * Koog capability list. Result is suitable for routing decisions —
      * never null, never throws.
      */
-    public fun capabilitiesOf(model: LLModel): ModelCapabilities =
+    fun capabilitiesOf(model: LLModel): ModelCapabilities =
         capabilities[model.id] ?: ModelCapabilities.derivedFrom(model)
 }
 
 /** Trivial [ModelRouter] that always returns the same model. */
-public class StaticModelRouter(private val model: LLModel) : ModelRouter {
+class StaticModelRouter(private val model: LLModel) : ModelRouter {
     override suspend fun route(context: RoutingContext): LLModel = model
 }

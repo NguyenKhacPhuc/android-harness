@@ -17,7 +17,7 @@ import kotlinx.serialization.Serializable
  * follow-up download?") or honor user requests like "tell me when the
  * battery is full" (paired with a periodic check).
  */
-public class BatteryStatusTool(ctx: WeftContext) : WeftTool<BatteryStatusTool.Args, BatteryInfo>(
+class BatteryStatusTool(ctx: WeftContext) : WeftTool<BatteryStatusTool.Args, BatteryInfo>(
     ctx = ctx,
     argsType = typeToken<Args>(),
     resultType = typeToken<BatteryInfo>(),
@@ -51,7 +51,7 @@ public class BatteryStatusTool(ctx: WeftContext) : WeftTool<BatteryStatusTool.Ar
      * onto without forcing the model to send anything.
      */
     @Serializable
-    public data class Args(val context: String = "")
+    data class Args(val context: String = "")
 
     override suspend fun executeWeft(args: Args): BatteryInfo = os.systemInfo.battery()
 }
@@ -65,7 +65,7 @@ public class BatteryStatusTool(ctx: WeftContext) : WeftTool<BatteryStatusTool.Ar
  * Use cases: "should I download this now? wait for wifi?", "am I
  * online?", "queue this for later if we're on cellular."
  */
-public class NetworkStatusTool(ctx: WeftContext) : WeftTool<NetworkStatusTool.Args, NetworkInfo>(
+class NetworkStatusTool(ctx: WeftContext) : WeftTool<NetworkStatusTool.Args, NetworkInfo>(
     ctx = ctx,
     argsType = typeToken<Args>(),
     resultType = typeToken<NetworkInfo>(),
@@ -99,7 +99,7 @@ public class NetworkStatusTool(ctx: WeftContext) : WeftTool<NetworkStatusTool.Ar
      * onto without forcing the model to send anything.
      */
     @Serializable
-    public data class Args(val context: String = "")
+    data class Args(val context: String = "")
 
     override suspend fun executeWeft(args: Args): NetworkInfo = os.systemInfo.network()
 }
@@ -111,7 +111,7 @@ public class NetworkStatusTool(ctx: WeftContext) : WeftTool<NetworkStatusTool.Ar
  * Use cases: localizing responses, knowing the SDK level for
  * platform-feature suggestions, warning when storage is low.
  */
-public class DeviceInfoTool(ctx: WeftContext) : WeftTool<DeviceInfoTool.Args, DeviceInfo>(
+class DeviceInfoTool(ctx: WeftContext) : WeftTool<DeviceInfoTool.Args, DeviceInfo>(
     ctx = ctx,
     argsType = typeToken<Args>(),
     resultType = typeToken<DeviceInfo>(),
@@ -146,7 +146,7 @@ public class DeviceInfoTool(ctx: WeftContext) : WeftTool<DeviceInfoTool.Args, De
      * onto without forcing the model to send anything.
      */
     @Serializable
-    public data class Args(val context: String = "")
+    data class Args(val context: String = "")
 
     override suspend fun executeWeft(args: Args): DeviceInfo = os.systemInfo.device()
 }
@@ -160,7 +160,7 @@ public class DeviceInfoTool(ctx: WeftContext) : WeftTool<DeviceInfoTool.Args, De
  * "can I show this 4-line layout? screen is short", "user might be
  * driving (screen off) — speak the answer instead of rendering it."
  */
-public class DisplayInfoTool(ctx: WeftContext) : WeftTool<DisplayInfoTool.Args, DisplayInfo>(
+class DisplayInfoTool(ctx: WeftContext) : WeftTool<DisplayInfoTool.Args, DisplayInfo>(
     ctx = ctx,
     argsType = typeToken<Args>(),
     resultType = typeToken<DisplayInfo>(),
@@ -180,7 +180,7 @@ public class DisplayInfoTool(ctx: WeftContext) : WeftTool<DisplayInfoTool.Args, 
     ),
 ) {
     @Serializable
-    public data class Args(val context: String = "")
+    data class Args(val context: String = "")
 
     override suspend fun executeWeft(args: Args): DisplayInfo = os.systemInfo.display()
 }

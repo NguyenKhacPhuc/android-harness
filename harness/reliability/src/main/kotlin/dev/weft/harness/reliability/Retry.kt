@@ -14,7 +14,7 @@ import kotlin.random.Random
  * Exponential backoff: `baseDelay * 2^(attempt-1)`, capped at `maxDelay`,
  * with `±jitterFraction` of jitter applied multiplicatively.
  */
-public suspend fun <T> withRetry(
+suspend fun <T> withRetry(
     policy: RetryPolicy,
     breaker: CircuitBreaker,
     onAttemptFailed: suspend (attempt: Int, cause: Throwable, retryingIn: Long?) -> Unit = { _, _, _ -> },

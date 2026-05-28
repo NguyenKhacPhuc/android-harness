@@ -36,7 +36,7 @@ import kotlin.coroutines.resume
  * can route completion back to exactly the suspending caller that queued
  * it (rather than fan-in across all callers).
  */
-public class AndroidSpeech(context: Context) : Speech {
+class AndroidSpeech(context: Context) : Speech {
 
     private val appContext: Context = context.applicationContext
 

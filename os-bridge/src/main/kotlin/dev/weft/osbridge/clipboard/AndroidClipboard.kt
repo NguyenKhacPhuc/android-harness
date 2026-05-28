@@ -20,7 +20,7 @@ import kotlinx.coroutines.withContext
  * not in the foreground. Tools that call [read] should treat the call as
  * user-observable.
  */
-public class AndroidClipboard(context: Context) : Clipboard {
+class AndroidClipboard(context: Context) : Clipboard {
 
     private val appContext: Context = context.applicationContext
     private val cm: ClipboardManager =

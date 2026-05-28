@@ -22,7 +22,7 @@ import kotlinx.serialization.Serializable
  *     before persisting.
  *   - Every stored memory is visible + deletable in AgentMemoriesScreen.
  */
-public class MemoryStoreTool(
+class MemoryStoreTool(
     ctx: WeftContext,
     private val store: MemoryStore,
     private val pii: PiiDetector = PiiDetector(),
@@ -68,14 +68,14 @@ public class MemoryStoreTool(
 ) {
 
     @Serializable
-    public data class Args(
+    data class Args(
         val content: String,
         val tags: List<String> = emptyList(),
         val scope: String = "session",
     )
 
     @Serializable
-    public data class Result(
+    data class Result(
         val id: String,
         val stored: Boolean,
         val redactedPreview: String? = null,
@@ -114,7 +114,7 @@ public class MemoryStoreTool(
  * `memory_recall` — search previously-stored memories by substring + tags.
  * Returns most-recent matches first.
  */
-public class MemoryRecallTool(
+class MemoryRecallTool(
     ctx: WeftContext,
     private val store: MemoryStore,
 ) : WeftTool<MemoryRecallTool.Args, MemoryRecallTool.Result>(
@@ -154,7 +154,7 @@ public class MemoryRecallTool(
 ) {
 
     @Serializable
-    public data class Args(
+    data class Args(
         val query: String = "",
         val tags: List<String> = emptyList(),
         val scope: String = "any",
@@ -162,9 +162,9 @@ public class MemoryRecallTool(
     )
 
     @Serializable
-    public data class Result(val matches: List<Match>) {
+    data class Result(val matches: List<Match>) {
         @Serializable
-        public data class Match(
+        data class Match(
             val id: String,
             val content: String,
             val tags: List<String>,
@@ -254,7 +254,7 @@ internal fun labelProvenance(nowMs: Long, storedAtMs: Long): String {
  * surfacing concrete candidates is too vague; the tool requires explicit
  * actions for that reason.
  */
-public class MemoryCompactTool(
+class MemoryCompactTool(
     ctx: WeftContext,
     private val store: MemoryStore,
 ) : WeftTool<MemoryCompactTool.Args, MemoryCompactTool.Result>(
@@ -290,9 +290,9 @@ public class MemoryCompactTool(
 ) {
 
     @Serializable
-    public data class Args(val actions: List<Action>) {
+    data class Args(val actions: List<Action>) {
         @Serializable
-        public data class Action(
+        data class Action(
             val mergeIds: List<String>,
             val replacement: String,
             val tags: List<String> = emptyList(),
@@ -301,13 +301,13 @@ public class MemoryCompactTool(
     }
 
     @Serializable
-    public data class Result(
+    data class Result(
         val applied: List<AppliedAction>,
         val cancelled: Boolean = false,
         val rejectedActions: List<String> = emptyList(),
     ) {
         @Serializable
-        public data class AppliedAction(
+        data class AppliedAction(
             val newMemoryId: String,
             val replacedIds: List<String>,
         )

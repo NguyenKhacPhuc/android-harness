@@ -12,32 +12,32 @@ import kotlinx.serialization.json.JsonObject
  * Registered into [ContextRegistry] at app startup. Queried by the
  * `system_user_context` tool when the LLM wants fresh structured values.
  */
-public interface ContextProvider {
+interface ContextProvider {
     /**
      * Stable identifier used as the key in [ContextRegistry] and in
      * `system_user_context`'s `providers` parameter. Convention: snake_case.
      */
-    public val name: String
+    val name: String
 
     /** Human-readable description shown to the LLM via tool docs. */
-    public val description: String
+    val description: String
 
     /** Capture the current snapshot of this provider's context. */
-    public suspend fun snapshot(): JsonObject
+    suspend fun snapshot(): JsonObject
 }
 
 /**
  * Lookup for named [ContextProvider]s. App builds this once at startup with
  * the substrate's defaults plus any app-specific providers.
  */
-public class ContextRegistry(providers: List<ContextProvider>) {
+class ContextRegistry(providers: List<ContextProvider>) {
     private val byName: Map<String, ContextProvider> =
         providers.associateBy { it.name }
             .also { require(it.size == providers.size) { "Duplicate context provider names" } }
 
-    public fun get(name: String): ContextProvider? = byName[name]
+    fun get(name: String): ContextProvider? = byName[name]
 
-    public fun all(): Collection<ContextProvider> = byName.values
+    fun all(): Collection<ContextProvider> = byName.values
 
-    public fun names(): Set<String> = byName.keys
+    fun names(): Set<String> = byName.keys
 }

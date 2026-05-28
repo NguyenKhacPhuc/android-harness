@@ -12,9 +12,9 @@ import kotlin.time.Duration
  * per-tool state. NOT for app data (that goes through the data_* tools
  * and the app's own database).
  */
-public interface ScriptStorage {
-    public suspend fun get(key: String): JsonElement?
-    public suspend fun put(key: String, value: JsonElement, ttl: Duration? = null)
-    public suspend fun remove(key: String)
-    public suspend fun list(prefix: String = ""): List<String>
+interface ScriptStorage {
+    suspend fun get(key: String): JsonElement?
+    suspend fun put(key: String, value: JsonElement, ttl: Duration? = null)
+    suspend fun remove(key: String)
+    suspend fun list(prefix: String = ""): List<String>
 }

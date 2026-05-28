@@ -15,7 +15,7 @@ import ai.koog.prompt.executor.clients.anthropic.AnthropicCacheControl
  * [CacheBinder] implementations translate the tier into the right
  * provider-native directive.
  */
-public enum class CacheTier {
+enum class CacheTier {
     /**
      * Bytes-identical across calls for the life of the app process: app
      * preamble, tool catalog, component metadata. Maps to the provider's
@@ -53,12 +53,12 @@ public enum class CacheTier {
  * keep additions opt-in via default implementations so existing
  * binders don't have to change.
  */
-public interface CacheBinder {
+interface CacheBinder {
     /**
      * Emit a `system(...)` message into [builder], optionally annotated
      * with the appropriate cache directive for this binder's provider.
      */
-    public fun cachedSystem(builder: PromptBuilder, text: String, tier: CacheTier)
+    fun cachedSystem(builder: PromptBuilder, text: String, tier: CacheTier)
 
     /**
      * Emit a `user(...)` message into [builder] with an optional cache
@@ -70,7 +70,7 @@ public interface CacheBinder {
      * cache automatically or don't support it — `NoOpCacheBinder` just
      * emits a plain user message.
      */
-    public fun cachedUser(builder: PromptBuilder, text: String, tier: CacheTier)
+    fun cachedUser(builder: PromptBuilder, text: String, tier: CacheTier)
 
     /**
      * Return [tools] with the last entry's [ToolDescriptor] marked for
@@ -82,7 +82,7 @@ public interface CacheBinder {
      * prefix to cover every prior tool definition. For a substrate with
      * 40+ tools this is bigger savings than the system message alone.
      */
-    public fun markedTools(tools: List<Tool<*, *>>, tier: CacheTier): List<Tool<*, *>>
+    fun markedTools(tools: List<Tool<*, *>>, tier: CacheTier): List<Tool<*, *>>
 }
 
 /**
@@ -99,7 +99,7 @@ public interface CacheBinder {
  * it's the right default for the substrate's app preamble + tool
  * catalog (which never change within a process).
  */
-public object AnthropicCacheBinder : CacheBinder {
+object AnthropicCacheBinder : CacheBinder {
     override fun cachedSystem(builder: PromptBuilder, text: String, tier: CacheTier) {
         val ctl = tierToControl(tier)
         if (ctl != null) builder.system(text, ctl) else builder.system(text)
@@ -134,7 +134,7 @@ public object AnthropicCacheBinder : CacheBinder {
  * volatile content last — the binder just doesn't add directives.
  * Ollama doesn't have prompt caching at all.
  */
-public object NoOpCacheBinder : CacheBinder {
+object NoOpCacheBinder : CacheBinder {
     override fun cachedSystem(builder: PromptBuilder, text: String, tier: CacheTier) {
         builder.system(text)
     }
@@ -160,7 +160,7 @@ public object NoOpCacheBinder : CacheBinder {
  * parameters, so the star-projection lossage here is invisible
  * to the runtime.
  */
-public class CachedToolAdapter(
+class CachedToolAdapter(
     private val inner: Tool<*, *>,
     descriptor: ToolDescriptor,
 ) : Tool<Any?, Any?>(

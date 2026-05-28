@@ -10,6 +10,6 @@ import dev.weft.contracts.ResolvedTool
  * `ToolDescriptor` (LLM advertising) + register it into the
  * `ToolRegistry` (execution dispatch).
  */
-public class ResolvedWeftTool(public val tool: WeftTool<*, *>) : ResolvedTool {
+class ResolvedWeftTool(val tool: WeftTool<*, *>) : ResolvedTool {
     override val name: String = tool.descriptor.name
 }

@@ -33,7 +33,7 @@ import kotlin.coroutines.resume
  * synchronous calls on Dispatchers.IO. The legacy calls may go to a
  * network service the OS owns; modern devices ship an on-device geocoder.
  */
-public class AndroidLocation(context: Context) : Location {
+class AndroidLocation(context: Context) : Location {
 
     private val appContext: Context = context.applicationContext
     private val fused = LocationServices.getFusedLocationProviderClient(appContext)

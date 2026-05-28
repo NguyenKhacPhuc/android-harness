@@ -20,7 +20,7 @@ import kotlinx.serialization.json.JsonObject
  *   - For in-app browsing we use Chrome Custom Tabs when available; falls
  *     back to the system browser if not.
  */
-public class AndroidIntents(private val context: Context) : Intents {
+class AndroidIntents(private val context: Context) : Intents {
 
     override suspend fun launchApp(target: String, payload: JsonObject?): Boolean = withContext(Dispatchers.Default) {
         val intent = when {

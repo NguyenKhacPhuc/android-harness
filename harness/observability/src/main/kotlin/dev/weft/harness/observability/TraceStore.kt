@@ -15,10 +15,10 @@ import java.util.UUID
  * SQLite-backed persistence is the natural next step (see plan
  * `docs/07-harness.md:96`).
  */
-public interface TraceStore {
+interface TraceStore {
 
     /** Snapshot of all currently-known traces, newest first. */
-    public val traces: StateFlow<List<AgentTrace>>
+    val traces: StateFlow<List<AgentTrace>>
 
     /**
      * Start a new trace for [conversationId] / [userMessage]. Returns
@@ -29,22 +29,22 @@ public interface TraceStore {
      * traces leave it null. The DevTools UI uses the link to render
      * nested traces under their parent.
      */
-    public suspend fun startTrace(
+    suspend fun startTrace(
         conversationId: String,
         userMessage: String,
         parentTraceId: String? = null,
     ): String
 
     /** Mark a trace as completed and record the final assistant reply. */
-    public suspend fun completeTrace(traceId: String, finalAssistantMessage: String?)
+    suspend fun completeTrace(traceId: String, finalAssistantMessage: String?)
 
     /** Mark a trace as failed. */
-    public suspend fun failTrace(traceId: String, errorMessage: String)
+    suspend fun failTrace(traceId: String, errorMessage: String)
 
     /** Record an LLM-call sub-event. Pass either Start or Complete shape. */
-    public suspend fun recordLlmStart(traceId: String, model: String): String
+    suspend fun recordLlmStart(traceId: String, model: String): String
 
-    public suspend fun recordLlmComplete(
+    suspend fun recordLlmComplete(
         traceId: String,
         llmCallId: String,
         inputTokens: Int? = null,
@@ -54,17 +54,17 @@ public interface TraceStore {
         cacheWriteTokens: Int? = null,
     )
 
-    public suspend fun recordToolStart(traceId: String, toolName: String, argsPreview: String): String
+    suspend fun recordToolStart(traceId: String, toolName: String, argsPreview: String): String
 
-    public suspend fun recordToolComplete(traceId: String, toolCallId: String, resultPreview: String?)
+    suspend fun recordToolComplete(traceId: String, toolCallId: String, resultPreview: String?)
 
-    public suspend fun recordToolFailed(traceId: String, toolCallId: String, errorMessage: String)
+    suspend fun recordToolFailed(traceId: String, toolCallId: String, errorMessage: String)
 
     /** Set or clear feedback on a trace. The viewer shows it as 👍 / 👎. */
-    public suspend fun setFeedback(traceId: String, feedback: TraceFeedback)
+    suspend fun setFeedback(traceId: String, feedback: TraceFeedback)
 
     /** Wipe all traces. User-facing "clear traces" lives behind this. */
-    public suspend fun clear()
+    suspend fun clear()
 }
 
 /**
@@ -72,12 +72,12 @@ public interface TraceStore {
  * dropped silently. The plan calls for SQLite + size-cap by bytes; this
  * approximation is enough to ship a viewer.
  */
-public class InMemoryTraceStore(private val maxTraces: Int = DEFAULT_MAX_TRACES) : TraceStore {
+class InMemoryTraceStore(private val maxTraces: Int = DEFAULT_MAX_TRACES) : TraceStore {
 
     private val _traces: MutableStateFlow<List<AgentTrace>> = MutableStateFlow(emptyList())
-    public override val traces: StateFlow<List<AgentTrace>> = _traces.asStateFlow()
+    override val traces: StateFlow<List<AgentTrace>> = _traces.asStateFlow()
 
-    public override suspend fun startTrace(
+    override suspend fun startTrace(
         conversationId: String,
         userMessage: String,
         parentTraceId: String?,
@@ -94,7 +94,7 @@ public class InMemoryTraceStore(private val maxTraces: Int = DEFAULT_MAX_TRACES)
         return id
     }
 
-    public override suspend fun completeTrace(traceId: String, finalAssistantMessage: String?) {
+    override suspend fun completeTrace(traceId: String, finalAssistantMessage: String?) {
         mutate(traceId) {
             it.copy(
                 endEpochMs = System.currentTimeMillis(),
@@ -104,7 +104,7 @@ public class InMemoryTraceStore(private val maxTraces: Int = DEFAULT_MAX_TRACES)
         }
     }
 
-    public override suspend fun failTrace(traceId: String, errorMessage: String) {
+    override suspend fun failTrace(traceId: String, errorMessage: String) {
         mutate(traceId) {
             it.copy(
                 endEpochMs = System.currentTimeMillis(),
@@ -114,7 +114,7 @@ public class InMemoryTraceStore(private val maxTraces: Int = DEFAULT_MAX_TRACES)
         }
     }
 
-    public override suspend fun recordLlmStart(traceId: String, model: String): String {
+    override suspend fun recordLlmStart(traceId: String, model: String): String {
         val id = newId("llm")
         mutate(traceId) {
             it.copy(
@@ -128,7 +128,7 @@ public class InMemoryTraceStore(private val maxTraces: Int = DEFAULT_MAX_TRACES)
         return id
     }
 
-    public override suspend fun recordLlmComplete(
+    override suspend fun recordLlmComplete(
         traceId: String,
         llmCallId: String,
         inputTokens: Int?,
@@ -157,7 +157,7 @@ public class InMemoryTraceStore(private val maxTraces: Int = DEFAULT_MAX_TRACES)
         }
     }
 
-    public override suspend fun recordToolStart(traceId: String, toolName: String, argsPreview: String): String {
+    override suspend fun recordToolStart(traceId: String, toolName: String, argsPreview: String): String {
         val id = newId("tool")
         mutate(traceId) {
             it.copy(
@@ -172,7 +172,7 @@ public class InMemoryTraceStore(private val maxTraces: Int = DEFAULT_MAX_TRACES)
         return id
     }
 
-    public override suspend fun recordToolComplete(traceId: String, toolCallId: String, resultPreview: String?) {
+    override suspend fun recordToolComplete(traceId: String, toolCallId: String, resultPreview: String?) {
         mutate(traceId) { t ->
             t.copy(
                 toolCalls = t.toolCalls.map { call ->
@@ -190,7 +190,7 @@ public class InMemoryTraceStore(private val maxTraces: Int = DEFAULT_MAX_TRACES)
         }
     }
 
-    public override suspend fun recordToolFailed(traceId: String, toolCallId: String, errorMessage: String) {
+    override suspend fun recordToolFailed(traceId: String, toolCallId: String, errorMessage: String) {
         mutate(traceId) { t ->
             t.copy(
                 toolCalls = t.toolCalls.map { call ->
@@ -208,11 +208,11 @@ public class InMemoryTraceStore(private val maxTraces: Int = DEFAULT_MAX_TRACES)
         }
     }
 
-    public override suspend fun setFeedback(traceId: String, feedback: TraceFeedback) {
+    override suspend fun setFeedback(traceId: String, feedback: TraceFeedback) {
         mutate(traceId) { it.copy(feedback = feedback) }
     }
 
-    public override suspend fun clear() {
+    override suspend fun clear() {
         _traces.value = emptyList()
     }
 
@@ -224,7 +224,7 @@ public class InMemoryTraceStore(private val maxTraces: Int = DEFAULT_MAX_TRACES)
 
     private fun newId(prefix: String): String = "$prefix-${UUID.randomUUID().toString().take(8)}"
 
-    public companion object {
-        public const val DEFAULT_MAX_TRACES: Int = 100
+    companion object {
+        const val DEFAULT_MAX_TRACES: Int = 100
     }
 }

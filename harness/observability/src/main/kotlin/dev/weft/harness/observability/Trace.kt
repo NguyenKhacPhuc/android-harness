@@ -12,7 +12,7 @@ import kotlinx.serialization.Serializable
  * or [TraceStore.failTrace].
  */
 @Serializable
-public data class AgentTrace(
+data class AgentTrace(
     val id: String,
     val conversationId: String,
     val startEpochMs: Long,
@@ -45,7 +45,7 @@ public data class AgentTrace(
 }
 
 @Serializable
-public data class LlmCallTrace(
+data class LlmCallTrace(
     val id: String,
     val startEpochMs: Long,
     val endEpochMs: Long? = null,
@@ -63,7 +63,7 @@ public data class LlmCallTrace(
 }
 
 @Serializable
-public data class ToolCallTrace(
+data class ToolCallTrace(
     val id: String,
     val startEpochMs: Long,
     val endEpochMs: Long? = null,
@@ -77,10 +77,10 @@ public data class ToolCallTrace(
 }
 
 @Serializable
-public enum class TraceStatus { RUNNING, COMPLETED, FAILED }
+enum class TraceStatus { RUNNING, COMPLETED, FAILED }
 
 @Serializable
-public enum class ToolStatus { RUNNING, COMPLETED, FAILED }
+enum class ToolStatus { RUNNING, COMPLETED, FAILED }
 
 /**
  * User-supplied "did this turn do what I wanted" signal. Visible in the
@@ -88,4 +88,4 @@ public enum class ToolStatus { RUNNING, COMPLETED, FAILED }
  * a feedback-export pipeline.
  */
 @Serializable
-public enum class TraceFeedback { NONE, THUMBS_UP, THUMBS_DOWN }
+enum class TraceFeedback { NONE, THUMBS_UP, THUMBS_DOWN }

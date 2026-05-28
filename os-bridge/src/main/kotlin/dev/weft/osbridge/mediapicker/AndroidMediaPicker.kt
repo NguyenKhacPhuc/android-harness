@@ -35,7 +35,7 @@ import kotlin.coroutines.resume
  * Returns an empty list when the user cancels (the picker contract
  * uses an empty result, not null, for cancellation).
  */
-public class AndroidMediaPicker(context: Context) : MediaPicker {
+class AndroidMediaPicker(context: Context) : MediaPicker {
     private val app: Application = context.applicationContext as Application
 
     @Volatile

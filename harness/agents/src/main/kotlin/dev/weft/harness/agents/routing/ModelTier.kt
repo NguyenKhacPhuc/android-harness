@@ -15,7 +15,7 @@ package dev.weft.harness.agents.routing
  * the shipped [DefaultModelRouter] honors it unconditionally — that's how
  * the "always force Opus for this turn" UX works.
  */
-public enum class ModelTier {
+enum class ModelTier {
     Cheap,
     Standard,
     Vision,

@@ -28,7 +28,7 @@ import ai.koog.serialization.typeToken
  * back when the toast disappears. If you need user confirmation, use
  * `ui_dialog` (modal) or `ui_render` with a Button (in-tree action).
  */
-public class UiNotifyTool(ctx: WeftContext) : WeftTool<UiNotifyTool.Args, String>(
+class UiNotifyTool(ctx: WeftContext) : WeftTool<UiNotifyTool.Args, String>(
     ctx = ctx,
     argsType = typeToken<Args>(),
     resultType = typeToken<String>(),
@@ -51,7 +51,7 @@ public class UiNotifyTool(ctx: WeftContext) : WeftTool<UiNotifyTool.Args, String
 ) {
 
     @Serializable
-    public data class Args(
+    data class Args(
         val text: String,
         val kind: String = "toast",
         val title: String = "",
@@ -76,7 +76,7 @@ public class UiNotifyTool(ctx: WeftContext) : WeftTool<UiNotifyTool.Args, String
         return "shown (kind=${overlayKind.name.lowercase()})"
     }
 
-    public companion object {
-        public const val DEFAULT_DURATION_MS: Long = 3000L
+    companion object {
+        const val DEFAULT_DURATION_MS: Long = 3000L
     }
 }

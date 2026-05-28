@@ -17,7 +17,7 @@ import kotlinx.serialization.Serializable
  * want a stretch alarm?"), fitness goal nudges, conversational replies
  * about how much the user has moved today.
  */
-public class SensorStepsTodayTool(ctx: WeftContext) :
+class SensorStepsTodayTool(ctx: WeftContext) :
     WeftTool<SensorStepsTodayTool.Args, SensorStepsTodayTool.Result>(
         ctx = ctx,
         argsType = typeToken<Args>(),
@@ -42,10 +42,10 @@ public class SensorStepsTodayTool(ctx: WeftContext) :
     ) {
 
     @Serializable
-    public data class Args(val context: String = "")
+    data class Args(val context: String = "")
 
     @Serializable
-    public data class Result(val available: Boolean, val steps: Int? = null)
+    data class Result(val available: Boolean, val steps: Int? = null)
 
     override suspend fun executeWeft(args: Args): Result {
         val n = os.sensors.stepsToday()
@@ -63,7 +63,7 @@ public class SensorStepsTodayTool(ctx: WeftContext) :
  * Use for: "the room is dark — should I dim the rendered chart?",
  * heuristic dark-mode suggestions, ambient-aware UX.
  */
-public class SensorAmbientLightTool(ctx: WeftContext) :
+class SensorAmbientLightTool(ctx: WeftContext) :
     WeftTool<SensorAmbientLightTool.Args, SensorAmbientLightTool.Result>(
         ctx = ctx,
         argsType = typeToken<Args>(),
@@ -85,10 +85,10 @@ public class SensorAmbientLightTool(ctx: WeftContext) :
     ) {
 
     @Serializable
-    public data class Args(val context: String = "")
+    data class Args(val context: String = "")
 
     @Serializable
-    public data class Result(val available: Boolean, val lux: Float? = null)
+    data class Result(val available: Boolean, val lux: Float? = null)
 
     override suspend fun executeWeft(args: Args): Result {
         val lux = os.sensors.ambientLightLux()

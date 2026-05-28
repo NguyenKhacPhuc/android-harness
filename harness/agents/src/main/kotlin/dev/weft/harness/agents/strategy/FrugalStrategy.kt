@@ -16,7 +16,7 @@ import dev.weft.harness.reliability.RetryPolicy
  * (Haiku 4.5 on Anthropic, GPT-4o-mini on OpenAI) is good for simple
  * Q&A and short tool sequences, not for multi-step agentic plans.
  */
-public data class FrugalStrategy(
+data class FrugalStrategy(
     override val retry: RetryPolicy = RetryPolicy(maxAttempts = 2),
     override val cacheTiers: Map<String, CacheTier> = mapOf(
         "system" to CacheTier.STATIC,

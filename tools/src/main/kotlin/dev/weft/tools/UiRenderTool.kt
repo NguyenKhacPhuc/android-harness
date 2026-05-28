@@ -23,7 +23,7 @@ import kotlinx.serialization.Serializable
  * keeps one universal check — depth — because that's a property of the
  * tree shape, not the component set.
  */
-public class UiRenderTool(ctx: WeftContext) : WeftTool<UiRenderTool.Args, UiRenderTool.Result>(
+class UiRenderTool(ctx: WeftContext) : WeftTool<UiRenderTool.Args, UiRenderTool.Result>(
     ctx = ctx,
     argsType = typeToken<Args>(),
     resultType = typeToken<Result>(),
@@ -48,10 +48,10 @@ public class UiRenderTool(ctx: WeftContext) : WeftTool<UiRenderTool.Args, UiRend
 ) {
 
     @Serializable
-    public data class Args(val tree: ComponentNode)
+    data class Args(val tree: ComponentNode)
 
     @Serializable
-    public data class Result(
+    data class Result(
         val rendered: Boolean,
         val nodeCount: Int,
         val depth: Int,

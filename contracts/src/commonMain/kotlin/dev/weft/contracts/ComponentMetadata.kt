@@ -12,21 +12,21 @@ package dev.weft.contracts
  * the agent-side prompt machinery (which doesn't render anything) stay
  * Compose-free.
  */
-public interface ComponentMetadata {
+interface ComponentMetadata {
     /** Stable identifier the LLM uses to reference this component in trees. */
-    public val name: String
+    val name: String
 
     /** One-line "what is this" summary. First line of the system-prompt catalog entry. */
-    public val description: String
+    val description: String
 
     /** Semantic role — drives grouping in the system prompt. */
-    public val category: ComponentCategory
+    val category: ComponentCategory
 
     /** Optional layout hint. Surfaces as a `Layout:` line in the catalog entry. */
-    public val layoutNotes: String?
+    val layoutNotes: String?
 
     /** Optional canonical JSON example. Surfaces as an `Example:` line. */
-    public val example: String?
+    val example: String?
 }
 
 /**
@@ -42,7 +42,7 @@ public interface ComponentMetadata {
  * are the more common use; document the filter variant in the
  * description.
  */
-public enum class ComponentCategory(public val label: String, public val hint: String) {
+enum class ComponentCategory(val label: String, val hint: String) {
     /** Render content. Stateless, no user-interaction events. */
     DISPLAY("Display", "Render content. Stateless, no events."),
 

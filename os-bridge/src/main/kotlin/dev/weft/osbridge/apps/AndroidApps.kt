@@ -26,7 +26,7 @@ import kotlinx.coroutines.withContext
  * manifest, or the `QUERY_ALL_PACKAGES` permission (Play Store will
  * scrutinize this).
  */
-public class AndroidApps(context: Context) : Apps {
+class AndroidApps(context: Context) : Apps {
     private val appContext: Context = context.applicationContext
     private val pm: PackageManager = appContext.packageManager
 

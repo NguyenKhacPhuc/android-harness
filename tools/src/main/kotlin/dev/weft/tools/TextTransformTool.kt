@@ -25,7 +25,7 @@ import java.util.Base64
  *   - `url_encode`, `url_decode` — percent-encoding
  *   - `length` — UTF-16 length (matches String.length)
  */
-public class TextTransformTool(ctx: WeftContext) :
+class TextTransformTool(ctx: WeftContext) :
     WeftTool<TextTransformTool.Args, TextTransformTool.Result>(
         ctx = ctx,
         argsType = typeToken<Args>(),
@@ -49,10 +49,10 @@ public class TextTransformTool(ctx: WeftContext) :
     ) {
 
     @Serializable
-    public data class Args(val op: String, val text: String)
+    data class Args(val op: String, val text: String)
 
     @Serializable
-    public data class Result(
+    data class Result(
         val ok: Boolean,
         val result: String? = null,
         val length: Int? = null,
@@ -135,7 +135,7 @@ public class TextTransformTool(ctx: WeftContext) :
  * NOT for password hashing — those need a real KDF (Argon2/PBKDF2),
  * not a plain hash. The substrate doesn't ship one.
  */
-public class HashTool(ctx: WeftContext) : WeftTool<HashTool.Args, HashTool.Result>(
+class HashTool(ctx: WeftContext) : WeftTool<HashTool.Args, HashTool.Result>(
     ctx = ctx,
     argsType = typeToken<Args>(),
     resultType = typeToken<Result>(),
@@ -157,10 +157,10 @@ public class HashTool(ctx: WeftContext) : WeftTool<HashTool.Args, HashTool.Resul
 ) {
 
     @Serializable
-    public data class Args(val algorithm: String, val text: String)
+    data class Args(val algorithm: String, val text: String)
 
     @Serializable
-    public data class Result(val ok: Boolean, val digest: String? = null, val error: String? = null)
+    data class Result(val ok: Boolean, val digest: String? = null, val error: String? = null)
 
     override suspend fun executeWeft(args: Args): Result = runCatching {
         val alg = args.algorithm.uppercase().replace("-", "").let { stripped ->

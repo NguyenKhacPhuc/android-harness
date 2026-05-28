@@ -14,11 +14,11 @@ package dev.weft.harness.memory
  * rather than exhaustive. False negatives are acceptable — this is a
  * convenience gate, not a privacy guarantee.
  */
-public class PiiDetector(
+class PiiDetector(
     private val patterns: List<PiiPattern> = DEFAULT_PATTERNS,
 ) {
 
-    public fun scan(text: String): List<PiiMatch> {
+    fun scan(text: String): List<PiiMatch> {
         if (text.isBlank()) return emptyList()
         return patterns.flatMap { pattern ->
             pattern.regex.findAll(text).map { match ->
@@ -33,7 +33,7 @@ public class PiiDetector(
     }
 
     /** Replace every match with `[REDACTED-<kind>]` for safe display in a confirmation prompt. */
-    public fun redact(text: String, matches: List<PiiMatch> = scan(text)): String {
+    fun redact(text: String, matches: List<PiiMatch> = scan(text)): String {
         if (matches.isEmpty()) return text
         val sorted = matches.sortedByDescending { it.start }
         val sb = StringBuilder(text)
@@ -43,8 +43,8 @@ public class PiiDetector(
         return sb.toString()
     }
 
-    public companion object {
-        public val DEFAULT_PATTERNS: List<PiiPattern> = listOf(
+    companion object {
+        val DEFAULT_PATTERNS: List<PiiPattern> = listOf(
             // US SSN: 3-2-4 digits, common separators
             PiiPattern(
                 kind = PiiKind.SSN,
@@ -69,16 +69,16 @@ public class PiiDetector(
     }
 }
 
-public data class PiiPattern(val kind: PiiKind, val regex: Regex)
+data class PiiPattern(val kind: PiiKind, val regex: Regex)
 
-public data class PiiMatch(
+data class PiiMatch(
     val kind: PiiKind,
     val start: Int,
     val endExclusive: Int,
     val raw: String,
 )
 
-public enum class PiiKind {
+enum class PiiKind {
     SSN,
     CREDIT_CARD,
     PHONE,

@@ -21,10 +21,10 @@ package dev.weft.harness.observability
  * if you need surgical PII handling that's the job of [PiiDetector] in
  * `:harness:memory`, which is applied before the LLM stores anything.
  */
-public class Redactor(
-    public val rules: List<Rule> = DEFAULT_RULES,
+class Redactor(
+    val rules: List<Rule> = DEFAULT_RULES,
 ) {
-    public data class Rule(
+    data class Rule(
         /** Short identifier — appears in the replacement marker. */
         val name: String,
         val pattern: Regex,
@@ -42,7 +42,7 @@ public class Redactor(
      * unrecognizable after the bearer rule fires and won't be re-matched
      * by the api-key rule).
      */
-    public fun redact(text: String): String {
+    fun redact(text: String): String {
         if (text.isEmpty() || rules.isEmpty()) return text
         var s = text
         for (rule in rules) {
@@ -53,14 +53,14 @@ public class Redactor(
     }
 
     /** Convenience: null in → null out. */
-    public fun redactNullable(text: String?): String? = text?.let(::redact)
+    fun redactNullable(text: String?): String? = text?.let(::redact)
 
-    public companion object {
+    companion object {
         /**
          * Sensible defaults. Apps that want zero redaction can pass an
          * empty [rules] list to the constructor.
          */
-        public val DEFAULT_RULES: List<Rule> = listOf(
+        val DEFAULT_RULES: List<Rule> = listOf(
             Rule(
                 name = "email",
                 pattern = Regex("""\b[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}\b"""),

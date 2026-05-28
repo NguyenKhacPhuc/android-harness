@@ -25,7 +25,7 @@ import java.io.FileOutputStream
  * enough for OCR/barcode follow-ups. Apps that need PNG or other
  * formats can implement their own ImageOps.
  */
-public class AndroidImageOps(context: Context) : ImageOps {
+class AndroidImageOps(context: Context) : ImageOps {
     private val appContext: Context = context.applicationContext
     private val authority: String = "${appContext.packageName}.fileprovider"
 

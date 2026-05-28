@@ -21,7 +21,7 @@ import kotlinx.coroutines.withContext
  * sensibly ("ask the user to enable location" vs "show the SSID").
  */
 @Suppress("DEPRECATION")
-public class AndroidWifi(context: Context) : Wifi {
+class AndroidWifi(context: Context) : Wifi {
     private val appContext: Context = context.applicationContext
 
     override suspend fun info(): WeftWifiInfo = withContext(Dispatchers.IO) {

@@ -9,7 +9,7 @@ import kotlinx.serialization.Serializable
  *
  * Mirrors the design in `docs/07-harness.md` "harness-behavior".
  */
-public data class BehaviorConfig(
+data class BehaviorConfig(
     /**
      * If true (default), the device snapshot (time/timezone/locale) is prepended
      * to the latest user message instead of being mixed into the system prompt.
@@ -42,7 +42,7 @@ public data class BehaviorConfig(
 )
 
 @Serializable
-public enum class CacheTtl { FiveMinutes, OneHour }
+enum class CacheTtl { FiveMinutes, OneHour }
 
 /**
  * How to reduce a long conversation history before sending it to the LLM.
@@ -58,9 +58,9 @@ public enum class CacheTtl { FiveMinutes, OneHour }
  *    an extra LLM call. Not implemented in v1.
  */
 @Serializable
-public sealed class CompactionStrategy {
-    @Serializable public data object None : CompactionStrategy()
-    @Serializable public data object DropOldest : CompactionStrategy()
-    @Serializable public data class SlidingWindow(val keepLastN: Int) : CompactionStrategy()
-    @Serializable public data class Summarize(val recapModelId: String) : CompactionStrategy()
+sealed class CompactionStrategy {
+    @Serializable data object None : CompactionStrategy()
+    @Serializable data object DropOldest : CompactionStrategy()
+    @Serializable data class SlidingWindow(val keepLastN: Int) : CompactionStrategy()
+    @Serializable data class Summarize(val recapModelId: String) : CompactionStrategy()
 }

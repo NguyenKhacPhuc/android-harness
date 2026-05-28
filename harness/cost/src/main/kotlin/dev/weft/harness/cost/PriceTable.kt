@@ -16,14 +16,14 @@ import kotlinx.serialization.Serializable
  * Anthropic cache_control through Koog (see `docs/follow-ups.md`).
  */
 @Serializable
-public data class PriceTable(
+data class PriceTable(
     /** Map: model id → per-MTok prices. */
     val byModel: Map<String, ModelPrice> = DEFAULT_PRICES,
 ) {
-    public fun lookup(modelId: String): ModelPrice? = byModel[modelId]
+    fun lookup(modelId: String): ModelPrice? = byModel[modelId]
 
-    public companion object {
-        public val DEFAULT_PRICES: Map<String, ModelPrice> = mapOf(
+    companion object {
+        val DEFAULT_PRICES: Map<String, ModelPrice> = mapOf(
             "claude-sonnet-4-6" to ModelPrice(inputPerMTok = 3.00, outputPerMTok = 15.00),
             "claude-sonnet-4-5" to ModelPrice(inputPerMTok = 3.00, outputPerMTok = 15.00),
             "claude-opus-4-7" to ModelPrice(inputPerMTok = 15.00, outputPerMTok = 75.00),
@@ -35,7 +35,7 @@ public data class PriceTable(
 }
 
 @Serializable
-public data class ModelPrice(
+data class ModelPrice(
     val inputPerMTok: Double,
     val outputPerMTok: Double,
     val cacheReadPerMTok: Double = inputPerMTok * 0.1,         // Anthropic cache reads ~10×
@@ -45,7 +45,7 @@ public data class ModelPrice(
      * Compute the dollar cost of one LLM call. Cache token counts are
      * optional (zero when not surfaced).
      */
-    public fun costUsd(
+    fun costUsd(
         inputTokens: Int,
         outputTokens: Int,
         cacheReadTokens: Int = 0,

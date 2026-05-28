@@ -14,7 +14,7 @@ import kotlinx.serialization.Serializable
  * Use for: shrinking a too-big photo before OCR, preparing a
  * lightweight share, generating a thumbnail.
  */
-public class ImageResizeTool(ctx: WeftContext) :
+class ImageResizeTool(ctx: WeftContext) :
     WeftTool<ImageResizeTool.Args, ImageResizeTool.Result>(
         ctx = ctx,
         argsType = typeToken<Args>(),
@@ -45,14 +45,14 @@ public class ImageResizeTool(ctx: WeftContext) :
     ) {
 
     @Serializable
-    public data class Args(
+    data class Args(
         val uri: String,
         val maxEdgePx: Int,
         val namePrefix: String = "resized",
     )
 
     @Serializable
-    public data class Result(
+    data class Result(
         val success: Boolean,
         val uri: String? = null,
         val sizeBytes: Long? = null,
@@ -69,7 +69,7 @@ public class ImageResizeTool(ctx: WeftContext) :
  * Crop an image to a pixel rectangle. (0,0) is top-left. Out-of-
  * bounds rectangles return success=false.
  */
-public class ImageCropTool(ctx: WeftContext) :
+class ImageCropTool(ctx: WeftContext) :
     WeftTool<ImageCropTool.Args, ImageCropTool.Result>(
         ctx = ctx,
         argsType = typeToken<Args>(),
@@ -98,7 +98,7 @@ public class ImageCropTool(ctx: WeftContext) :
     ) {
 
     @Serializable
-    public data class Args(
+    data class Args(
         val uri: String,
         val left: Int,
         val top: Int,
@@ -108,7 +108,7 @@ public class ImageCropTool(ctx: WeftContext) :
     )
 
     @Serializable
-    public data class Result(
+    data class Result(
         val success: Boolean,
         val uri: String? = null,
         val sizeBytes: Long? = null,
@@ -128,7 +128,7 @@ public class ImageCropTool(ctx: WeftContext) :
  * Rotate an image by a multiple of 90 degrees clockwise.
  * Other values snap to the nearest 90.
  */
-public class ImageRotateTool(ctx: WeftContext) :
+class ImageRotateTool(ctx: WeftContext) :
     WeftTool<ImageRotateTool.Args, ImageRotateTool.Result>(
         ctx = ctx,
         argsType = typeToken<Args>(),
@@ -157,14 +157,14 @@ public class ImageRotateTool(ctx: WeftContext) :
     ) {
 
     @Serializable
-    public data class Args(
+    data class Args(
         val uri: String,
         val degrees: Int,
         val namePrefix: String = "rotated",
     )
 
     @Serializable
-    public data class Result(
+    data class Result(
         val success: Boolean,
         val uri: String? = null,
         val sizeBytes: Long? = null,

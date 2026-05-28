@@ -23,9 +23,9 @@ import dev.weft.harness.agents.WeftAgent
  *   structural mismatch — the agent retries with the exception's
  *   `message` appended to the next prompt.
  */
-public data class StructuredOutputSchema<T>(
-    public val schemaDescription: String,
-    public val decoder: (String) -> T,
+data class StructuredOutputSchema<T>(
+    val schemaDescription: String,
+    val decoder: (String) -> T,
 )
 
 /**
@@ -34,11 +34,11 @@ public data class StructuredOutputSchema<T>(
  * errors so the caller can decide whether to surface to the user or
  * give up.
  */
-public sealed class StructuredOutputResult<out T> {
-    public data class Success<T>(public val value: T, public val raw: String) : StructuredOutputResult<T>()
-    public data class Failed(
-        public val rawFinal: String,
-        public val errors: List<String>,
+sealed class StructuredOutputResult<out T> {
+    data class Success<T>(val value: T, val raw: String) : StructuredOutputResult<T>()
+    data class Failed(
+        val rawFinal: String,
+        val errors: List<String>,
     ) : StructuredOutputResult<Nothing>()
 }
 
@@ -60,7 +60,7 @@ public sealed class StructuredOutputResult<out T> {
  * is true a future overload may bypass the retry loop and use the
  * provider's native schema validation.
  */
-public suspend fun <T> WeftAgent.sendStructured(
+suspend fun <T> WeftAgent.sendStructured(
     userText: String,
     schema: StructuredOutputSchema<T>,
     maxRetries: Int = 2,

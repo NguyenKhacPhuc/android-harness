@@ -23,9 +23,9 @@ import java.time.ZoneId
  * Implementations are responsible for picking up the right `nowProvider`
  * — same shape, different time-zone strategies allowed.
  */
-public interface UsageStore {
+interface UsageStore {
     /** Live snapshot of accumulated usage. The cost badge reads from this. */
-    public val totals: StateFlow<UsageTotals>
+    val totals: StateFlow<UsageTotals>
 
     /**
      * Record an LLM call's usage. Returns the per-call cost in USD; the
@@ -38,7 +38,7 @@ public interface UsageStore {
      * per-agent cost breakdown (`UsageTotals.byAgent`,
      * `selectLifetimeByAgent` SQL query) is queryable.
      */
-    public fun record(
+    fun record(
         modelId: String,
         inputTokens: Int,
         outputTokens: Int,
@@ -48,19 +48,19 @@ public interface UsageStore {
     ): Double
 
     /** Convenience: today's spend per the implementation's clock. */
-    public fun usdToday(): Double
+    fun usdToday(): Double
 
     /** Wipe all aggregates. Used by the "reset usage" admin action. */
-    public fun reset()
+    fun reset()
 
-    public companion object {
+    companion object {
         /**
          * Canonical name for the auto-default agent — kept in sync
          * with `AgentDeclaration.DEFAULT_AGENT_NAME` and
          * `ConversationStore.DEFAULT_AGENT_NAME`. Duplicated here to
          * keep `:harness:cost` free of a back-dep on `:harness:agents`.
          */
-        public const val DEFAULT_AGENT_NAME: String = "default"
+        const val DEFAULT_AGENT_NAME: String = "default"
     }
 }
 
@@ -71,14 +71,14 @@ public interface UsageStore {
  * Use this for tests, or in apps that don't need usage to survive
  * restart. Production apps should use `SqlDelightUsageStore`.
  */
-public class InMemoryUsageStore(
+class InMemoryUsageStore(
     private val priceTable: PriceTable = PriceTable(),
     private val nowProvider: () -> LocalDate = { LocalDate.now(ZoneId.systemDefault()) },
 ) : UsageStore {
     private val _totals: MutableStateFlow<UsageTotals> = MutableStateFlow(UsageTotals())
-    public override val totals: StateFlow<UsageTotals> = _totals.asStateFlow()
+    override val totals: StateFlow<UsageTotals> = _totals.asStateFlow()
 
-    public override fun record(
+    override fun record(
         modelId: String,
         inputTokens: Int,
         outputTokens: Int,
@@ -115,9 +115,9 @@ public class InMemoryUsageStore(
         return cost
     }
 
-    public override fun usdToday(): Double = _totals.value.byDay[nowProvider().toString()] ?: 0.0
+    override fun usdToday(): Double = _totals.value.byDay[nowProvider().toString()] ?: 0.0
 
-    public override fun reset() {
+    override fun reset() {
         _totals.value = UsageTotals()
     }
 }
@@ -126,7 +126,7 @@ public class InMemoryUsageStore(
  * Snapshot of accumulated usage. The viewer reads from this via the
  * StateFlow on UsageStore.
  */
-public data class UsageTotals(
+data class UsageTotals(
     val lifetimeUsd: Double = 0.0,
     val lifetimeInputTokens: Int = 0,
     val lifetimeOutputTokens: Int = 0,
@@ -159,23 +159,23 @@ public data class UsageTotals(
  * The check is invoked by WeftAgent before each send; over the hard
  * cap, send() throws [QuotaExceededException].
  */
-public data class QuotaPolicy(
+data class QuotaPolicy(
     val dailySoftWarningUsd: Double? = 5.0,
     val dailyHardCapUsd: Double? = 10.0,
 ) {
-    public fun check(usdToday: Double): QuotaState = when {
+    fun check(usdToday: Double): QuotaState = when {
         dailyHardCapUsd != null && usdToday >= dailyHardCapUsd -> QuotaState.Blocked(usdToday, dailyHardCapUsd)
         dailySoftWarningUsd != null && usdToday >= dailySoftWarningUsd -> QuotaState.Warning(usdToday, dailySoftWarningUsd)
         else -> QuotaState.Ok(usdToday)
     }
 }
 
-public sealed class QuotaState {
-    public abstract val usdToday: Double
-    public data class Ok(override val usdToday: Double) : QuotaState()
-    public data class Warning(override val usdToday: Double, val thresholdUsd: Double) : QuotaState()
-    public data class Blocked(override val usdToday: Double, val thresholdUsd: Double) : QuotaState()
+sealed class QuotaState {
+    abstract val usdToday: Double
+    data class Ok(override val usdToday: Double) : QuotaState()
+    data class Warning(override val usdToday: Double, val thresholdUsd: Double) : QuotaState()
+    data class Blocked(override val usdToday: Double, val thresholdUsd: Double) : QuotaState()
 }
 
-public class QuotaExceededException(public val usdToday: Double, public val capUsd: Double) :
+class QuotaExceededException(val usdToday: Double, val capUsd: Double) :
     RuntimeException("Daily cost cap reached: \$%.2f used of \$%.2f cap".format(usdToday, capUsd))

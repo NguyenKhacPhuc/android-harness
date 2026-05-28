@@ -22,7 +22,7 @@ package dev.weft.harness.agents
  * letters, digits, hyphen, underscore. Anything else fails to match
  * and the whole input is treated as body.
  */
-public object AgentMentionParser {
+object AgentMentionParser {
 
     private val MENTION_REGEX = Regex("^@([a-z0-9_-]+)(?:\\s+(.*))?$", RegexOption.DOT_MATCHES_ALL)
 
@@ -32,7 +32,7 @@ public object AgentMentionParser {
      * decides what to do with an unknown name (typical: fall back to
      * the default agent and prepend an error to the chat).
      */
-    public fun parse(input: String): Mention {
+    fun parse(input: String): Mention {
         val trimmed = input.trim()
         // Escape sequence: `@@` at the start = literal text.
         if (trimmed.startsWith("@@")) {
@@ -51,7 +51,7 @@ public object AgentMentionParser {
  * [agentName] is null, the input had no recognizable mention and
  * [body] equals the trimmed input.
  */
-public data class Mention(
-    public val agentName: String?,
-    public val body: String,
+data class Mention(
+    val agentName: String?,
+    val body: String,
 )

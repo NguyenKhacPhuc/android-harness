@@ -29,7 +29,7 @@ import kotlin.coroutines.resume
  * downloads; translation itself is fast enough that the same timeout
  * applies to the whole operation.
  */
-public class AndroidTranslation(context: Context) : Translation {
+class AndroidTranslation(context: Context) : Translation {
     @Suppress("unused") private val appContext: Context = context.applicationContext
 
     private val languageIdentifier by lazy { LanguageIdentification.getClient() }

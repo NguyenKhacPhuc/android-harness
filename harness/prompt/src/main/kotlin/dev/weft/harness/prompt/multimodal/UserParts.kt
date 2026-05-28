@@ -13,7 +13,7 @@ import ai.koog.prompt.message.MessagePart
  * `weftSingleRunStrategy` and `streamingSingleRunStrategy`) so the user
  * message has the same shape across both paths.
  */
-public fun buildUserParts(input: WeftUserInput): List<MessagePart.RequestPart> = buildList {
+fun buildUserParts(input: WeftUserInput): List<MessagePart.RequestPart> = buildList {
     if (input.text.isNotBlank()) add(MessagePart.Text(input.text))
     addAll(input.attachments)
 }

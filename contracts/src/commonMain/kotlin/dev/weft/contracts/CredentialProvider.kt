@@ -37,7 +37,7 @@ package dev.weft.contracts
  * New providers are added here as the substrate gains support. Each
  * `ProviderKind` should map to exactly one Koog `LLMClient` family.
  */
-public enum class ProviderKind {
+enum class ProviderKind {
     /** Anthropic native or Anthropic-API-compatible proxy. */
     Anthropic,
 
@@ -59,10 +59,10 @@ public enum class ProviderKind {
     DeepSeek,
 }
 
-public interface WeftCredentialProvider {
+interface WeftCredentialProvider {
 
     /** The credential to authenticate the next LLM request. */
-    public suspend fun bearer(): String
+    suspend fun bearer(): String
 
     /**
      * Which provider this credential targets. Defaults to [ProviderKind.Anthropic]
@@ -72,7 +72,7 @@ public interface WeftCredentialProvider {
      * picks the right [ai.koog.prompt.executor.model.LLMClient] +
      * [dev.weft.harness.prompt.cache.CacheBinder].
      */
-    public val kind: ProviderKind get() = ProviderKind.Anthropic
+    val kind: ProviderKind get() = ProviderKind.Anthropic
 
     /**
      * Base URL for the LLM provider. Default targets Anthropic; proxy
@@ -80,7 +80,7 @@ public interface WeftCredentialProvider {
      * setups can override here. OpenAI-kind providers MUST override to a
      * URL that responds to the OpenAI chat-completions schema.
      */
-    public val baseUrl: String get() = DEFAULT_BASE_URL
+    val baseUrl: String get() = DEFAULT_BASE_URL
 
     /**
      * HTTP header name that carries the credential. Defaults to Anthropic's
@@ -88,12 +88,12 @@ public interface WeftCredentialProvider {
      * override to `Authorization` and return the token already prefixed
      * with `"Bearer "` from [bearer].
      */
-    public val authHeaderName: String get() = DEFAULT_AUTH_HEADER
+    val authHeaderName: String get() = DEFAULT_AUTH_HEADER
 
-    public companion object {
-        public const val DEFAULT_BASE_URL: String = "https://api.anthropic.com"
-        public const val DEFAULT_AUTH_HEADER: String = "x-api-key"
-        public const val BEARER_AUTH_HEADER: String = "Authorization"
-        public const val OPENAI_BASE_URL: String = "https://api.openai.com"
+    companion object {
+        const val DEFAULT_BASE_URL: String = "https://api.anthropic.com"
+        const val DEFAULT_AUTH_HEADER: String = "x-api-key"
+        const val BEARER_AUTH_HEADER: String = "Authorization"
+        const val OPENAI_BASE_URL: String = "https://api.openai.com"
     }
 }

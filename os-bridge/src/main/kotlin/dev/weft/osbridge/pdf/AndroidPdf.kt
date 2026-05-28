@@ -35,7 +35,7 @@ import java.util.UUID
  * under storage pressure). Callers that need durable storage should
  * pass the returned URI to `files_save` to copy it somewhere persistent.
  */
-public class AndroidPdf(private val context: Context) : Pdf {
+class AndroidPdf(private val context: Context) : Pdf {
 
     private val initialized: Boolean by lazy {
         runCatching { PDFBoxResourceLoader.init(context) }.isSuccess

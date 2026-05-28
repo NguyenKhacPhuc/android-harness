@@ -22,8 +22,8 @@ import kotlinx.coroutines.coroutineScope
  * then per-provider order). Use a small number — every hit consumes
  * input-prompt tokens for every turn it's injected.
  */
-public class MemoryRegistry(
-    public val providers: List<MemoryProvider>,
+class MemoryRegistry(
+    val providers: List<MemoryProvider>,
     private val onProviderError: (providerName: String, cause: Throwable) -> Unit = { _, _ -> },
 ) {
     /**
@@ -35,7 +35,7 @@ public class MemoryRegistry(
      *
      * Empty provider list returns an empty list synchronously.
      */
-    public suspend fun retrieveAll(
+    suspend fun retrieveAll(
         query: String,
         perProviderLimit: Int = 5,
         globalLimit: Int = 5,
@@ -68,7 +68,7 @@ public class MemoryRegistry(
  * memory store ([MemoryStore]). Surfaces facts the LLM stored explicitly
  * via the `memory_store` tool. Always registered by `WeftRuntime`.
  */
-public class SubstrateMemoryProvider(
+class SubstrateMemoryProvider(
     private val store: MemoryStore,
     override val name: String = "substrate",
     override val description: String = "User-curated facts stored via memory_store.",

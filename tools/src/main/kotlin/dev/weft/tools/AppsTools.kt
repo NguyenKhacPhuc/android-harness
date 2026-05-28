@@ -18,7 +18,7 @@ import kotlinx.serialization.Serializable
  * visibility rules on Android 11+). Treat false as "not usable from
  * here", not as ground truth.
  */
-public class AppInstalledTool(ctx: WeftContext) :
+class AppInstalledTool(ctx: WeftContext) :
     WeftTool<AppInstalledTool.Args, AppInstalledTool.Result>(
         ctx = ctx,
         argsType = typeToken<Args>(),
@@ -40,10 +40,10 @@ public class AppInstalledTool(ctx: WeftContext) :
     ) {
 
     @Serializable
-    public data class Args(val packageName: String)
+    data class Args(val packageName: String)
 
     @Serializable
-    public data class Result(val installed: Boolean)
+    data class Result(val installed: Boolean)
 
     override suspend fun executeWeft(args: Args): Result {
         if (args.packageName.isBlank()) return Result(installed = false)
@@ -60,7 +60,7 @@ public class AppInstalledTool(ctx: WeftContext) :
  * launchable activity won't appear — query `app_installed` directly if
  * you know the package name.
  */
-public class AppListLaunchableTool(ctx: WeftContext) :
+class AppListLaunchableTool(ctx: WeftContext) :
     WeftTool<AppListLaunchableTool.Args, AppListLaunchableTool.Result>(
         ctx = ctx,
         argsType = typeToken<Args>(),
@@ -88,13 +88,13 @@ public class AppListLaunchableTool(ctx: WeftContext) :
     ) {
 
     @Serializable
-    public data class Args(
+    data class Args(
         val context: String = "",
         val limit: Int = Apps.LAUNCHABLE_LIMIT_DEFAULT,
     )
 
     @Serializable
-    public data class Result(val apps: List<AppInfo>)
+    data class Result(val apps: List<AppInfo>)
 
     override suspend fun executeWeft(args: Args): Result {
         val cap = args.limit.coerceIn(1, Apps.LAUNCHABLE_LIMIT_MAX)

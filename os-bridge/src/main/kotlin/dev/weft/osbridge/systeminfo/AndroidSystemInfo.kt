@@ -33,7 +33,7 @@ import java.util.TimeZone
  * none of these calls actually block — BatteryManager + ConnectivityManager
  * are synchronous registry reads, and StatFs is a tiny libc call.
  */
-public class AndroidSystemInfo(private val context: Context) : SystemInfo {
+class AndroidSystemInfo(private val context: Context) : SystemInfo {
 
     override suspend fun battery(): BatteryInfo {
         val bm = context.getSystemService(Context.BATTERY_SERVICE) as? BatteryManager

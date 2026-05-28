@@ -17,7 +17,7 @@ import dev.weft.harness.reliability.RetryPolicy
  * deep reasoning AND many tool calls. The default `pickTier = null`
  * lets the router pick based on input shape.
  */
-public data class BurstStrategy(
+data class BurstStrategy(
     override val retry: RetryPolicy = RetryPolicy(maxAttempts = 1),
     override val cacheTiers: Map<String, CacheTier> = mapOf(
         "system" to CacheTier.SESSION, // relaxed from STATIC

@@ -24,7 +24,7 @@ import kotlinx.serialization.Serializable
  * 4. agent → memory_clear  (or similar destructive op)
  * ```
  */
-public class BiometricAuthenticateTool(ctx: WeftContext) :
+class BiometricAuthenticateTool(ctx: WeftContext) :
     WeftTool<BiometricAuthenticateTool.Args, BiometricAuthenticateTool.Result>(
         ctx = ctx,
         argsType = typeToken<Args>(),
@@ -49,10 +49,10 @@ public class BiometricAuthenticateTool(ctx: WeftContext) :
     ) {
 
     @Serializable
-    public data class Args(val reason: String)
+    data class Args(val reason: String)
 
     @Serializable
-    public data class Result(
+    data class Result(
         /** One of: AUTHENTICATED, USER_CANCELLED, NOT_AVAILABLE, LOCKED_OUT, FAILED. */
         val outcome: String,
         /** Human-readable detail, mostly useful when outcome=FAILED. */

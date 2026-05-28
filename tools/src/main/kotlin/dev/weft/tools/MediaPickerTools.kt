@@ -16,7 +16,7 @@ import kotlinx.serialization.Serializable
  * Use for: "attach a photo", "share a screenshot of …", "pick from
  * your gallery". Suspends until the user picks or cancels.
  */
-public class MediaPickImageTool(ctx: WeftContext) :
+class MediaPickImageTool(ctx: WeftContext) :
     WeftTool<MediaPickImageTool.Args, MediaPickImageTool.Result>(
         ctx = ctx,
         argsType = typeToken<Args>(),
@@ -45,10 +45,10 @@ public class MediaPickImageTool(ctx: WeftContext) :
     ) {
 
     @Serializable
-    public data class Args(val context: String = "", val maxItems: Int = 1)
+    data class Args(val context: String = "", val maxItems: Int = 1)
 
     @Serializable
-    public data class Result(val uris: List<String>)
+    data class Result(val uris: List<String>)
 
     override suspend fun executeWeft(args: Args): Result =
         Result(os.mediaPicker.pick(MediaPickerKind.IMAGE, args.maxItems.coerceAtLeast(1)))
@@ -57,7 +57,7 @@ public class MediaPickImageTool(ctx: WeftContext) :
 /**
  * Same as `media_pick_image` but for video files. No permission.
  */
-public class MediaPickVideoTool(ctx: WeftContext) :
+class MediaPickVideoTool(ctx: WeftContext) :
     WeftTool<MediaPickVideoTool.Args, MediaPickVideoTool.Result>(
         ctx = ctx,
         argsType = typeToken<Args>(),
@@ -85,10 +85,10 @@ public class MediaPickVideoTool(ctx: WeftContext) :
     ) {
 
     @Serializable
-    public data class Args(val context: String = "", val maxItems: Int = 1)
+    data class Args(val context: String = "", val maxItems: Int = 1)
 
     @Serializable
-    public data class Result(val uris: List<String>)
+    data class Result(val uris: List<String>)
 
     override suspend fun executeWeft(args: Args): Result =
         Result(os.mediaPicker.pick(MediaPickerKind.VIDEO, args.maxItems.coerceAtLeast(1)))
@@ -98,7 +98,7 @@ public class MediaPickVideoTool(ctx: WeftContext) :
  * Open the Photo Picker for image OR video. No permission. Use when
  * the user request doesn't disambiguate ("pick something to share").
  */
-public class MediaPickAnyTool(ctx: WeftContext) :
+class MediaPickAnyTool(ctx: WeftContext) :
     WeftTool<MediaPickAnyTool.Args, MediaPickAnyTool.Result>(
         ctx = ctx,
         argsType = typeToken<Args>(),
@@ -126,10 +126,10 @@ public class MediaPickAnyTool(ctx: WeftContext) :
     ) {
 
     @Serializable
-    public data class Args(val context: String = "", val maxItems: Int = 1)
+    data class Args(val context: String = "", val maxItems: Int = 1)
 
     @Serializable
-    public data class Result(val uris: List<String>)
+    data class Result(val uris: List<String>)
 
     override suspend fun executeWeft(args: Args): Result =
         Result(os.mediaPicker.pick(MediaPickerKind.IMAGE_OR_VIDEO, args.maxItems.coerceAtLeast(1)))

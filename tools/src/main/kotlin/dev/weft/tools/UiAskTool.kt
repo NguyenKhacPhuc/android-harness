@@ -10,7 +10,7 @@ import dev.weft.tools.WeftContext
 import dev.weft.tools.WeftTool
 import kotlinx.serialization.Serializable
 
-public class UiAskTool(ctx: WeftContext) : WeftTool<UiAskTool.Args, UiAskTool.Result>(
+class UiAskTool(ctx: WeftContext) : WeftTool<UiAskTool.Args, UiAskTool.Result>(
     ctx = ctx,
     argsType = typeToken<Args>(),
     resultType = typeToken<Result>(),
@@ -38,17 +38,17 @@ public class UiAskTool(ctx: WeftContext) : WeftTool<UiAskTool.Args, UiAskTool.Re
 ) {
 
     @Serializable
-    public enum class Kind { yes_no, choice, free_text }
+    enum class Kind { yes_no, choice, free_text }
 
     @Serializable
-    public data class Args(
+    data class Args(
         val question: String,
         val kind: Kind = Kind.yes_no,
         val options: List<String> = emptyList(),
     )
 
     @Serializable
-    public data class Result(
+    data class Result(
         val answer: String? = null,
         val cancelled: Boolean = false,
     )

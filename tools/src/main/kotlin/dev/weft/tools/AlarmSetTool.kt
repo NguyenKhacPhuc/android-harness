@@ -19,7 +19,7 @@ import kotlinx.serialization.Serializable
  * — that's a notification, not a true OS alarm, and doesn't require
  * a user-confirmation handoff.
  */
-public class AlarmSetTool(ctx: WeftContext) : WeftTool<AlarmSetTool.Args, String>(
+class AlarmSetTool(ctx: WeftContext) : WeftTool<AlarmSetTool.Args, String>(
     ctx = ctx,
     argsType = typeToken<Args>(),
     resultType = typeToken<String>(),
@@ -53,7 +53,7 @@ public class AlarmSetTool(ctx: WeftContext) : WeftTool<AlarmSetTool.Args, String
 ) {
 
     @Serializable
-    public data class Args(
+    data class Args(
         val hour: Int,
         val minute: Int,
         val label: String? = null,

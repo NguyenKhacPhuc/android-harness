@@ -38,7 +38,7 @@ import kotlin.time.Instant
  * are ISO-8601 (`2026-05-26T12:00:00Z`).
  */
 @OptIn(ExperimentalTime::class)
-public class DateComputeTool(ctx: WeftContext) :
+class DateComputeTool(ctx: WeftContext) :
     WeftTool<DateComputeTool.Args, DateComputeTool.Result>(
         ctx = ctx,
         argsType = typeToken<Args>(),
@@ -87,7 +87,7 @@ public class DateComputeTool(ctx: WeftContext) :
     ) {
 
     @Serializable
-    public data class Args(
+    data class Args(
         val op: String,
         val anchorIso: String? = null,
         val otherIso: String? = null,
@@ -97,7 +97,7 @@ public class DateComputeTool(ctx: WeftContext) :
     )
 
     @Serializable
-    public data class Result(
+    data class Result(
         val ok: Boolean,
         /** ISO-8601 instant for ops that return a moment. */
         val iso: String? = null,

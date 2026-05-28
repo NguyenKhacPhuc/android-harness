@@ -15,7 +15,7 @@ import kotlinx.serialization.Serializable
  * permission; the substrate's permission gate will refuse and hint the LLM
  * to call ui_request_permission first.
  */
-public class ContactsReadTool(ctx: WeftContext) : WeftTool<ContactsReadTool.Args, ContactsReadTool.Result>(
+class ContactsReadTool(ctx: WeftContext) : WeftTool<ContactsReadTool.Args, ContactsReadTool.Result>(
     ctx = ctx,
     argsType = typeToken<Args>(),
     resultType = typeToken<Result>(),
@@ -44,7 +44,7 @@ public class ContactsReadTool(ctx: WeftContext) : WeftTool<ContactsReadTool.Args
 ) {
 
     @Serializable
-    public data class Args(
+    data class Args(
         val context: String = "",
         val nameContains: String? = null,
         val hasEmail: Boolean? = null,
@@ -53,7 +53,7 @@ public class ContactsReadTool(ctx: WeftContext) : WeftTool<ContactsReadTool.Args
     )
 
     @Serializable
-    public data class Contact(
+    data class Contact(
         val id: String,
         val displayName: String,
         val emails: List<String> = emptyList(),
@@ -61,7 +61,7 @@ public class ContactsReadTool(ctx: WeftContext) : WeftTool<ContactsReadTool.Args
     )
 
     @Serializable
-    public data class Result(val items: List<Contact>)
+    data class Result(val items: List<Contact>)
 
     override suspend fun executeWeft(args: Args): Result {
         val results = os.contacts.read(

@@ -28,13 +28,13 @@ import ai.koog.prompt.message.MessagePart
  * not the attached media. A future schema bump will add a side table
  * for blob refs.
  */
-public data class WeftUserInput(
-    public val text: String,
-    public val attachments: List<MessagePart.Attachment> = emptyList(),
+data class WeftUserInput(
+    val text: String,
+    val attachments: List<MessagePart.Attachment> = emptyList(),
 ) {
-    public companion object {
+    companion object {
         /** Convenience for the common text-only case. */
-        public fun text(text: String): WeftUserInput = WeftUserInput(text, emptyList())
+        fun text(text: String): WeftUserInput = WeftUserInput(text, emptyList())
     }
 }
 
@@ -54,9 +54,9 @@ public data class WeftUserInput(
  * video; "pdf" / "txt" for documents). The MIME type defaults derive
  * from the format — override for non-standard cases.
  */
-public object Attachments {
+object Attachments {
     /** Image from in-memory bytes. */
-    public fun imageBytes(
+    fun imageBytes(
         bytes: ByteArray,
         format: String,
         mimeType: String = "image/$format",
@@ -73,7 +73,7 @@ public object Attachments {
     /** Image referenced by URL (the provider fetches it). Mostly useful
      *  for assets already hosted somewhere reachable; on Android the
      *  bytes path is usually simpler. */
-    public fun imageUrl(
+    fun imageUrl(
         url: String,
         format: String,
         mimeType: String = "image/$format",
@@ -88,7 +88,7 @@ public object Attachments {
     )
 
     /** PDF or other binary document from in-memory bytes. */
-    public fun fileBytes(
+    fun fileBytes(
         bytes: ByteArray,
         format: String,
         mimeType: String,
@@ -103,7 +103,7 @@ public object Attachments {
     )
 
     /** Audio attachment from in-memory bytes. */
-    public fun audioBytes(
+    fun audioBytes(
         bytes: ByteArray,
         format: String,
         mimeType: String = "audio/$format",

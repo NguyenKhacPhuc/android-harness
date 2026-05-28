@@ -19,7 +19,7 @@ import kotlinx.serialization.Serializable
  * NOT for picking a specific photo — use `media_query` with a filter
  * (date range, name substring). NOT for the camera — use `camera_capture`.
  */
-public class MediaListRecentTool(ctx: WeftContext) :
+class MediaListRecentTool(ctx: WeftContext) :
     WeftTool<MediaListRecentTool.Args, MediaListRecentTool.Result>(
         ctx = ctx,
         argsType = typeToken<Args>(),
@@ -60,14 +60,14 @@ public class MediaListRecentTool(ctx: WeftContext) :
     ) {
 
     @Serializable
-    public data class Args(
+    data class Args(
         val context: String = "",
         val kinds: String = "IMAGE",
         val limit: Int = MediaLibrary.LIST_LIMIT_DEFAULT,
     )
 
     @Serializable
-    public data class Result(val items: List<MediaItem>)
+    data class Result(val items: List<MediaItem>)
 
     override suspend fun executeWeft(args: Args): Result {
         val kinds = parseKinds(args.kinds)
@@ -82,7 +82,7 @@ public class MediaListRecentTool(ctx: WeftContext) :
  * specific than "recent" ("photos from last weekend", "videos with
  * 'beach' in the name").
  */
-public class MediaQueryTool(ctx: WeftContext) :
+class MediaQueryTool(ctx: WeftContext) :
     WeftTool<MediaQueryTool.Args, MediaQueryTool.Result>(
         ctx = ctx,
         argsType = typeToken<Args>(),
@@ -136,7 +136,7 @@ public class MediaQueryTool(ctx: WeftContext) :
     ) {
 
     @Serializable
-    public data class Args(
+    data class Args(
         val context: String = "",
         val kinds: String = "IMAGE",
         val sinceEpochMs: Long? = null,
@@ -146,7 +146,7 @@ public class MediaQueryTool(ctx: WeftContext) :
     )
 
     @Serializable
-    public data class Result(val items: List<MediaItem>)
+    data class Result(val items: List<MediaItem>)
 
     override suspend fun executeWeft(args: Args): Result {
         val filter = MediaFilter(

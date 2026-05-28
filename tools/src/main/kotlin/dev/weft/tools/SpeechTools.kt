@@ -12,7 +12,7 @@ import ai.koog.serialization.typeToken
  * flows (driving, cooking), accessibility, or anywhere the user asks the
  * assistant to "read this to me". Suspends until the utterance completes.
  */
-public class SpeechSayTool(ctx: WeftContext) : WeftTool<SpeechSayTool.Args, String>(
+class SpeechSayTool(ctx: WeftContext) : WeftTool<SpeechSayTool.Args, String>(
     ctx = ctx,
     argsType = typeToken<Args>(),
     resultType = typeToken<String>(),
@@ -33,7 +33,7 @@ public class SpeechSayTool(ctx: WeftContext) : WeftTool<SpeechSayTool.Args, Stri
 ) {
 
     @Serializable
-    public data class Args(val text: String, val locale: String? = null)
+    data class Args(val text: String, val locale: String? = null)
 
     override suspend fun executeWeft(args: Args): String {
         if (args.text.isBlank()) return "Empty text — nothing to say."
@@ -52,7 +52,7 @@ public class SpeechSayTool(ctx: WeftContext) : WeftTool<SpeechSayTool.Args, Stri
  * stops as soon as the user pauses speaking, returns the transcript,
  * and tears down the recognizer.
  */
-public class SpeechRecognizeTool(ctx: WeftContext) :
+class SpeechRecognizeTool(ctx: WeftContext) :
     WeftTool<SpeechRecognizeTool.Args, SpeechRecognizeTool.Result>(
         ctx = ctx,
         argsType = typeToken<Args>(),
@@ -91,14 +91,14 @@ public class SpeechRecognizeTool(ctx: WeftContext) :
     ) {
 
     @Serializable
-    public data class Args(
+    data class Args(
         val context: String = "",
         val locale: String? = null,
         val maxDurationSeconds: Int = DEFAULT_SECONDS,
     )
 
     @Serializable
-    public data class Result(
+    data class Result(
         val recognized: Boolean,
         val text: String? = null,
         val confidence: Float? = null,

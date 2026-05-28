@@ -21,7 +21,7 @@ import dev.weft.harness.reliability.RetryPolicy
  *
  * [1]: https://github.com/NguyenKhacPhuc/android-harness/blob/main/docs/architecture/strategy-hook.md
  */
-public interface WeftStrategy {
+interface WeftStrategy {
 
     /**
      * Pick a model tier for this turn. Returning `null` defers to the
@@ -33,7 +33,7 @@ public interface WeftStrategy {
      * Called once per [send][dev.weft.harness.agents.WeftAgent.send] /
      * `sendStreaming` invocation, before agent construction.
      */
-    public fun pickTier(input: WeftUserInput, recent: List<Turn>): ModelTier?
+    fun pickTier(input: WeftUserInput, recent: List<Turn>): ModelTier?
 
     /**
      * Retry policy applied to LLM + tool failures via
@@ -42,7 +42,7 @@ public interface WeftStrategy {
      * but a fresh retry policy on every turn is what the contract
      * promises.
      */
-    public val retry: RetryPolicy
+    val retry: RetryPolicy
 
     /**
      * Cache-tier mapping. Special keys:
@@ -56,14 +56,14 @@ public interface WeftStrategy {
      * by the default integration; reserved for future per-tool
      * cache-control granularity.
      */
-    public val cacheTiers: Map<String, CacheTier>
+    val cacheTiers: Map<String, CacheTier>
 
     /**
      * Per-turn iteration cap on tool-calls. Used to populate
      * `AIAgentConfig.maxAgentIterations`. Vary by input to give simple
      * Q&A turns a lower cap than agentic plans, for example.
      */
-    public fun maxIterations(input: WeftUserInput): Int
+    fun maxIterations(input: WeftUserInput): Int
 
     /**
      * Number of trailing turns kept VOLATILE (uncached). Default 2 —
@@ -74,5 +74,5 @@ public interface WeftStrategy {
      * cache more aggressively (good for tool-heavy workloads where the
      * same history gets reused across many tool round-trips).
      */
-    public val historyVolatileTailTurns: Int get() = 2
+    val historyVolatileTailTurns: Int get() = 2
 }

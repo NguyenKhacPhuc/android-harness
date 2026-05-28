@@ -34,9 +34,9 @@ import kotlin.coroutines.CoroutineContext
  * that. CoroutineContext is the idiomatic way to thread "ambient
  * per-call data" without parameter pollution.
  */
-public class TraceContext(
-    public val traceId: String,
-    public val conversationId: String,
+class TraceContext(
+    val traceId: String,
+    val conversationId: String,
 ) : AbstractCoroutineContextElement(Key) {
-    public companion object Key : CoroutineContext.Key<TraceContext>
+    companion object Key : CoroutineContext.Key<TraceContext>
 }

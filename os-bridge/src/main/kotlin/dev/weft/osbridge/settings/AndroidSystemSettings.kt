@@ -16,7 +16,7 @@ import kotlinx.coroutines.withContext
  * on the device (rare on stock Android; possible on heavily-modified
  * AOSP forks).
  */
-public class AndroidSystemSettings(context: Context) : SystemSettings {
+class AndroidSystemSettings(context: Context) : SystemSettings {
     private val appContext: Context = context.applicationContext
 
     override suspend fun open(panel: SettingsPanel): Boolean = withContext(Dispatchers.Default) {

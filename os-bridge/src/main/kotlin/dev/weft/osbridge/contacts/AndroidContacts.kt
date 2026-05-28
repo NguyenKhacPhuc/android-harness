@@ -18,7 +18,7 @@ import kotlinx.coroutines.withContext
  *   - No write side (substrate doesn't expose contact-write in v1; see
  *     `docs/05-script-catalog.md`).
  */
-public class AndroidContacts(private val context: Context) : Contacts {
+class AndroidContacts(private val context: Context) : Contacts {
 
     override suspend fun read(filter: ContactFilter): List<ContactSummary> = withContext(Dispatchers.IO) {
         val resolver = context.contentResolver

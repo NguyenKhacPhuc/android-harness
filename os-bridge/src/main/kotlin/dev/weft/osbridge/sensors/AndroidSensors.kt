@@ -30,7 +30,7 @@ import java.util.Calendar
  * previous one we treat it as a reboot and reset the baseline to 0
  * (a conservative undercount that recovers within a day).
  */
-public class AndroidSensors(context: Context) : Sensors {
+class AndroidSensors(context: Context) : Sensors {
     private val appContext: Context = context.applicationContext
     private val sensorManager: SensorManager? =
         appContext.getSystemService(Context.SENSOR_SERVICE) as? SensorManager

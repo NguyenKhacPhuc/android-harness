@@ -87,14 +87,14 @@ import java.util.TimeZone
  * than crashing the screen. Use [evaluateWithError] when you want the
  * underlying exception for diagnostics.
  */
-public object BindingEvaluator {
+object BindingEvaluator {
 
     /**
      * Evaluate a binding spec. Returns the resolved value (or [JsonNull]
      * on any failure). Failure includes: unknown source, malformed
      * filter, unsupported aggregate kind.
      */
-    public suspend fun evaluate(
+    suspend fun evaluate(
         binding: JsonObject,
         sources: DataSourceRegistry,
     ): JsonElement = runCatching { evaluateWithError(binding, sources) }.getOrElse { JsonNull }
@@ -103,7 +103,7 @@ public object BindingEvaluator {
      * Same as [evaluate] but rethrows on error — exposed for callers
      * that want diagnostics (e.g. a debug overlay or a unit test).
      */
-    public suspend fun evaluateWithError(
+    suspend fun evaluateWithError(
         binding: JsonObject,
         sources: DataSourceRegistry,
     ): JsonElement {

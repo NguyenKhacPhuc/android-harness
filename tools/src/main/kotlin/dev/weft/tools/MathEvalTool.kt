@@ -34,7 +34,7 @@ import kotlin.math.tan
  * risk: this is a hand-written recursive-descent parser, NOT
  * JavaScript / scripting.
  */
-public class MathEvalTool(ctx: WeftContext) : WeftTool<MathEvalTool.Args, MathEvalTool.Result>(
+class MathEvalTool(ctx: WeftContext) : WeftTool<MathEvalTool.Args, MathEvalTool.Result>(
     ctx = ctx,
     argsType = typeToken<Args>(),
     resultType = typeToken<Result>(),
@@ -56,10 +56,10 @@ public class MathEvalTool(ctx: WeftContext) : WeftTool<MathEvalTool.Args, MathEv
 ) {
 
     @Serializable
-    public data class Args(val expression: String)
+    data class Args(val expression: String)
 
     @Serializable
-    public data class Result(val ok: Boolean, val value: Double? = null, val error: String? = null)
+    data class Result(val ok: Boolean, val value: Double? = null, val error: String? = null)
 
     override suspend fun executeWeft(args: Args): Result = runCatching {
         val parser = Parser(args.expression)

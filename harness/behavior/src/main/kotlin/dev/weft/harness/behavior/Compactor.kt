@@ -5,7 +5,7 @@ package dev.weft.harness.behavior
  * [BehaviorConfig.compactionStrategy]. Applies once per turn inside
  * WeftAgent.send().
  */
-public class Compactor(
+class Compactor(
     private val config: BehaviorConfig,
     /**
      * Token estimator used by [estimateInputTokens]. Defaults to the
@@ -21,7 +21,7 @@ public class Compactor(
      * possibly-shorter list — same shape, fewer entries, possibly with a
      * leading [Turn.System] recap message.
      */
-    public fun compact(history: List<Turn>): List<Turn> {
+    fun compact(history: List<Turn>): List<Turn> {
         if (history.size <= config.compactionTriggerTurns) return history
         return when (val strategy = config.compactionStrategy) {
             CompactionStrategy.None -> history
@@ -37,7 +37,7 @@ public class Compactor(
      * [TokenCounter]. Default counter is the 4-chars/token heuristic;
      * apps that bill per-token should inject a real tokenizer.
      */
-    public fun estimateInputTokens(history: List<Turn>): Int =
+    fun estimateInputTokens(history: List<Turn>): Int =
         history.sumOf { tokenCounter.estimate(it.text) }
 
     private fun dropOldest(history: List<Turn>): List<Turn> {
@@ -77,10 +77,10 @@ public class Compactor(
  * operates on them; the WeftAgent translates them to Koog Messages
  * when building the next Prompt.
  */
-public sealed class Turn {
-    public abstract val text: String
+sealed class Turn {
+    abstract val text: String
 
-    public data class User(override val text: String) : Turn()
-    public data class Assistant(override val text: String) : Turn()
-    public data class System(override val text: String) : Turn()
+    data class User(override val text: String) : Turn()
+    data class Assistant(override val text: String) : Turn()
+    data class System(override val text: String) : Turn()
 }

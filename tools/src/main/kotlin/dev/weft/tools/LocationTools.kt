@@ -12,7 +12,7 @@ import kotlinx.serialization.Serializable
  * the user denied permission, location services are off, or no fix
  * arrived in time. Requires LOCATION at runtime.
  */
-public class LocationCurrentTool(ctx: WeftContext) :
+class LocationCurrentTool(ctx: WeftContext) :
     WeftTool<LocationCurrentTool.Args, LocationCurrentTool.Result>(
         ctx = ctx,
         argsType = typeToken<Args>(),
@@ -40,10 +40,10 @@ public class LocationCurrentTool(ctx: WeftContext) :
     ) {
 
     @Serializable
-    public data class Args(val context: String = "")
+    data class Args(val context: String = "")
 
     @Serializable
-    public data class Result(
+    data class Result(
         val hasFix: Boolean,
         val latitude: Double? = null,
         val longitude: Double? = null,
@@ -67,7 +67,7 @@ public class LocationCurrentTool(ctx: WeftContext) :
  * Forward geocoding: address text → coordinates + structured address.
  * No location permission required. Empty list on no matches.
  */
-public class LocationGeocodeTool(ctx: WeftContext) :
+class LocationGeocodeTool(ctx: WeftContext) :
     WeftTool<LocationGeocodeTool.Args, LocationGeocodeTool.Result>(
         ctx = ctx,
         argsType = typeToken<Args>(),
@@ -87,10 +87,10 @@ public class LocationGeocodeTool(ctx: WeftContext) :
     ) {
 
     @Serializable
-    public data class Args(val query: String, val maxResults: Int = DEFAULT_MAX)
+    data class Args(val query: String, val maxResults: Int = DEFAULT_MAX)
 
     @Serializable
-    public data class Place(
+    data class Place(
         val latitude: Double,
         val longitude: Double,
         val addressLine: String? = null,
@@ -101,7 +101,7 @@ public class LocationGeocodeTool(ctx: WeftContext) :
     )
 
     @Serializable
-    public data class Result(val places: List<Place>)
+    data class Result(val places: List<Place>)
 
     override suspend fun executeWeft(args: Args): Result {
         val capped = args.maxResults.coerceIn(1, MAX_ALLOWED)
@@ -126,7 +126,7 @@ public class LocationGeocodeTool(ctx: WeftContext) :
 }
 
 /** Reverse geocoding: coordinates → structured address. */
-public class LocationReverseGeocodeTool(ctx: WeftContext) :
+class LocationReverseGeocodeTool(ctx: WeftContext) :
     WeftTool<LocationReverseGeocodeTool.Args, LocationGeocodeTool.Result>(
         ctx = ctx,
         argsType = typeToken<Args>(),
@@ -147,7 +147,7 @@ public class LocationReverseGeocodeTool(ctx: WeftContext) :
     ) {
 
     @Serializable
-    public data class Args(
+    data class Args(
         val latitude: Double,
         val longitude: Double,
         val maxResults: Int = 1,

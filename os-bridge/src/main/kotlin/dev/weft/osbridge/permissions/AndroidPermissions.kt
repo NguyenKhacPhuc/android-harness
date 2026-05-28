@@ -46,7 +46,7 @@ import kotlin.coroutines.resume
  *    implementing [ActivityResultRegistryOwner]). All Compose activities
  *    already are.
  */
-public class AndroidPermissions(context: Context) : Permissions {
+class AndroidPermissions(context: Context) : Permissions {
     private val app: Application = context.applicationContext as Application
 
     @Volatile

@@ -17,27 +17,27 @@ import kotlinx.serialization.Serializable
  * structured plans than long ones, and the UI is easier to scan.
  */
 @Serializable
-public data class Plan(
+data class Plan(
     /** One-line summary, e.g. "Build a habit tracker mini-app". */
-    public val title: String,
+    val title: String,
     /**
      * Ordered execution steps. Each step is a small, reviewable chunk —
      * "Define the data model", "Add storage", "Build the screen". Avoid
      * single-line plans ("Build the app") and exhaustive task lists.
      */
-    public val steps: List<PlanStep>,
+    val steps: List<PlanStep>,
     /**
      * Things the agent is uncertain about and wants the user to clarify
      * before committing. Empty list = the agent thinks the plan is
      * complete as drafted.
      */
-    public val openQuestions: List<String> = emptyList(),
+    val openQuestions: List<String> = emptyList(),
     /**
      * Assumptions the agent baked into the plan. Surfacing these here
      * lets the user spot disagreement early ("you assumed SQL — use
      * key-value instead").
      */
-    public val assumptions: List<String> = emptyList(),
+    val assumptions: List<String> = emptyList(),
 ) {
     /**
      * Render a compact, plain-text form suitable for re-injecting into
@@ -45,7 +45,7 @@ public data class Plan(
      * the following:"). Stable formatting so the model can parse it
      * back as a checklist.
      */
-    public fun toExecutionInstructions(): String = buildString {
+    fun toExecutionInstructions(): String = buildString {
         append("Plan: ")
         appendLine(title)
         steps.forEachIndexed { i, step ->
@@ -64,27 +64,27 @@ public data class Plan(
 }
 
 @Serializable
-public data class PlanStep(
+data class PlanStep(
     /** Short imperative, e.g. "Add the habit data model". */
-    public val title: String,
+    val title: String,
     /**
      * One-sentence why. Helps the user catch reasoning errors without
      * inspecting the full step. Empty string is allowed for trivial
      * steps but discouraged.
      */
-    public val rationale: String = "",
+    val rationale: String = "",
     /**
      * Tool names this step will call, in order. Used by the UI to show
      * "Step 3 will call data_update, ui_render" so the user can spot
      * surprises before approving. Empty list = step is informational
      * only (e.g. "Review the design").
      */
-    public val toolsUsed: List<String> = emptyList(),
+    val toolsUsed: List<String> = emptyList(),
 )
 
 /** Where a plan is in its lifecycle. */
 @Serializable
-public enum class PlanState {
+enum class PlanState {
     /** No plan yet, or a previous one was rejected. */
     Empty,
     /** Agent has drafted a plan and is iterating on it. */
@@ -103,21 +103,21 @@ public enum class PlanState {
  * `exit_plan_mode` tool's result string.
  */
 @Serializable
-public sealed class PlanDecision {
+sealed class PlanDecision {
     /** Approve as drafted. The agent should execute next. */
     @Serializable
-    public data object Approved : PlanDecision()
+    data object Approved : PlanDecision()
 
     /**
      * Request changes. [feedback] is the user's note, fed back to the
      * agent as the tool result so the next turn re-drafts.
      */
     @Serializable
-    public data class Refine(public val feedback: String) : PlanDecision()
+    data class Refine(val feedback: String) : PlanDecision()
 
     /** Abandon the plan entirely. The agent should stop. */
     @Serializable
-    public data object Cancelled : PlanDecision()
+    data object Cancelled : PlanDecision()
 }
 
 /**
@@ -130,30 +130,30 @@ public sealed class PlanDecision {
  * [state] and re-render whenever the agent's `exit_plan_mode` call
  * mutates it.
  */
-public interface PlanStore {
-    public val state: StateFlow<PlanSnapshot>
+interface PlanStore {
+    val state: StateFlow<PlanSnapshot>
 
     /** Latest snapshot. Convenience for non-Flow consumers. */
-    public fun current(): PlanSnapshot
+    fun current(): PlanSnapshot
 
     /** Replace the draft and move state to [PlanState.AwaitingApproval]. */
-    public fun propose(plan: Plan)
+    fun propose(plan: Plan)
 
     /** Mark the current plan approved (state → [PlanState.Approved]). */
-    public fun markApproved()
+    fun markApproved()
 
     /**
      * Note that the user asked for changes. State → [PlanState.Drafting]
      * and [PlanSnapshot.lastFeedback] is set so the agent's next turn
      * sees what changed.
      */
-    public fun markRefining(feedback: String)
+    fun markRefining(feedback: String)
 
     /** Mark the current plan rejected (state → [PlanState.Rejected]). */
-    public fun markRejected()
+    fun markRejected()
 
     /** Drop the plan entirely and reset to [PlanState.Empty]. */
-    public fun clear()
+    fun clear()
 }
 
 /**
@@ -161,13 +161,13 @@ public interface PlanStore {
  * [PlanState.Empty].
  */
 @Serializable
-public data class PlanSnapshot(
-    public val plan: Plan?,
-    public val state: PlanState,
-    public val lastFeedback: String? = null,
+data class PlanSnapshot(
+    val plan: Plan?,
+    val state: PlanState,
+    val lastFeedback: String? = null,
 ) {
-    public companion object {
-        public val EMPTY: PlanSnapshot = PlanSnapshot(plan = null, state = PlanState.Empty)
+    companion object {
+        val EMPTY: PlanSnapshot = PlanSnapshot(plan = null, state = PlanState.Empty)
     }
 }
 
@@ -176,7 +176,7 @@ public data class PlanSnapshot(
  * updates. Suitable for the substrate's default; production apps that
  * want plans to survive process death implement against SQLDelight.
  */
-public class InMemoryPlanStore : PlanStore {
+class InMemoryPlanStore : PlanStore {
     private val _state: MutableStateFlow<PlanSnapshot> = MutableStateFlow(PlanSnapshot.EMPTY)
     override val state: StateFlow<PlanSnapshot> = _state.asStateFlow()
 
@@ -216,9 +216,9 @@ public class InMemoryPlanStore : PlanStore {
  * loop (for prompt injection) read from the same holder, so a single
  * call to [set] takes effect across the whole session.
  */
-public class ApprovalModeHolder(initial: ApprovalMode = ApprovalMode.Default) {
+class ApprovalModeHolder(initial: ApprovalMode = ApprovalMode.Default) {
     private val _state: MutableStateFlow<ApprovalMode> = MutableStateFlow(initial)
-    public val state: StateFlow<ApprovalMode> = _state.asStateFlow()
-    public fun current(): ApprovalMode = _state.value
-    public fun set(mode: ApprovalMode) { _state.value = mode }
+    val state: StateFlow<ApprovalMode> = _state.asStateFlow()
+    fun current(): ApprovalMode = _state.value
+    fun set(mode: ApprovalMode) { _state.value = mode }
 }

@@ -12,7 +12,7 @@ import kotlin.time.Duration.Companion.seconds
  *
  * Defaults match the plan ([07-harness.md:51](07-harness.md)).
  */
-public data class RetryPolicy(
+data class RetryPolicy(
     val maxAttempts: Int = DEFAULT_MAX_ATTEMPTS,
     val baseDelay: Duration = DEFAULT_BASE_DELAY,
     val maxDelay: Duration = DEFAULT_MAX_DELAY,
@@ -20,11 +20,11 @@ public data class RetryPolicy(
     /** Predicate: should this exception trigger a retry? Default uses [defaultIsRetryable]. */
     val isRetryable: (Throwable) -> Boolean = ::defaultIsRetryable,
 ) {
-    public companion object {
-        public const val DEFAULT_MAX_ATTEMPTS: Int = 3
-        public val DEFAULT_BASE_DELAY: Duration = 1.seconds
-        public val DEFAULT_MAX_DELAY: Duration = 30.seconds
-        public const val DEFAULT_JITTER_FRACTION: Double = 0.25
+    companion object {
+        const val DEFAULT_MAX_ATTEMPTS: Int = 3
+        val DEFAULT_BASE_DELAY: Duration = 1.seconds
+        val DEFAULT_MAX_DELAY: Duration = 30.seconds
+        const val DEFAULT_JITTER_FRACTION: Double = 0.25
     }
 }
 
@@ -32,7 +32,7 @@ public data class RetryPolicy(
  * Heuristic for "this is probably a transient failure." Conservative —
  * we'd rather under-retry than retry user-facing errors.
  */
-public fun defaultIsRetryable(t: Throwable): Boolean {
+fun defaultIsRetryable(t: Throwable): Boolean {
     val msg = t.message.orEmpty().lowercase()
     return when {
         // Auth / validation never retried — the request itself is wrong.

@@ -26,7 +26,7 @@ import kotlinx.serialization.json.buildJsonObject
  * snapshot. If the LLM asks for an unknown provider, that key is absent and
  * the available names are returned under `_available`.
  */
-public class SystemUserContextTool(
+class SystemUserContextTool(
     ctx: WeftContext,
     private val contextRegistry: ContextRegistry,
 ) : WeftTool<SystemUserContextTool.Args, JsonObject>(
@@ -50,7 +50,7 @@ public class SystemUserContextTool(
 ) {
 
     @Serializable
-    public data class Args(val providers: List<String> = emptyList())
+    data class Args(val providers: List<String> = emptyList())
 
     override suspend fun executeWeft(args: Args): JsonObject {
         val names = if (args.providers.isEmpty()) contextRegistry.names() else args.providers.toSet()

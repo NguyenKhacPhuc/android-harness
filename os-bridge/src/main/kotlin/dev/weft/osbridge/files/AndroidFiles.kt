@@ -29,7 +29,7 @@ import java.util.UUID
  * the placeholder `${applicationId}.fileprovider`, so each consuming app
  * gets a unique authority.
  */
-public class AndroidFiles(private val context: Context) : Files {
+class AndroidFiles(private val context: Context) : Files {
 
     /**
      * Authority used for the FileProvider. Matches the `<provider>` in the

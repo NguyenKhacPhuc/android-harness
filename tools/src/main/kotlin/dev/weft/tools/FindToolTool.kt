@@ -34,7 +34,7 @@ import kotlinx.serialization.Serializable
  * scoring quality knob is _what is shown to the LLM_, not _what is
  * activated_; activation is downstream of selection.
  */
-public class FindToolTool(
+class FindToolTool(
     ctx: WeftContext,
     private val provider: ToolProvider,
 ) : WeftTool<FindToolTool.Args, FindToolTool.Result>(
@@ -77,14 +77,14 @@ public class FindToolTool(
 ) {
 
     @Serializable
-    public data class Args(
+    data class Args(
         val query: String,
         val category: String? = null,
         val limit: Int = DEFAULT_LIMIT,
     )
 
     @Serializable
-    public data class Result(
+    data class Result(
         /** Found tools, best-first. */
         val tools: List<Match>,
         /**
@@ -96,7 +96,7 @@ public class FindToolTool(
     )
 
     @Serializable
-    public data class Match(val name: String, val description: String, val category: String? = null)
+    data class Match(val name: String, val description: String, val category: String? = null)
 
     override suspend fun executeWeft(args: Args): Result {
         val cap = args.limit.coerceIn(1, MAX_LIMIT)

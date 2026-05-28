@@ -12,7 +12,7 @@ import kotlinx.serialization.Serializable
  * Use for: "is my ringer silenced?", "what's media volume?", "show
  * volume bars".
  */
-public class VolumeGetTool(ctx: WeftContext) : WeftTool<VolumeGetTool.Args, VolumeGetTool.Result>(
+class VolumeGetTool(ctx: WeftContext) : WeftTool<VolumeGetTool.Args, VolumeGetTool.Result>(
     ctx = ctx,
     argsType = typeToken<Args>(),
     resultType = typeToken<Result>(),
@@ -31,10 +31,10 @@ public class VolumeGetTool(ctx: WeftContext) : WeftTool<VolumeGetTool.Args, Volu
     ),
 ) {
     @Serializable
-    public data class Args(val stream: String)
+    data class Args(val stream: String)
 
     @Serializable
-    public data class Result(val stream: String, val normalized: Float)
+    data class Result(val stream: String, val normalized: Float)
 
     override suspend fun executeWeft(args: Args): Result {
         val s = parseStream(args.stream) ?: return Result(args.stream, 0f)
@@ -47,7 +47,7 @@ public class VolumeGetTool(ctx: WeftContext) : WeftTool<VolumeGetTool.Args, Volu
  * "turn media down", "set alarm to 50%". The system enforces DND
  * policy — returns success=false when blocked.
  */
-public class VolumeSetTool(ctx: WeftContext) : WeftTool<VolumeSetTool.Args, VolumeSetTool.Result>(
+class VolumeSetTool(ctx: WeftContext) : WeftTool<VolumeSetTool.Args, VolumeSetTool.Result>(
     ctx = ctx,
     argsType = typeToken<Args>(),
     resultType = typeToken<Result>(),
@@ -72,10 +72,10 @@ public class VolumeSetTool(ctx: WeftContext) : WeftTool<VolumeSetTool.Args, Volu
     sideEffecting = true,
 ) {
     @Serializable
-    public data class Args(val stream: String, val normalized: Float)
+    data class Args(val stream: String, val normalized: Float)
 
     @Serializable
-    public data class Result(val success: Boolean, val applied: Float? = null)
+    data class Result(val success: Boolean, val applied: Float? = null)
 
     override suspend fun executeWeft(args: Args): Result {
         val s = parseStream(args.stream) ?: return Result(success = false)

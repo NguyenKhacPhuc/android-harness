@@ -29,7 +29,7 @@ import kotlinx.coroutines.withContext
  * [dev.weft.contracts.Permission.BLUETOOTH_CONNECT] declaration on
  * the tools. These checks are defense-in-depth.
  */
-public class AndroidBluetooth(private val context: Context) : Bluetooth {
+class AndroidBluetooth(private val context: Context) : Bluetooth {
 
     private val adapter: BluetoothAdapter? by lazy {
         val mgr = context.getSystemService(Context.BLUETOOTH_SERVICE) as? BluetoothManager

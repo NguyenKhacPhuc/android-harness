@@ -18,7 +18,7 @@ import kotlinx.serialization.Serializable
  * Latency: ~100-500ms for typical receipts on a modern phone. First call
  * may include a one-time model download from Play Services.
  */
-public class VisionOcrTool(ctx: WeftContext) : WeftTool<VisionOcrTool.Args, VisionOcrTool.Result>(
+class VisionOcrTool(ctx: WeftContext) : WeftTool<VisionOcrTool.Args, VisionOcrTool.Result>(
     ctx = ctx,
     argsType = typeToken<Args>(),
     resultType = typeToken<Result>(),
@@ -36,10 +36,10 @@ public class VisionOcrTool(ctx: WeftContext) : WeftTool<VisionOcrTool.Args, Visi
 ) {
 
     @Serializable
-    public data class Args(val imageUri: String)
+    data class Args(val imageUri: String)
 
     @Serializable
-    public data class Result(
+    data class Result(
         val text: String,
         val blockCount: Int,
     )
@@ -54,7 +54,7 @@ public class VisionOcrTool(ctx: WeftContext) : WeftTool<VisionOcrTool.Args, Visi
  * Decode barcodes / QR codes from an image. Returns each barcode's
  * payload and format. Empty list when nothing recognizable is found.
  */
-public class VisionBarcodeTool(ctx: WeftContext) :
+class VisionBarcodeTool(ctx: WeftContext) :
     WeftTool<VisionBarcodeTool.Args, VisionBarcodeTool.Result>(
         ctx = ctx,
         argsType = typeToken<Args>(),
@@ -72,13 +72,13 @@ public class VisionBarcodeTool(ctx: WeftContext) :
     ) {
 
     @Serializable
-    public data class Args(val imageUri: String)
+    data class Args(val imageUri: String)
 
     @Serializable
-    public data class Item(val value: String, val format: String)
+    data class Item(val value: String, val format: String)
 
     @Serializable
-    public data class Result(val items: List<Item>)
+    data class Result(val items: List<Item>)
 
     override suspend fun executeWeft(args: Args): Result {
         val decoded: List<DecodedBarcode> = os.vision.barcodes(args.imageUri)

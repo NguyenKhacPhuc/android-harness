@@ -13,7 +13,7 @@ import ai.koog.serialization.typeToken
 /**
  * List scheduled notifications. Useful for "what reminders do I have?" prompts.
  */
-public class ScheduleListTool(ctx: WeftContext) : WeftTool<ScheduleListTool.Args, ScheduleListTool.Result>(
+class ScheduleListTool(ctx: WeftContext) : WeftTool<ScheduleListTool.Args, ScheduleListTool.Result>(
     ctx = ctx,
     argsType = typeToken<Args>(),
     resultType = typeToken<Result>(),
@@ -38,17 +38,17 @@ public class ScheduleListTool(ctx: WeftContext) : WeftTool<ScheduleListTool.Args
 ) {
 
     @Serializable
-    public data class Args(
+    data class Args(
         val context: String = "",
         val beforeIso: String? = null,
         val afterIso: String? = null,
     )
 
     @Serializable
-    public data class Entry(val id: String, val title: String, val body: String? = null, val nextRunIso: String)
+    data class Entry(val id: String, val title: String, val body: String? = null, val nextRunIso: String)
 
     @Serializable
-    public data class Result(val items: List<Entry>)
+    data class Result(val items: List<Entry>)
 
     override suspend fun executeWeft(args: Args): Result {
         val filter = if (args.beforeIso == null && args.afterIso == null) {
@@ -69,7 +69,7 @@ public class ScheduleListTool(ctx: WeftContext) : WeftTool<ScheduleListTool.Args
  * Not flagged destructive — the user explicitly asked to cancel; an automatic
  * confirmation prompt would be friction, not safety.
  */
-public class ScheduleCancelTool(ctx: WeftContext) : WeftTool<ScheduleCancelTool.Args, String>(
+class ScheduleCancelTool(ctx: WeftContext) : WeftTool<ScheduleCancelTool.Args, String>(
     ctx = ctx,
     argsType = typeToken<Args>(),
     resultType = typeToken<String>(),
@@ -86,7 +86,7 @@ public class ScheduleCancelTool(ctx: WeftContext) : WeftTool<ScheduleCancelTool.
 ) {
 
     @Serializable
-    public data class Args(val scheduleId: String)
+    data class Args(val scheduleId: String)
 
     override suspend fun executeWeft(args: Args): String {
         val cancelled = os.notifications.cancel(NotificationHandle(args.scheduleId))

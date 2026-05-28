@@ -33,20 +33,20 @@ package dev.weft.contracts
  * wraps the runtime's `MemoryStore`. Apps add their own via
  * `WeftRuntime(extraMemoryProviders = listOf(...))`.
  */
-public interface MemoryProvider {
+interface MemoryProvider {
     /**
      * Stable identifier surfaced in [MemoryHit.source] so the LLM (and
      * trace viewers) can see which provider contributed which fact.
      * Convention: snake_case.
      */
-    public val name: String
+    val name: String
 
     /**
      * Human-readable description. Currently not shown to the LLM — kept
      * for parity with [ContextProvider] in case we surface a
      * `memory_providers_list` tool later.
      */
-    public val description: String
+    val description: String
 
     /**
      * Retrieve up to [limit] memory hits relevant to [query]. Empty
@@ -58,7 +58,7 @@ public interface MemoryProvider {
      * — the substrate logs the failure but doesn't propagate it. Make
      * the implementation robust to whatever backend churn it depends on.
      */
-    public suspend fun retrieve(query: String, limit: Int = 5): List<MemoryHit>
+    suspend fun retrieve(query: String, limit: Int = 5): List<MemoryHit>
 }
 
 /**
@@ -76,8 +76,8 @@ public interface MemoryProvider {
  *   in. Providers that don't compute scores can leave it at 0f — the
  *   aggregator falls back to per-provider ordering.
  */
-public data class MemoryHit(
-    public val content: String,
-    public val source: String = "",
-    public val score: Float = 0f,
+data class MemoryHit(
+    val content: String,
+    val source: String = "",
+    val score: Float = 0f,
 )

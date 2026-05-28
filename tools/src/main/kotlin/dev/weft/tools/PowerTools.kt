@@ -15,7 +15,7 @@ import kotlinx.serialization.Serializable
  * NOT a system-wide setting — when the user backgrounds the app the
  * flag is automatically dropped by the window manager.
  */
-public class PowerKeepScreenOnTool(ctx: WeftContext) :
+class PowerKeepScreenOnTool(ctx: WeftContext) :
     WeftTool<PowerKeepScreenOnTool.Args, PowerKeepScreenOnTool.Result>(
         ctx = ctx,
         argsType = typeToken<Args>(),
@@ -38,10 +38,10 @@ public class PowerKeepScreenOnTool(ctx: WeftContext) :
     ) {
 
     @Serializable
-    public data class Args(val enabled: Boolean)
+    data class Args(val enabled: Boolean)
 
     @Serializable
-    public data class Result(val success: Boolean)
+    data class Result(val success: Boolean)
 
     override suspend fun executeWeft(args: Args): Result =
         Result(success = os.power.keepScreenOn(args.enabled))
@@ -55,7 +55,7 @@ public class PowerKeepScreenOnTool(ctx: WeftContext) :
  * Use for: dimming during read-aloud (eye comfort), maxing brightness
  * for QR scan, hand-off to a darker theme.
  */
-public class PowerSetBrightnessTool(ctx: WeftContext) :
+class PowerSetBrightnessTool(ctx: WeftContext) :
     WeftTool<PowerSetBrightnessTool.Args, PowerSetBrightnessTool.Result>(
         ctx = ctx,
         argsType = typeToken<Args>(),
@@ -78,10 +78,10 @@ public class PowerSetBrightnessTool(ctx: WeftContext) :
     ) {
 
     @Serializable
-    public data class Args(val normalized: Float)
+    data class Args(val normalized: Float)
 
     @Serializable
-    public data class Result(val success: Boolean)
+    data class Result(val success: Boolean)
 
     override suspend fun executeWeft(args: Args): Result =
         Result(success = os.power.setBrightness(args.normalized))

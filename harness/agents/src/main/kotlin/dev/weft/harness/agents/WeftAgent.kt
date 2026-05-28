@@ -55,7 +55,7 @@ import java.util.UUID
  *
  * Cost: a new AIAgent + ToolRegistry per send. Negligible.
  */
-public class WeftAgent(
+class WeftAgent(
     private val executor: PromptExecutor,
     /**
      * Provider's model pool — the menu the [modelRouter] picks from per
@@ -95,7 +95,7 @@ public class WeftAgent(
      */
     private val maxOutputTokens: Int = DEFAULT_MAX_OUTPUT_TOKENS,
     private val retryPolicy: RetryPolicy = RetryPolicy(),
-    public val circuitBreaker: CircuitBreaker = CircuitBreaker(),
+    val circuitBreaker: CircuitBreaker = CircuitBreaker(),
     private val behaviorConfig: BehaviorConfig = BehaviorConfig(),
     private val usageStore: UsageStore = dev.weft.harness.cost.InMemoryUsageStore(),
     private val quotaPolicy: QuotaPolicy = QuotaPolicy(),
@@ -234,7 +234,7 @@ public class WeftAgent(
      * [newChat] or [resume] is called.
      */
     private val _conversationId: MutableStateFlow<String> = MutableStateFlow(conversationId)
-    public val currentConversationId: StateFlow<String> = _conversationId.asStateFlow()
+    val currentConversationId: StateFlow<String> = _conversationId.asStateFlow()
 
     private val _events = MutableSharedFlow<ToolEvent>(
         replay = 0,
@@ -242,14 +242,14 @@ public class WeftAgent(
     )
 
     /** Tool-call events from the underlying Koog agent. Use to render trace bubbles in chat. */
-    public val events: SharedFlow<ToolEvent> = _events.asSharedFlow()
+    val events: SharedFlow<ToolEvent> = _events.asSharedFlow()
 
     /**
      * Text-only convenience overload. Equivalent to
      * `send(userText, attachments = emptyList())`. The most common path
      * stays string-shaped so existing callers don't change.
      */
-    public suspend fun send(userText: String): String =
+    suspend fun send(userText: String): String =
         send(userText, attachments = emptyList(), modelTier = null)
 
     /**
@@ -258,7 +258,7 @@ public class WeftAgent(
      * normal heuristics — the picked tier comes straight from [modelTier].
      * Passing `null` is identical to the no-tier overload (normal routing).
      */
-    public suspend fun send(
+    suspend fun send(
         userText: String,
         modelTier: dev.weft.harness.agents.routing.ModelTier?,
     ): String = send(userText, attachments = emptyList(), modelTier = modelTier)
@@ -281,7 +281,7 @@ public class WeftAgent(
      * disk. The agent's *current* turn always sees the full multimodal
      * input.
      */
-    public suspend fun send(
+    suspend fun send(
         userText: String,
         attachments: List<ai.koog.prompt.message.MessagePart.Attachment>,
         modelTier: dev.weft.harness.agents.routing.ModelTier? = null,
@@ -410,7 +410,7 @@ public class WeftAgent(
      * Text-only convenience overload — mirrors [send]. Pass attachments
      * via the [sendStreaming] overload taking a list.
      */
-    public fun sendStreaming(userText: String): Flow<StreamChunk> =
+    fun sendStreaming(userText: String): Flow<StreamChunk> =
         sendStreaming(userText, attachments = emptyList(), modelTier = null)
 
     /**
@@ -419,7 +419,7 @@ public class WeftAgent(
      * router's normal heuristics; passing `null` is identical to the
      * no-tier overload.
      */
-    public fun sendStreaming(
+    fun sendStreaming(
         userText: String,
         modelTier: dev.weft.harness.agents.routing.ModelTier?,
     ): Flow<StreamChunk> = sendStreaming(userText, attachments = emptyList(), modelTier = modelTier)
@@ -428,7 +428,7 @@ public class WeftAgent(
      * Streaming variant of [send] with multimodal attachments. See the
      * [send] overload taking attachments for the persistence caveat.
      */
-    public fun sendStreaming(
+    fun sendStreaming(
         userText: String,
         attachments: List<ai.koog.prompt.message.MessagePart.Attachment>,
         modelTier: dev.weft.harness.agents.routing.ModelTier? = null,
@@ -548,7 +548,7 @@ public class WeftAgent(
     }
 
     /** Drop the in-memory conversation history. Does NOT touch the persistent store. */
-    public fun resetHistory() {
+    fun resetHistory() {
         history.clear()
     }
 
@@ -561,7 +561,7 @@ public class WeftAgent(
      *
      * No-op when [conversationStore] is null.
      */
-    public suspend fun resume(conversationId: String? = null) {
+    suspend fun resume(conversationId: String? = null) {
         val store = conversationStore ?: return
         val id = conversationId
             ?: store.mostRecentConversationId()
@@ -579,7 +579,7 @@ public class WeftAgent(
      * history; if a [conversationStore] is wired, creates a new
      * conversation row and switches [currentConversationId] to it.
      */
-    public suspend fun newChat() {
+    suspend fun newChat() {
         history.clear()
         val newId = conversationStore?.newConversation() ?: UUID.randomUUID().toString()
         _conversationId.value = newId
@@ -601,7 +601,7 @@ public class WeftAgent(
      * again. This is intentionally simpler than a save-then-restore dance,
      * which would introduce tricky race handling for negligible benefit.
      */
-    public suspend fun regenerate(): String? {
+    suspend fun regenerate(): String? {
         val lastUserText = rollBackToLastUser() ?: return null
         conversationStore?.deleteLastTurn(_conversationId.value)
         return send(lastUserText)
@@ -616,7 +616,7 @@ public class WeftAgent(
      * Same failure semantics as [regenerate]: the rollback is committed
      * before the new send begins.
      */
-    public fun regenerateStreaming(): Flow<StreamChunk> = flow {
+    fun regenerateStreaming(): Flow<StreamChunk> = flow {
         val lastUserText = rollBackToLastUser() ?: return@flow
         conversationStore?.deleteLastTurn(_conversationId.value)
         emitAll(sendStreaming(lastUserText))
@@ -652,7 +652,7 @@ public class WeftAgent(
      * @param fieldValues snapshot of TextField values on the rendered surface,
      *                    so forms work without the agent having to ask.
      */
-    public suspend fun sendEvent(
+    suspend fun sendEvent(
         action: String,
         sourceLabel: String? = null,
         fieldValues: Map<String, String> = emptyMap(),
@@ -962,7 +962,7 @@ public class WeftAgent(
     private data class HistoryEntry(val role: Role, val text: String)
     private enum class Role { USER, ASSISTANT }
 
-    public companion object {
+    companion object {
         private const val MAX_ITERATIONS_DEFAULT = 10
         private const val EVENT_BUFFER_CAPACITY = 64
 
@@ -973,7 +973,7 @@ public class WeftAgent(
          * than necessary is fine — Anthropic only bills for tokens
          * actually generated.
          */
-        public const val DEFAULT_MAX_OUTPUT_TOKENS: Int = 8192
+        const val DEFAULT_MAX_OUTPUT_TOKENS: Int = 8192
         // 8KB is enough for typical ui_render trees + form payloads.
         // Bigger trees still get truncated; the user can drill into the
         // trace in the viewer and see the args.
@@ -1000,10 +1000,10 @@ public class WeftAgent(
 }
 
 /** Tool lifecycle event emitted by [WeftAgent]. */
-public sealed class ToolEvent {
-    public abstract val toolName: String
+sealed class ToolEvent {
+    abstract val toolName: String
 
-    public data class Starting(override val toolName: String, val argsPreview: String) : ToolEvent()
-    public data class Completed(override val toolName: String) : ToolEvent()
-    public data class Failed(override val toolName: String, val message: String) : ToolEvent()
+    data class Starting(override val toolName: String, val argsPreview: String) : ToolEvent()
+    data class Completed(override val toolName: String) : ToolEvent()
+    data class Failed(override val toolName: String, val message: String) : ToolEvent()
 }

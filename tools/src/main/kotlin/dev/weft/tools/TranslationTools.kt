@@ -17,7 +17,7 @@ import kotlinx.serialization.Serializable
  * for languages outside ML Kit's set (~60 languages; call
  * `translate_supported_languages` to discover).
  */
-public class TranslateTextTool(ctx: WeftContext) :
+class TranslateTextTool(ctx: WeftContext) :
     WeftTool<TranslateTextTool.Args, TranslateTextTool.Result>(
         ctx = ctx,
         argsType = typeToken<Args>(),
@@ -48,14 +48,14 @@ public class TranslateTextTool(ctx: WeftContext) :
     ) {
 
     @Serializable
-    public data class Args(
+    data class Args(
         val text: String,
         val target: String,
         val source: String? = null,
     )
 
     @Serializable
-    public data class Result(val translated: String? = null, val success: Boolean)
+    data class Result(val translated: String? = null, val success: Boolean)
 
     override suspend fun executeWeft(args: Args): Result {
         val out = os.translation.translate(args.text, args.target, args.source)
@@ -68,7 +68,7 @@ public class TranslateTextTool(ctx: WeftContext) :
  * ("en", "ja", "zh", "de"…) or "und" when undetermined. Fast (~10ms
  * after first call) and free.
  */
-public class DetectLanguageTool(ctx: WeftContext) :
+class DetectLanguageTool(ctx: WeftContext) :
     WeftTool<DetectLanguageTool.Args, DetectLanguageTool.Result>(
         ctx = ctx,
         argsType = typeToken<Args>(),
@@ -86,10 +86,10 @@ public class DetectLanguageTool(ctx: WeftContext) :
     ) {
 
     @Serializable
-    public data class Args(val text: String)
+    data class Args(val text: String)
 
     @Serializable
-    public data class Result(val languageCode: String)
+    data class Result(val languageCode: String)
 
     override suspend fun executeWeft(args: Args): Result =
         Result(languageCode = os.translation.detectLanguage(args.text))

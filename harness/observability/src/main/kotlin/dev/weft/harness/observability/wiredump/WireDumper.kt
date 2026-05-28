@@ -47,7 +47,7 @@ import kotlin.time.ExperimentalTime
  * flight; each gets its own [WireCapture.requestId] so the JSON-lines
  * file stays sortable.
  */
-public class WireDumper(
+class WireDumper(
     private val delegate: PromptExecutor,
     private val sink: DumpSink,
     /**
@@ -150,7 +150,7 @@ public class WireDumper(
  * `default = …` and renames need migration.
  */
 @kotlinx.serialization.Serializable
-public data class WireCapture(
+data class WireCapture(
     val turnNumber: Int,
     val requestId: String,
     val timestampMs: Long,
@@ -162,7 +162,7 @@ public data class WireCapture(
 )
 
 @kotlinx.serialization.Serializable
-public data class WireRequest(
+data class WireRequest(
     val modelId: String,
     val modelProvider: String,
     val systemMessage: String,
@@ -175,8 +175,8 @@ public data class WireRequest(
      */
     val providerExtras: Map<String, String> = emptyMap(),
 ) {
-    public companion object {
-        public fun from(prompt: Prompt, model: LLModel, tools: List<ToolDescriptor>): WireRequest {
+    companion object {
+        fun from(prompt: Prompt, model: LLModel, tools: List<ToolDescriptor>): WireRequest {
             val systemText = prompt.messages
                 .filterIsInstance<Message.System>()
                 .joinToString("\n") { it.textContent() }
@@ -203,14 +203,14 @@ public data class WireRequest(
 }
 
 @kotlinx.serialization.Serializable
-public data class WireMessage(
+data class WireMessage(
     val role: String,
     val text: String,
     val toolCalls: List<WireToolCall> = emptyList(),
     val toolResults: List<WireToolResult> = emptyList(),
 ) {
-    public companion object {
-        public fun from(msg: Message): WireMessage {
+    companion object {
+        fun from(msg: Message): WireMessage {
             val text = msg.textContent()
             val toolCalls = msg.parts
                 .filterIsInstance<MessagePart.Tool.Call>()
@@ -236,14 +236,14 @@ public data class WireMessage(
 }
 
 @kotlinx.serialization.Serializable
-public data class WireToolCall(
+data class WireToolCall(
     val id: String,
     val name: String,
     val argsJson: String,
 )
 
 @kotlinx.serialization.Serializable
-public data class WireToolResult(
+data class WireToolResult(
     val callId: String,
     val name: String,
     val content: String,
@@ -251,7 +251,7 @@ public data class WireToolResult(
 )
 
 @kotlinx.serialization.Serializable
-public data class WireResponse(
+data class WireResponse(
     val text: String,
     val toolCalls: List<WireToolCall>,
     val inputTokens: Int? = null,
@@ -259,8 +259,8 @@ public data class WireResponse(
     val totalTokens: Int? = null,
     val finishReason: String? = null,
 ) {
-    public companion object {
-        public fun from(msg: Message.Assistant): WireResponse {
+    companion object {
+        fun from(msg: Message.Assistant): WireResponse {
             val text = msg.textContent()
             val toolCalls = msg.parts
                 .filterIsInstance<MessagePart.Tool.Call>()
@@ -280,7 +280,7 @@ public data class WireResponse(
          * produces so the fixture round-trip works regardless of which
          * path produced the capture.
          */
-        public fun fromFrames(frames: List<StreamFrame>): WireResponse {
+        fun fromFrames(frames: List<StreamFrame>): WireResponse {
             val textBuf = StringBuilder()
             val toolCalls = mutableListOf<WireToolCall>()
             var inputTokens: Int? = null

@@ -22,7 +22,7 @@ import dev.weft.contracts.ToolProvider
  * )
  * ```
  */
-public class EagerToolProvider(
+class EagerToolProvider(
     private val tools: List<WeftTool<*, *>>,
     /**
      * If true (default), every wrapped tool is reported with
@@ -64,9 +64,9 @@ public class EagerToolProvider(
  * `overrides` map keyed by tool name to tag a category, flip
  * always-on, or both.
  */
-public data class ToolMetadataOverride(
-    public val category: String? = null,
-    public val alwaysOn: Boolean? = null,
+data class ToolMetadataOverride(
+    val category: String? = null,
+    val alwaysOn: Boolean? = null,
 )
 
 /**
@@ -83,11 +83,11 @@ public data class ToolMetadataOverride(
  *   - app-supplied provider(s)
  *   - `McpToolProvider` (per-server MCP tools)
  */
-public fun compositeToolProvider(vararg providers: ToolProvider): ToolProvider =
+fun compositeToolProvider(vararg providers: ToolProvider): ToolProvider =
     CompositeToolProvider(providers.toList())
 
 /** List overload — convenient when assembling providers dynamically. */
-public fun compositeToolProvider(providers: List<ToolProvider>): ToolProvider =
+fun compositeToolProvider(providers: List<ToolProvider>): ToolProvider =
     CompositeToolProvider(providers)
 
 private class CompositeToolProvider(

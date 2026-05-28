@@ -19,7 +19,7 @@ import kotlinx.serialization.Serializable
  * context window from drowning on huge documents — for those, the
  * agent should call again with an explicit [Args.pageRange].
  */
-public class PdfReadTool(ctx: WeftContext) : WeftTool<PdfReadTool.Args, PdfTextResult>(
+class PdfReadTool(ctx: WeftContext) : WeftTool<PdfReadTool.Args, PdfTextResult>(
     ctx = ctx,
     argsType = typeToken<Args>(),
     resultType = typeToken<PdfTextResult>(),
@@ -47,7 +47,7 @@ public class PdfReadTool(ctx: WeftContext) : WeftTool<PdfReadTool.Args, PdfTextR
     ),
 ) {
     @Serializable
-    public data class Args(
+    data class Args(
         val uri: String,
         val pageRange: String? = null,
         val maxPages: Int = 50,
@@ -66,7 +66,7 @@ public class PdfReadTool(ctx: WeftContext) : WeftTool<PdfReadTool.Args, PdfTextR
  * inside the renderer). [Args.scale] = 1.5 is roughly 108 DPI; higher
  * values make OCR more accurate at the cost of memory.
  */
-public class PdfRenderPagesTool(ctx: WeftContext) : WeftTool<PdfRenderPagesTool.Args, PdfRenderResult>(
+class PdfRenderPagesTool(ctx: WeftContext) : WeftTool<PdfRenderPagesTool.Args, PdfRenderResult>(
     ctx = ctx,
     argsType = typeToken<Args>(),
     resultType = typeToken<PdfRenderResult>(),
@@ -93,7 +93,7 @@ public class PdfRenderPagesTool(ctx: WeftContext) : WeftTool<PdfRenderPagesTool.
     ),
 ) {
     @Serializable
-    public data class Args(
+    data class Args(
         val uri: String,
         val pages: List<Int>? = null,
         val scale: Float = 1.5f,
@@ -113,7 +113,7 @@ public class PdfRenderPagesTool(ctx: WeftContext) : WeftTool<PdfRenderPagesTool.
  * wrapping, auto page breaks. No markdown rendering (yet); the body
  * is treated as plain text with `\n` paragraph separators.
  */
-public class PdfCreateTool(ctx: WeftContext) : WeftTool<PdfCreateTool.Args, FileRef>(
+class PdfCreateTool(ctx: WeftContext) : WeftTool<PdfCreateTool.Args, FileRef>(
     ctx = ctx,
     argsType = typeToken<Args>(),
     resultType = typeToken<FileRef>(),
@@ -137,7 +137,7 @@ public class PdfCreateTool(ctx: WeftContext) : WeftTool<PdfCreateTool.Args, File
     sideEffecting = true,
 ) {
     @Serializable
-    public data class Args(
+    data class Args(
         val title: String,
         val body: String,
         val fileName: String = "document.pdf",

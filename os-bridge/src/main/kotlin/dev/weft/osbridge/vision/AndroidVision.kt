@@ -29,7 +29,7 @@ import kotlin.coroutines.resumeWithException
  * Threading: ML Kit's `Task<T>` API hops to its own background pool
  * internally, so we just wrap each await in a [suspendCancellableCoroutine].
  */
-public class AndroidVision(context: Context) : Vision {
+class AndroidVision(context: Context) : Vision {
 
     private val appContext: Context = context.applicationContext
 

@@ -57,7 +57,7 @@ import kotlin.coroutines.resume
  *     else implementing [ActivityResultRegistryOwner]). Compose activities
  *     already are, so this isn't a real constraint in practice.
  */
-public class AndroidCamera(context: Context) : Camera {
+class AndroidCamera(context: Context) : Camera {
 
     private val app: Application = context.applicationContext as Application
     private val authority: String = "${app.packageName}.fileprovider"

@@ -21,12 +21,12 @@ package dev.weft.contracts
  * Hooks run on the same coroutine as the agent — keep them fast and
  * non-blocking. Long work should dispatch onto a separate scope.
  */
-public interface WeftHook {
+interface WeftHook {
 
-    public suspend fun onUserMessage(ctx: HookContext.UserMessage) {}
-    public suspend fun onTurnStart(ctx: HookContext.TurnStart) {}
-    public suspend fun onTurnEnd(ctx: HookContext.TurnEnd) {}
-    public suspend fun onTurnFailed(ctx: HookContext.TurnFailed) {}
+    suspend fun onUserMessage(ctx: HookContext.UserMessage) {}
+    suspend fun onTurnStart(ctx: HookContext.TurnStart) {}
+    suspend fun onTurnEnd(ctx: HookContext.TurnEnd) {}
+    suspend fun onTurnFailed(ctx: HookContext.TurnFailed) {}
 
     /**
      * Pre-tool hook. Returning [HookDecision.Deny] aborts the tool
@@ -34,10 +34,10 @@ public interface WeftHook {
      * error and chooses how to recover. Returning [HookDecision.Continue]
      * (the default) lets the tool proceed.
      */
-    public suspend fun onToolStart(ctx: HookContext.ToolStart): HookDecision = HookDecision.Continue
+    suspend fun onToolStart(ctx: HookContext.ToolStart): HookDecision = HookDecision.Continue
 
-    public suspend fun onToolEnd(ctx: HookContext.ToolEnd) {}
-    public suspend fun onToolFailed(ctx: HookContext.ToolFailed) {}
+    suspend fun onToolEnd(ctx: HookContext.ToolEnd) {}
+    suspend fun onToolFailed(ctx: HookContext.ToolFailed) {}
 }
 
 /**
@@ -45,79 +45,79 @@ public interface WeftHook {
  * the fields relevant for its lifecycle point — keep the surface tight
  * so hooks stay easy to write.
  */
-public sealed class HookContext {
+sealed class HookContext {
     /** Trace id this event belongs to. Shared across all hooks for one turn. */
-    public abstract val traceId: String
+    abstract val traceId: String
     /** Conversation id this turn belongs to. */
-    public abstract val conversationId: String
+    abstract val conversationId: String
 
-    public data class UserMessage(
+    data class UserMessage(
         override val traceId: String,
         override val conversationId: String,
-        public val text: String,
-        public val hasAttachments: Boolean,
+        val text: String,
+        val hasAttachments: Boolean,
     ) : HookContext()
 
-    public data class TurnStart(
+    data class TurnStart(
         override val traceId: String,
         override val conversationId: String,
-        public val userText: String,
-        public val modelId: String,
+        val userText: String,
+        val modelId: String,
     ) : HookContext()
 
-    public data class TurnEnd(
+    data class TurnEnd(
         override val traceId: String,
         override val conversationId: String,
-        public val assistantText: String,
-        public val modelId: String,
+        val assistantText: String,
+        val modelId: String,
     ) : HookContext()
 
-    public data class TurnFailed(
+    data class TurnFailed(
         override val traceId: String,
         override val conversationId: String,
-        public val cause: Throwable,
+        val cause: Throwable,
     ) : HookContext()
 
-    public data class ToolStart(
+    data class ToolStart(
         override val traceId: String,
         override val conversationId: String,
-        public val toolName: String,
-        public val argsPreview: String,
-        public val risk: ToolRisk,
+        val toolName: String,
+        val argsPreview: String,
+        val risk: ToolRisk,
     ) : HookContext()
 
-    public data class ToolEnd(
+    data class ToolEnd(
         override val traceId: String,
         override val conversationId: String,
-        public val toolName: String,
-        public val resultPreview: String?,
+        val toolName: String,
+        val resultPreview: String?,
     ) : HookContext()
 
-    public data class ToolFailed(
+    data class ToolFailed(
         override val traceId: String,
         override val conversationId: String,
-        public val toolName: String,
-        public val message: String,
+        val toolName: String,
+        val message: String,
     ) : HookContext()
 }
 
 /** Pre-tool hook outcome. */
-public sealed class HookDecision {
+sealed class HookDecision {
     /** Tool proceeds normally. */
-    public data object Continue : HookDecision()
+    data object Continue : HookDecision()
 
     /**
      * Tool is aborted before [executeWeft][dev.weft.tools.WeftTool.executeWeft]
      * runs. The [reason] is surfaced to the LLM as the tool's error
      * message and to the chat UI as a `ToolEvent.Failed`.
      */
-    public data class Deny(public val reason: String) : HookDecision()
+    data class Deny(val reason: String) : HookDecision()
 }
 
 /** Raised inside `WeftTool.execute` when a pre-tool hook returns [HookDecision.Deny]. */
-public class HookDeniedException(
-    public val toolName: String,
-    public val reason: String,
+class HookDeniedException(
+    val toolName: String,
+    val reason: String,
 ) : RuntimeException("Tool '$toolName' denied by hook: $reason")
 
 /**
@@ -134,26 +134,26 @@ public class HookDeniedException(
  * Defaults to [EMPTY] so callers that don't care about hooks pay no
  * runtime cost.
  */
-public class HookRegistry(private val hooks: List<WeftHook> = emptyList()) {
+class HookRegistry(private val hooks: List<WeftHook> = emptyList()) {
 
-    public val isEmpty: Boolean get() = hooks.isEmpty()
+    val isEmpty: Boolean get() = hooks.isEmpty()
 
-    public suspend fun onUserMessage(ctx: HookContext.UserMessage) {
+    suspend fun onUserMessage(ctx: HookContext.UserMessage) {
         if (hooks.isEmpty()) return
         fanOut { it.onUserMessage(ctx) }
     }
 
-    public suspend fun onTurnStart(ctx: HookContext.TurnStart) {
+    suspend fun onTurnStart(ctx: HookContext.TurnStart) {
         if (hooks.isEmpty()) return
         fanOut { it.onTurnStart(ctx) }
     }
 
-    public suspend fun onTurnEnd(ctx: HookContext.TurnEnd) {
+    suspend fun onTurnEnd(ctx: HookContext.TurnEnd) {
         if (hooks.isEmpty()) return
         fanOut { it.onTurnEnd(ctx) }
     }
 
-    public suspend fun onTurnFailed(ctx: HookContext.TurnFailed) {
+    suspend fun onTurnFailed(ctx: HookContext.TurnFailed) {
         if (hooks.isEmpty()) return
         fanOut { it.onTurnFailed(ctx) }
     }
@@ -164,7 +164,7 @@ public class HookRegistry(private val hooks: List<WeftHook> = emptyList()) {
      * Short-circuits so a denying hook can prevent expensive downstream
      * hooks from running.
      */
-    public suspend fun onToolStart(ctx: HookContext.ToolStart): HookDecision {
+    suspend fun onToolStart(ctx: HookContext.ToolStart): HookDecision {
         if (hooks.isEmpty()) return HookDecision.Continue
         for (hook in hooks) {
             val decision = hook.onToolStart(ctx)
@@ -173,12 +173,12 @@ public class HookRegistry(private val hooks: List<WeftHook> = emptyList()) {
         return HookDecision.Continue
     }
 
-    public suspend fun onToolEnd(ctx: HookContext.ToolEnd) {
+    suspend fun onToolEnd(ctx: HookContext.ToolEnd) {
         if (hooks.isEmpty()) return
         fanOut { it.onToolEnd(ctx) }
     }
 
-    public suspend fun onToolFailed(ctx: HookContext.ToolFailed) {
+    suspend fun onToolFailed(ctx: HookContext.ToolFailed) {
         if (hooks.isEmpty()) return
         fanOut { it.onToolFailed(ctx) }
     }
@@ -200,10 +200,10 @@ public class HookRegistry(private val hooks: List<WeftHook> = emptyList()) {
         if (first != null) throw first
     }
 
-    public companion object {
-        public val EMPTY: HookRegistry = HookRegistry(emptyList())
+    companion object {
+        val EMPTY: HookRegistry = HookRegistry(emptyList())
 
         /** Convenience builder for the common 1–3 hooks case. */
-        public fun of(vararg hooks: WeftHook): HookRegistry = HookRegistry(hooks.toList())
+        fun of(vararg hooks: WeftHook): HookRegistry = HookRegistry(hooks.toList())
     }
 }

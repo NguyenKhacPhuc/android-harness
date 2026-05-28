@@ -37,7 +37,7 @@ import kotlinx.serialization.Serializable
  * Parallel fan-out can be reintroduced as a separate tool once the
  * single-target path stabilizes.
  */
-public class DelegateToAgentTool(
+class DelegateToAgentTool(
     ctx: WeftContext,
     /**
      * Build the delegated [WeftAgent] for [agentName]. Closes over the
@@ -82,7 +82,7 @@ public class DelegateToAgentTool(
 ) {
 
     @Serializable
-    public data class Args(
+    data class Args(
         val agent: String,
         val prompt: String,
         val expects: String? = null,
@@ -109,8 +109,8 @@ public class DelegateToAgentTool(
         }
     }
 
-    public companion object {
-        public const val TOOL_NAME: String = "delegate_to_agent"
+    companion object {
+        const val TOOL_NAME: String = "delegate_to_agent"
 
         /**
          * Maximum nesting depth for delegations: A → B → C → D would
@@ -118,7 +118,7 @@ public class DelegateToAgentTool(
          * for legitimate sub-task decomposition while bounding the
          * cost-of-recursion blast radius.
          */
-        public const val MAX_DELEGATION_DEPTH: Int = 3
+        const val MAX_DELEGATION_DEPTH: Int = 3
 
         private fun buildDescription(knownAgents: List<AgentDeclaration>): String {
             val list = knownAgents

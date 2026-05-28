@@ -33,13 +33,13 @@ import kotlinx.coroutines.flow.SharingStarted
  * Subscribe to [isActive] to drive UI affordances (the "Plan mode" chip
  * in the input bar, for example).
  */
-public class PlanSession(
-    public val approvalMode: ApprovalModeHolder = ApprovalModeHolder(),
-    public val planStore: PlanStore = InMemoryPlanStore(),
+class PlanSession(
+    val approvalMode: ApprovalModeHolder = ApprovalModeHolder(),
+    val planStore: PlanStore = InMemoryPlanStore(),
 ) {
 
     /** Enter plan mode. Idempotent. */
-    public fun enter() {
+    fun enter() {
         approvalMode.set(ApprovalMode.Plan)
     }
 
@@ -49,7 +49,7 @@ public class PlanSession(
      * back to [ApprovalMode.Default] and the store is cleared so the
      * next session starts fresh.
      */
-    public fun forceCancel() {
+    fun forceCancel() {
         approvalMode.set(ApprovalMode.Default)
         planStore.clear()
     }
@@ -62,7 +62,7 @@ public class PlanSession(
      * handles the mode flip itself; calling this on top would queue an
      * extra user turn.
      */
-    public suspend fun approveAndExecute(agent: WeftAgent): String {
+    suspend fun approveAndExecute(agent: WeftAgent): String {
         val snapshot = planStore.current()
         val plan = snapshot.plan
         check(plan != null) { "Cannot approve — no plan in store." }
@@ -81,7 +81,7 @@ public class PlanSession(
      * [ApprovalMode.Plan] so the agent's next `exit_plan_mode` call
      * goes through the same gate.
      */
-    public suspend fun refine(agent: WeftAgent, feedback: String): String {
+    suspend fun refine(agent: WeftAgent, feedback: String): String {
         planStore.markRefining(feedback)
         return agent.send("Refine the plan based on this feedback: $feedback")
     }
@@ -91,7 +91,7 @@ public class PlanSession(
      * Drive the input-bar chip / status indicator from this. Cold flow
      * — [scope] specifies who owns the subscription.
      */
-    public fun isActive(scope: CoroutineScope): StateFlow<Boolean> =
+    fun isActive(scope: CoroutineScope): StateFlow<Boolean> =
         approvalMode.state
             .map { it == ApprovalMode.Plan }
             .stateIn(scope, SharingStarted.Eagerly, approvalMode.current() == ApprovalMode.Plan)
@@ -101,7 +101,7 @@ public class PlanSession(
      * the host should be rendering. UIs gate the plan-review sheet on
      * this.
      */
-    public fun isAwaitingApproval(scope: CoroutineScope): StateFlow<Boolean> =
+    fun isAwaitingApproval(scope: CoroutineScope): StateFlow<Boolean> =
         planStore.state
             .map { it.state == PlanState.AwaitingApproval }
             .stateIn(scope, SharingStarted.Eagerly, planStore.current().state == PlanState.AwaitingApproval)

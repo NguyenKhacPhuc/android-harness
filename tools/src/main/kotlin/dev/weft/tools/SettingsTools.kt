@@ -16,7 +16,7 @@ import kotlinx.serialization.Serializable
  * NOT for changing settings programmatically — that's WRITE_SETTINGS
  * and is intentionally out of scope.
  */
-public class SettingsOpenTool(ctx: WeftContext) :
+class SettingsOpenTool(ctx: WeftContext) :
     WeftTool<SettingsOpenTool.Args, SettingsOpenTool.Result>(
         ctx = ctx,
         argsType = typeToken<Args>(),
@@ -40,10 +40,10 @@ public class SettingsOpenTool(ctx: WeftContext) :
     ) {
 
     @Serializable
-    public data class Args(val panel: String)
+    data class Args(val panel: String)
 
     @Serializable
-    public data class Result(val opened: Boolean, val resolvedPanel: String? = null)
+    data class Result(val opened: Boolean, val resolvedPanel: String? = null)
 
     override suspend fun executeWeft(args: Args): Result {
         val panel = runCatching { SettingsPanel.valueOf(args.panel.trim().uppercase()) }

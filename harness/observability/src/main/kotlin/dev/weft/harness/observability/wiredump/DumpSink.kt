@@ -15,19 +15,19 @@ import java.util.concurrent.atomic.AtomicReference
  * from [write] is logged and skipped; the agent loop never sees the
  * failure.
  */
-public interface DumpSink {
-    public suspend fun write(capture: WireCapture)
+interface DumpSink {
+    suspend fun write(capture: WireCapture)
 
     /** Flush + close any open resources. Idempotent. */
-    public fun close()
+    fun close()
 }
 
 /**
  * Fans out to multiple sinks. Errors from one sink do not stop the
  * others — each gets its own try/catch.
  */
-public class CompoundSink(private val sinks: List<DumpSink>) : DumpSink {
-    public constructor(vararg sinks: DumpSink) : this(sinks.toList())
+class CompoundSink(private val sinks: List<DumpSink>) : DumpSink {
+    constructor(vararg sinks: DumpSink) : this(sinks.toList())
 
     override suspend fun write(capture: WireCapture) {
         for (s in sinks) runCatching { s.write(capture) }
@@ -44,7 +44,7 @@ public class CompoundSink(private val sinks: List<DumpSink>) : DumpSink {
  *
  * Thread-safe: writes are synchronized on the writer.
  */
-public class JsonLinesSink(
+class JsonLinesSink(
     private val file: File,
     private val json: Json = DEFAULT_JSON,
 ) : DumpSink {
@@ -99,7 +99,7 @@ public class JsonLinesSink(
  * Use alongside [JsonLinesSink] (via [CompoundSink]) — the JSON-lines
  * is the queryable index, the per-turn files are the readable detail.
  */
-public class PerTurnSink(
+class PerTurnSink(
     private val directory: File,
     private val prefix: String = "turn-",
     private val json: Json = DEFAULT_JSON,
@@ -137,10 +137,10 @@ public class PerTurnSink(
  * the whole read — a half-written line at the tail shouldn't block
  * loading the rest.
  */
-public object JsonLinesReader {
+object JsonLinesReader {
     private val json = Json { ignoreUnknownKeys = true; isLenient = true }
 
-    public fun readAll(file: File): List<WireCapture> {
+    fun readAll(file: File): List<WireCapture> {
         if (!file.exists()) return emptyList()
         val out = mutableListOf<WireCapture>()
         file.useLines { lines ->

@@ -33,7 +33,7 @@ import kotlin.coroutines.resume
  * on the main thread. We hop dispatchers internally so callers can invoke
  * from any context.
  */
-public class AndroidBiometrics(context: Context) : Biometrics {
+class AndroidBiometrics(context: Context) : Biometrics {
 
     private val app: Application = context.applicationContext as Application
     private val mgr: BiometricManager = BiometricManager.from(app)

@@ -52,14 +52,14 @@ import dev.weft.contracts.UiBridge
  *   - **Disambiguate from neighbors.** When two tools sound similar,
  *     add a sentence like "NOT for X — use `other_tool` for X."
  */
-public abstract class WeftTool<TArgs, TResult>(
-    public val ctx: WeftContext,
+abstract class WeftTool<TArgs, TResult>(
+    val ctx: WeftContext,
     argsType: TypeToken,
     resultType: TypeToken,
     descriptor: ToolDescriptor,
-    public val destructive: Boolean = false,
-    public val sideEffecting: Boolean = false,
-    public val requiredPermissions: Set<Permission> = emptySet(),
+    val destructive: Boolean = false,
+    val sideEffecting: Boolean = false,
+    val requiredPermissions: Set<Permission> = emptySet(),
     /**
      * Coarse risk classification. Defaults derive from [destructive] /
      * [sideEffecting] so existing tools classify correctly without
@@ -72,7 +72,7 @@ public abstract class WeftTool<TArgs, TResult>(
      * sideEffecting `log_event` that's safe to run in [ApprovalMode.ReadOnly]
      * should declare `risk = ToolRisk.Read`.
      */
-    public val risk: ToolRisk = when {
+    val risk: ToolRisk = when {
         destructive -> ToolRisk.Destructive
         sideEffecting -> ToolRisk.Write
         else -> ToolRisk.Read
@@ -88,7 +88,7 @@ public abstract class WeftTool<TArgs, TResult>(
      * Apps that ship their own plan-mode helpers (e.g. a custom
      * `propose_design`) set it on those tools too.
      */
-    public val planAware: Boolean = false,
+    val planAware: Boolean = false,
 ) : Tool<TArgs, TResult>(
     argsType = argsType,
     resultType = resultType,
@@ -96,15 +96,15 @@ public abstract class WeftTool<TArgs, TResult>(
 ) {
 
     /** Per-tool namespaced storage. Created lazily on first access. */
-    public val storage: ScriptStorage by lazy { ctx.storageFactory(name) }
+    val storage: ScriptStorage by lazy { ctx.storageFactory(name) }
 
     /** The OS capability umbrella. Tools call into this for platform behavior. */
-    public val os: OsCapabilities get() = ctx.os
+    val os: OsCapabilities get() = ctx.os
 
     /** UI host. Use [UiBridge.askUser], [UiBridge.confirmDestructive], [UiBridge.emit]. */
-    public val ui: UiBridge get() = ctx.ui
+    val ui: UiBridge get() = ctx.ui
 
-    public abstract suspend fun executeWeft(args: TArgs): TResult
+    abstract suspend fun executeWeft(args: TArgs): TResult
 
     final override suspend fun execute(args: TArgs): TResult {
         runApprovalGate()
@@ -241,7 +241,7 @@ public abstract class WeftTool<TArgs, TResult>(
  * here that it passes to the agent so tool-level and turn-level hooks
  * fire from a unified set.
  */
-public data class WeftContext(
+data class WeftContext(
     val os: OsCapabilities,
     val ui: UiBridge,
     val storageFactory: (toolName: String) -> ScriptStorage,
@@ -269,14 +269,14 @@ public data class WeftContext(
     val planStore: PlanStore = InMemoryPlanStore(),
 )
 
-public class PermissionDeniedException(
-    public val missing: Set<Permission>,
-    public val toolName: String,
+class PermissionDeniedException(
+    val missing: Set<Permission>,
+    val toolName: String,
 ) : RuntimeException(
     "Permission denied for $toolName: ${missing.joinToString { it.name }}.",
 )
 
-public class UserCancelledException(public val toolName: String) :
+class UserCancelledException(val toolName: String) :
     RuntimeException("User declined to run $toolName.")
 
 /**
@@ -284,10 +284,10 @@ public class UserCancelledException(public val toolName: String) :
  * [ApprovalMode] — [ApprovalMode.ReadOnly] rejecting a Write tool, for
  * example. The LLM sees this as a tool failure and can react.
  */
-public class ApprovalDeniedException(
-    public val toolName: String,
-    public val risk: ToolRisk,
-    public val mode: ApprovalMode,
+class ApprovalDeniedException(
+    val toolName: String,
+    val risk: ToolRisk,
+    val mode: ApprovalMode,
 ) : RuntimeException(
     "Tool '$toolName' (risk=$risk) blocked by approval mode $mode.",
 )
