@@ -95,6 +95,10 @@ napier = { module = "io.github.aakira:napier", version.ref = "napier" }
 ktor-client-core = { module = "io.ktor:ktor-client-core", version.ref = "ktor" }
 ktor-client-content-negotiation = { module = "io.ktor:ktor-client-content-negotiation", version.ref = "ktor" }
 ktor-client-okhttp = { module = "io.ktor:ktor-client-okhttp", version.ref = "ktor" }
+# Darwin engine — the iOS-native HttpClient backend Ktor needs for
+# WeftRuntime's iosMain factory + Coil 3's iOS image loading network
+# path. Pure Kotlin/Native; bridges NSURLSession underneath.
+ktor-client-darwin = { module = "io.ktor:ktor-client-darwin", version.ref = "ktor" }
 
 # OkHttp version-alignment patch. Koog's AWS Smithy http engine pulls
 # OkHttp 5.3.2; Ktor's ktor-client-okhttp brings in OkHttp 4.12.0 + the

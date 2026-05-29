@@ -180,6 +180,15 @@ kotlin {
                 // (Kotlin/Native links libsqlite3 from the system) so
                 // we don't need an Osmerion-equivalent on iOS.
                 implementation(libs.sqldelight.native.driver)
+                // Ktor Darwin engine — wires the iOS network client
+                // for `WeftRuntime.create(...)`'s iOS factory.
+                implementation(libs.ktor.client.darwin)
+                // Ktor content-negotiation + json — the iOS factory
+                // installs ContentNegotiation on the network client
+                // so MCP discovery can reuse it (mirroring the Android
+                // factory).
+                implementation(libs.ktor.client.content.negotiation)
+                implementation(libs.ktor.serialization.kotlinx.json)
             }
         }
 
