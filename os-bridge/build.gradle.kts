@@ -38,9 +38,21 @@ kotlin {
     iosSimulatorArm64()
 
     sourceSets {
-        androidMain.dependencies {
+        commonMain.dependencies {
+            // Exposed to both androidMain (the real `Android*` impls)
+            // and iosMain (the `Ios*` TODO stubs). Hosts that depend on
+            // os-bridge see `OsCapabilities` + every sub-interface
+            // through this dep.
             api(project(":contracts"))
+            // Stubs need kotlinx-serialization-json for the few
+            // sub-interfaces (UserContext.snapshot) whose return types
+            // are JsonObject.
+            implementation(libs.kotlinx.serialization.json)
+            // Same coroutine surface the stubs' suspend methods reference.
+            implementation(libs.kotlinx.coroutines.core)
+        }
 
+        androidMain.dependencies {
             implementation(libs.androidx.security.crypto)
             implementation(libs.androidx.core.ktx)
             implementation(libs.androidx.browser)
