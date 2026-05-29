@@ -349,7 +349,7 @@ public class WeftRuntime(
      * tests can pass a JDBC in-memory variant.
      */
     private val database: dev.weft.android.db.WeftDatabase =
-        WeftDatabaseFactory.create(context),
+        WeftDatabaseFactory.create(dev.weft.android.persistence.WeftPlatform(context)),
 ) {
     public val keyVault: KeyVault get() = os.keyVault
 
@@ -1309,7 +1309,9 @@ public class WeftRuntime(
             agents: List<dev.weft.harness.agents.AgentDeclaration> = emptyList(),
         ): WeftRuntime {
             val appContext = context.applicationContext
-            val database = WeftDatabaseFactory.create(appContext)
+            val database = WeftDatabaseFactory.create(
+                dev.weft.android.persistence.WeftPlatform(appContext),
+            )
             val scheduledNotificationStore =
                 dev.weft.android.persistence.SqlDelightScheduledNotificationKeyStore(database)
             return WeftRuntime(

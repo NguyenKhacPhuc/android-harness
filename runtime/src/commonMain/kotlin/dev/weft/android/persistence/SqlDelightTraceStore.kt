@@ -1,7 +1,11 @@
+@file:OptIn(kotlin.time.ExperimentalTime::class, kotlin.uuid.ExperimentalUuidApi::class)
+
 package dev.weft.android.persistence
 
 import app.cash.sqldelight.coroutines.asFlow
 import app.cash.sqldelight.coroutines.mapToList
+import kotlin.time.Clock
+import kotlin.uuid.Uuid
 import dev.weft.harness.observability.AgentTrace
 import dev.weft.harness.observability.LlmCallTrace
 import dev.weft.harness.observability.ToolCallTrace
@@ -16,7 +20,7 @@ import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.stateIn
-import java.util.UUID
+
 
 /**
  * SQLDelight-backed [TraceStore]. Each user turn writes one row into
@@ -40,9 +44,9 @@ public class SqlDelightTraceStore(
 ) : TraceStore {
 
     override val traces: StateFlow<List<AgentTrace>> = combine(
-        db.tracesQueries.selectAllTraces().asFlow().mapToList(Dispatchers.IO),
-        db.tracesQueries.selectAllLlmCalls().asFlow().mapToList(Dispatchers.IO),
-        db.tracesQueries.selectAllToolCalls().asFlow().mapToList(Dispatchers.IO),
+        db.tracesQueries.selectAllTraces().asFlow().mapToList(Dispatchers.Default),
+        db.tracesQueries.selectAllLlmCalls().asFlow().mapToList(Dispatchers.Default),
+        db.tracesQueries.selectAllToolCalls().asFlow().mapToList(Dispatchers.Default),
     ) { traceRows, llmRows, toolRows ->
         val llmByTrace = llmRows.groupBy { it.trace_id }
         val toolByTrace = toolRows.groupBy { it.trace_id }
@@ -97,7 +101,7 @@ public class SqlDelightTraceStore(
             db.tracesQueries.insertTrace(
                 id = id,
                 conversation_id = conversationId,
-                start_epoch_ms = System.currentTimeMillis(),
+                start_epoch_ms = Clock.System.now().toEpochMilliseconds(),
                 user_message = userMessage,
                 parent_trace_id = parentTraceId,
             )
@@ -114,7 +118,7 @@ public class SqlDelightTraceStore(
 
     override suspend fun completeTrace(traceId: String, finalAssistantMessage: String?) {
         db.tracesQueries.completeTrace(
-            endEpochMs = System.currentTimeMillis(),
+            endEpochMs = Clock.System.now().toEpochMilliseconds(),
             finalMessage = finalAssistantMessage,
             id = traceId,
         )
@@ -122,7 +126,7 @@ public class SqlDelightTraceStore(
 
     override suspend fun failTrace(traceId: String, errorMessage: String) {
         db.tracesQueries.failTrace(
-            endEpochMs = System.currentTimeMillis(),
+            endEpochMs = Clock.System.now().toEpochMilliseconds(),
             errorMessage = errorMessage,
             id = traceId,
         )
@@ -136,7 +140,7 @@ public class SqlDelightTraceStore(
                 id = id,
                 trace_id = traceId,
                 seq = seq,
-                start_epoch_ms = System.currentTimeMillis(),
+                start_epoch_ms = Clock.System.now().toEpochMilliseconds(),
                 model = model,
             )
         }
@@ -153,7 +157,7 @@ public class SqlDelightTraceStore(
         cacheWriteTokens: Int?,
     ) {
         db.tracesQueries.completeLlmCall(
-            endEpochMs = System.currentTimeMillis(),
+            endEpochMs = Clock.System.now().toEpochMilliseconds(),
             inputTokens = inputTokens?.toLong(),
             outputTokens = outputTokens?.toLong(),
             totalTokens = totalTokens?.toLong(),
@@ -175,7 +179,7 @@ public class SqlDelightTraceStore(
                 id = id,
                 trace_id = traceId,
                 seq = seq,
-                start_epoch_ms = System.currentTimeMillis(),
+                start_epoch_ms = Clock.System.now().toEpochMilliseconds(),
                 tool_name = toolName,
                 args_preview = argsPreview,
             )
@@ -189,7 +193,7 @@ public class SqlDelightTraceStore(
         resultPreview: String?,
     ) {
         db.tracesQueries.completeToolCall(
-            endEpochMs = System.currentTimeMillis(),
+            endEpochMs = Clock.System.now().toEpochMilliseconds(),
             resultPreview = resultPreview,
             id = toolCallId,
         )
@@ -201,7 +205,7 @@ public class SqlDelightTraceStore(
         errorMessage: String,
     ) {
         db.tracesQueries.failToolCall(
-            endEpochMs = System.currentTimeMillis(),
+            endEpochMs = Clock.System.now().toEpochMilliseconds(),
             errorMessage = errorMessage,
             id = toolCallId,
         )
@@ -230,7 +234,7 @@ public class SqlDelightTraceStore(
         db.tracesQueries.deleteTraceById(traceId)
     }
 
-    private fun newId(prefix: String): String = "$prefix-${UUID.randomUUID().toString().take(ID_LEN)}"
+    private fun newId(prefix: String): String = "$prefix-${Uuid.random().toHexString().take(ID_LEN)}"
 
     public companion object {
         public const val DEFAULT_MAX_TRACES: Int = 100

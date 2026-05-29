@@ -73,6 +73,7 @@ kotlin {
     jvmToolchain(17)
     applyDefaultHierarchyTemplate()
 
+
     androidTarget {
         // We intentionally omit the per-target `compilerOptions { jvmTarget = … }`
         // block here. SQLDelight 2.0.2's Gradle plugin pulls an older
@@ -94,21 +95,38 @@ kotlin {
     explicitApi()
 
     sourceSets {
+        commonMain.dependencies {
+            // Contract surface that the commonMain persistence stores
+            // implement (UsageStore, MemoryStore, TraceStore, …).
+            api(project(":contracts"))
+            api(project(":harness:cost"))
+            api(project(":harness:memory"))
+            api(project(":harness:conversation"))
+            api(project(":harness:observability"))
+
+            // SQLDelight — schema + queries live in commonMain/sqldelight,
+            // so the generated `WeftDatabase` type is commonMain. The
+            // store classes operate on `WeftDatabase` + the coroutines
+            // extensions; the per-platform driver is wired by the
+            // `expect fun createWeftDriver` actuals below.
+            implementation(libs.sqldelight.coroutines.extensions)
+
+            // kotlinx-datetime + kotlin.time — replaces System.currentTimeMillis()
+            // and java.time.LocalDate in the stores.
+            implementation(libs.kotlinx.datetime)
+            implementation(libs.kotlinx.coroutines.core)
+        }
+
         androidMain.dependencies {
             // Weft layers
-            api(project(":contracts"))
             api(project(":tools"))
             api(project(":os-bridge"))
             api(project(":security"))
             api(project(":harness:reliability"))
-            api(project(":harness:observability"))
-            api(project(":harness:cost"))
             api(project(":harness:behavior"))
-            api(project(":harness:memory"))
-            api(project(":harness:conversation"))
             // Agent core (WeftAgent, sub-agents, routing, multimodal, cache,
-            // streaming). KMP-published; :runtime keeps the composition
-            // root (WeftRuntime), persistence (SqlDelight*), credentials
+            // streaming). KMP-published; :runtime's androidMain keeps the
+            // composition root (WeftRuntime), Android driver, credentials
             // (Android Keystore), and OS-bridge wiring.
             api(project(":harness:agents"))
             // Skills — app-handled slash-command primitives. Surfaced as
@@ -138,16 +156,25 @@ kotlin {
             // the first streaming call).
             implementation(libs.okhttp.sse)
 
-            // SQLDelight — persistence backend for MemoryStore, TraceStore,
-            // ScriptStorage, ScheduledNotificationStore, conversation
-            // history, UsageStore.
+            // Android-specific SQLDelight driver — wires the commonMain
+            // `createWeftDriver` actual. The driver itself is
+            // androidMain-only because it depends on `Context`.
             implementation(libs.sqldelight.android.driver)
-            implementation(libs.sqldelight.coroutines.extensions)
 
             // Bundled SQLite — guarantees FTS5 + modern features
             // regardless of device. Wired via SupportSQLiteOpenHelper.Factory
-            // in WeftDatabaseFactory.
+            // in the androidMain `createWeftDriver` actual.
             implementation(libs.osmerion.sqlite.android)
+        }
+
+        val iosMain by getting {
+            dependencies {
+                // SQLDelight's Native driver — wires the iosMain
+                // `createWeftDriver` actual. Bundles its own SQLite
+                // (Kotlin/Native links libsqlite3 from the system) so
+                // we don't need an Osmerion-equivalent on iOS.
+                implementation(libs.sqldelight.native.driver)
+            }
         }
 
         val androidUnitTest by getting {

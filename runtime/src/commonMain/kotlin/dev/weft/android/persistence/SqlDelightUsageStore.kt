@@ -1,3 +1,5 @@
+@file:OptIn(kotlin.time.ExperimentalTime::class)
+
 package dev.weft.android.persistence
 
 import app.cash.sqldelight.coroutines.asFlow
@@ -13,8 +15,11 @@ import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.stateIn
-import java.time.LocalDate
-import java.time.ZoneId
+import kotlinx.datetime.LocalDate
+import kotlinx.datetime.TimeZone
+import kotlinx.datetime.toLocalDateTime
+import kotlin.concurrent.Volatile
+import kotlin.time.Clock
 
 /**
  * SQLDelight-backed [UsageStore]. Per-day aggregates persist; lifetime
@@ -34,7 +39,9 @@ public class SqlDelightUsageStore(
     private val db: WeftDatabase,
     coroutineScope: CoroutineScope,
     private val priceTable: PriceTable = PriceTable(),
-    private val nowProvider: () -> LocalDate = { LocalDate.now(ZoneId.systemDefault()) },
+    private val nowProvider: () -> LocalDate = {
+        Clock.System.now().toLocalDateTime(TimeZone.currentSystemDefault()).date
+    },
 ) : UsageStore {
 
     /**
@@ -55,8 +62,8 @@ public class SqlDelightUsageStore(
     private val volatileBump = MutableStateFlow(0L)
 
     public override val totals: StateFlow<UsageTotals> = combine(
-        db.usageQueries.selectAll().asFlow().mapToList(Dispatchers.IO),
-        db.usageQueries.selectLifetimeByAgent().asFlow().mapToList(Dispatchers.IO),
+        db.usageQueries.selectAll().asFlow().mapToList(Dispatchers.Default),
+        db.usageQueries.selectLifetimeByAgent().asFlow().mapToList(Dispatchers.Default),
         volatileBump,
     ) { dayRows, agentRows, _ ->
         val byDay = dayRows.associate { it.day to (it.usd_total ?: 0.0) }

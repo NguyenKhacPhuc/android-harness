@@ -15,7 +15,10 @@ import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.serialization.encodeToString
 import kotlinx.serialization.json.Json
-import java.util.UUID
+import kotlin.time.Clock
+import kotlin.time.ExperimentalTime
+import kotlin.uuid.ExperimentalUuidApi
+import kotlin.uuid.Uuid
 
 /**
  * SQLDelight-backed [MemoryStore]. Memories survive app restart.
@@ -38,18 +41,19 @@ public class SqlDelightMemoryStore(
     public override val memories: StateFlow<List<MemoryEntry>> = db.memoriesQueries
         .selectAll()
         .asFlow()
-        .mapToList(Dispatchers.IO)
+        .mapToList(Dispatchers.Default)
         .map { rows -> rows.map { it.toEntry() } }
         .stateIn(coroutineScope, SharingStarted.Eagerly, emptyList())
 
+    @OptIn(ExperimentalTime::class, ExperimentalUuidApi::class)
     public override suspend fun store(content: String, tags: List<String>, scope: MemoryScope): MemoryEntry {
         require(scope != MemoryScope.ANY) { "Cannot store with scope=ANY — pick SESSION or PERMANENT" }
         val entry = MemoryEntry(
-            id = "mem-${UUID.randomUUID().toString().take(MEMORY_ID_LEN)}",
+            id = "mem-${Uuid.random().toHexString().take(MEMORY_ID_LEN)}",
             content = content,
             tags = tags.distinct(),
             scope = scope,
-            storedAtEpochMs = System.currentTimeMillis(),
+            storedAtEpochMs = Clock.System.now().toEpochMilliseconds(),
         )
         db.memoriesQueries.insert(
             id = entry.id,

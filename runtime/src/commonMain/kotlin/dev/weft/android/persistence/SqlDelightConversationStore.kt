@@ -1,3 +1,5 @@
+@file:OptIn(kotlin.time.ExperimentalTime::class, kotlin.uuid.ExperimentalUuidApi::class)
+
 package dev.weft.android.persistence
 
 import app.cash.sqldelight.coroutines.asFlow
@@ -14,7 +16,10 @@ import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.stateIn
-import java.util.UUID
+import kotlin.time.Clock
+import kotlin.time.ExperimentalTime
+import kotlin.uuid.ExperimentalUuidApi
+import kotlin.uuid.Uuid
 
 /**
  * SQLDelight-backed [ConversationStore]. One thread per row in
@@ -39,7 +44,7 @@ public class SqlDelightConversationStore(
     public override val conversations: StateFlow<List<ConversationSummary>> = db.conversationsQueries
         .selectAllConversations()
         .asFlow()
-        .mapToList(Dispatchers.IO)
+        .mapToList(Dispatchers.Default)
         .map { rows ->
             rows.map { ConversationSummary(it.id, it.title, it.created_at_ms, it.last_message_at_ms) }
         }
@@ -49,8 +54,8 @@ public class SqlDelightConversationStore(
         db.conversationsQueries.selectMostRecentConversation().executeAsOneOrNull()?.id
 
     public override suspend fun newConversation(): String {
-        val id = "conv-${UUID.randomUUID().toString().take(CONVERSATION_ID_LEN)}"
-        val now = System.currentTimeMillis()
+        val id = "conv-${Uuid.random().toHexString().take(CONVERSATION_ID_LEN)}"
+        val now = Clock.System.now().toEpochMilliseconds()
         db.conversationsQueries.transaction {
             db.conversationsQueries.insertConversation(id = id, nowMs = now)
             val toEvict = db.conversationsQueries
@@ -69,7 +74,7 @@ public class SqlDelightConversationStore(
         // FTS5 rejects empty match patterns and prefix-only matches are
         // pointless for an empty query — fast-path to selectAll.
         val source = if (trimmed.isEmpty()) {
-            db.conversationsQueries.selectAllConversations().asFlow().mapToList(Dispatchers.IO)
+            db.conversationsQueries.selectAllConversations().asFlow().mapToList(Dispatchers.Default)
         } else {
             // FTS5 prefix match. We sanitize the user-supplied string into a
             // safe FTS5 expression: strip everything that isn't word-class
@@ -81,11 +86,11 @@ public class SqlDelightConversationStore(
                 // only via the existing LIKE-based query.
                 db.conversationsQueries.searchConversations(trimmed)
                     .asFlow()
-                    .mapToList(Dispatchers.IO)
+                    .mapToList(Dispatchers.Default)
             } else {
                 db.conversationsQueries.searchConversationsFts(like = trimmed, fts = fts)
                     .asFlow()
-                    .mapToList(Dispatchers.IO)
+                    .mapToList(Dispatchers.Default)
             }
         }
         return source.map { rows ->
@@ -96,7 +101,7 @@ public class SqlDelightConversationStore(
     public override fun messagesFor(conversationId: String): Flow<List<PersistedMessage>> =
         db.conversationsQueries.selectMessagesByConversation(conversationId)
             .asFlow()
-            .mapToList(Dispatchers.IO)
+            .mapToList(Dispatchers.Default)
             .map { rows ->
                 rows.map {
                     PersistedMessage(
@@ -130,8 +135,8 @@ public class SqlDelightConversationStore(
         content: String,
         agentName: String,
     ) {
-        val now = System.currentTimeMillis()
-        val msgId = "msg-${UUID.randomUUID().toString().take(MESSAGE_ID_LEN)}"
+        val now = Clock.System.now().toEpochMilliseconds()
+        val msgId = "msg-${Uuid.random().toHexString().take(MESSAGE_ID_LEN)}"
         db.conversationsQueries.transaction {
             val seq = db.conversationsQueries.nextMessageSeq(conversationId).executeAsOne()
             db.conversationsQueries.insertMessage(
@@ -179,7 +184,7 @@ public class SqlDelightConversationStore(
         // own createdAt when we emptied the thread.
         val newLastAt = if (lastUserIdx == 0) {
             db.conversationsQueries.selectConversation(conversationId)
-                .executeAsOneOrNull()?.created_at_ms ?: System.currentTimeMillis()
+                .executeAsOneOrNull()?.created_at_ms ?: Clock.System.now().toEpochMilliseconds()
         } else {
             msgs[lastUserIdx - 1].createdAtMs
         }
