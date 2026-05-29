@@ -96,13 +96,37 @@ kotlin {
 
     sourceSets {
         commonMain.dependencies {
-            // Contract surface that the commonMain persistence stores
-            // implement (UsageStore, MemoryStore, TraceStore, …).
+            // Contracts + everything WeftRuntime's class body references.
+            // WeftRuntime itself now lives in commonMain (Phase 2); only
+            // the Android-specific `WeftRuntime.create(...)` convenience
+            // factory + `AndroidOsCapabilities` wiring + the OkHttp
+            // engine wiring live in androidMain.
             api(project(":contracts"))
+            api(project(":tools"))
+            api(project(":security"))
+            api(project(":harness:reliability"))
+            api(project(":harness:behavior"))
             api(project(":harness:cost"))
             api(project(":harness:memory"))
             api(project(":harness:conversation"))
             api(project(":harness:observability"))
+            api(project(":harness:agents"))
+            api(project(":harness:prompt"))
+            // Skills — app-handled slash-command primitives. Surfaced as
+            // `api` because consumer apps reference Skill / SkillRegistry
+            // / withHelp directly when wiring their chat surface.
+            api(project(":harness:skills"))
+            // Optional MCP support — the suspend `createWithMcpServers`
+            // factory lives here. Apps that don't configure MCP servers
+            // still pay for the small type surface, but the network code
+            // path stays cold.
+            api(project(":mcp"))
+
+            api(libs.koog.agents)
+            // Extra Koog provider client not bundled with koog-agents.
+            // DeepSeek rides on OpenAILLMClient (api.deepseek.com) since
+            // the dedicated Koog DeepSeek client isn't published at 1.0.0.
+            api(libs.koog.prompt.executor.openrouter.client)
 
             // SQLDelight — schema + queries live in commonMain/sqldelight,
             // so the generated `WeftDatabase` type is commonMain. The
@@ -115,36 +139,18 @@ kotlin {
             // and java.time.LocalDate in the stores.
             implementation(libs.kotlinx.datetime)
             implementation(libs.kotlinx.coroutines.core)
+
+            // Ktor — WeftRuntime's commonMain class body takes an
+            // HttpClient via constructor and threads it into MCP +
+            // `network_fetch` plumbing. The engine (OkHttp / Darwin /
+            // CIO / …) is wired per-platform in the host factory.
+            api(libs.ktor.client.core)
         }
 
         androidMain.dependencies {
-            // Weft layers
-            api(project(":tools"))
+            // Android-only OS bridge — wires `AndroidOsCapabilities.create`
+            // from the Android `WeftRuntime.create(...)` factory.
             api(project(":os-bridge"))
-            api(project(":security"))
-            api(project(":harness:reliability"))
-            api(project(":harness:behavior"))
-            // Agent core (WeftAgent, sub-agents, routing, multimodal, cache,
-            // streaming). KMP-published; :runtime's androidMain keeps the
-            // composition root (WeftRuntime), Android driver, credentials
-            // (Android Keystore), and OS-bridge wiring.
-            api(project(":harness:agents"))
-            // Skills — app-handled slash-command primitives. Surfaced as
-            // `api` because consumer apps reference Skill / SkillRegistry
-            // / withHelp directly when wiring their chat surface.
-            api(project(":harness:skills"))
-
-            // Optional MCP support — the suspend `createWithMcpServers`
-            // factory lives here. Apps that don't configure MCP servers
-            // still pay for the small type surface, but the network code
-            // path stays cold.
-            api(project(":mcp"))
-
-            api(libs.koog.agents)
-            // Extra Koog provider client not bundled with koog-agents.
-            // DeepSeek rides on OpenAILLMClient (api.deepseek.com) since
-            // the dedicated Koog DeepSeek client isn't published at 1.0.0.
-            api(libs.koog.prompt.executor.openrouter.client)
 
             implementation(libs.kotlinx.coroutines.android)
             // OkHttp engine for the substrate's whitelisting HTTP client

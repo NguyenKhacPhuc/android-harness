@@ -7,7 +7,6 @@ import ai.koog.prompt.executor.llms.MultiLLMPromptExecutor
 import ai.koog.prompt.llm.LLMCapability
 import ai.koog.prompt.llm.LLMProvider
 import ai.koog.prompt.llm.LLModel
-import android.content.Context
 import dev.weft.contracts.ComponentMetadata
 import dev.weft.contracts.ContextProvider
 import dev.weft.contracts.ContextRegistry
@@ -32,7 +31,6 @@ import dev.weft.mcp.McpRemoteTool
 import dev.weft.mcp.McpServerConfig
 import dev.weft.mcp.McpToolDescriptor
 import dev.weft.mcp.translateToKoogDescriptor
-import dev.weft.osbridge.AndroidOsCapabilities
 import dev.weft.security.NetworkPolicy
 import dev.weft.security.whitelistingHttpClient
 import dev.weft.harness.conversation.ConversationStore
@@ -136,7 +134,6 @@ import dev.weft.tools.UiNotifyTool
 import dev.weft.tools.UiRenderTool
 import dev.weft.tools.UiRequestPermissionTool
 import dev.weft.tools.context.DeviceContextProvider
-import io.ktor.client.engine.okhttp.OkHttp
 import io.ktor.client.plugins.contentnegotiation.ContentNegotiation
 import io.ktor.serialization.kotlinx.json.json
 import kotlinx.coroutines.CompletableDeferred
@@ -172,7 +169,6 @@ import kotlin.time.Duration.Companion.seconds
  *   - the UI surface (compose with `WeftUi` from `:substrate:android-ui`).
  */
 public class WeftRuntime(
-    public val context: Context,
     public val os: OsCapabilities,
     public val uiBridge: UiBridge,
     /**
@@ -345,11 +341,28 @@ public class WeftRuntime(
     private val mcpDiscoveryTimeout: Duration = DEFAULT_MCP_DISCOVERY_TIMEOUT,
     /**
      * SQLDelight database backing every persistent store the substrate
-     * ships. Built by [WeftRuntime.create] from the app's context;
-     * tests can pass a JDBC in-memory variant.
+     * ships. Built by `WeftRuntime.create` from the app's platform
+     * handle; tests can pass a JDBC in-memory variant; iOS hosts pass
+     * a [NativeSqliteDriver]-backed variant.
      */
-    private val database: dev.weft.android.db.WeftDatabase =
-        WeftDatabaseFactory.create(dev.weft.android.persistence.WeftPlatform(context)),
+    private val database: dev.weft.android.db.WeftDatabase,
+    /**
+     * HTTP client used by `network_fetch` (and the MCP transport when
+     * one is configured). [Companion.create] on Android wires a
+     * Ktor + OkHttp client wrapped with the host-allowlist policy; iOS
+     * hosts wire Ktor + Darwin similarly. Apps can supply their own —
+     * useful for adding tracing, custom retry, or a corporate proxy.
+     */
+    private val networkClient: io.ktor.client.HttpClient,
+    /**
+     * Per-turn device snapshot prepended to the user message. Android's
+     * `create` factory wires the substrate's built-in
+     * `deviceSnapshot(context)` (Build.VERSION + locale + connectivity);
+     * iOS hosts wire a UIDevice-backed equivalent. Default returns
+     * empty — the LLM still gets all the other context, just without a
+     * platform-specific device block.
+     */
+    private val deviceSnapshotProvider: () -> String = { "" },
 ) {
     public val keyVault: KeyVault get() = os.keyVault
 
@@ -393,7 +406,9 @@ public class WeftRuntime(
         listOf(DeviceContextProvider(os)) + extraContextProviders,
     )
 
-    private val networkClient = whitelistingHttpClient(engine = OkHttp.create(), policy = networkPolicy)
+    // `networkClient` is now a constructor arg — `Companion.create()`
+    // wires the OkHttp-backed whitelisting variant on Android, and the
+    // policy stays accessible separately via the `networkPolicy` field.
 
     /**
      * Coroutine scope tied to the runtime's lifetime. Used by Flow-backed
@@ -696,13 +711,13 @@ public class WeftRuntime(
         if (mcpServers.isEmpty()) {
             return CompletableDeferred(emptyList())
         }
-        val mcpHttp = whitelistingHttpClient(
-            engine = OkHttp.create(),
-            policy = networkPolicy,
-            extraConfig = { install(ContentNegotiation) { json(HttpMcpClient.DEFAULT_JSON) } },
-        )
-        val mcpClient = HttpMcpClient(mcpHttp)
-        return runtimeScope.async(Dispatchers.IO) {
+        // Reuses the host-supplied [networkClient]; the host is
+        // responsible for installing `ContentNegotiation` if MCP is
+        // configured. The Android `WeftRuntime.create(...)` factory
+        // installs it automatically; iOS hosts wire equivalent setup
+        // when they construct the client.
+        val mcpClient = HttpMcpClient(networkClient)
+        return runtimeScope.async(Dispatchers.Default) {
             mcpServers.flatMap { server ->
                 val discovered: List<McpToolDescriptor>? = withTimeoutOrNull(mcpDiscoveryTimeout) {
                     runCatching {
@@ -740,7 +755,7 @@ public class WeftRuntime(
      * In-memory cache for [resolvedSystemPrompt]. Computed lazily once
      * MCP discovery completes. Null until the first call.
      */
-    @Volatile
+    @kotlin.concurrent.Volatile
     private var cachedResolvedSystemPrompt: String? = null
 
     /**
@@ -990,7 +1005,7 @@ public class WeftRuntime(
             // Empty extensions are dropped so the prompt doesn't grow
             // unnecessarily.
             volatilePrefixSupplier = {
-                listOf(deviceSnapshot(context), extraVolatilePrefix())
+                listOf(deviceSnapshotProvider(), extraVolatilePrefix())
                     .filter { it.isNotBlank() }
                     .joinToString("\n\n")
             },
@@ -1255,96 +1270,12 @@ public class WeftRuntime(
             maxOutputTokens = 8_192,
         )
 
-        /**
-         * Convenience factory that constructs the substrate with the default
-         * Android [OsCapabilities]. Apps using `:substrate:android-ui` will
-         * also build a `WeftUi` and thread its `components` +
-         * `toolsFactory` through.
-         */
-        public fun create(
-            context: Context,
-            uiBridge: UiBridge,
-            appPromptPreamble: String,
-            dataSources: List<DataSource> = emptyList(),
-            networkPolicy: NetworkPolicy = NetworkPolicy(coreAllowlist = emptySet()),
-            extraContextProviders: List<ContextProvider> = emptyList(),
-            extraToolsFactory: (WeftContext) -> List<WeftTool<*, *>> = { _ -> emptyList() },
-            /**
-             * Stage 2 of `docs/architecture/tool-provider.md` — optional
-             * lazy tool provider. Null (default) auto-wraps the
-             * substrate's prebuilt list as an [EagerToolProvider] with
-             * everything `alwaysOn`, preserving today's behavior.
-             * Pass a custom provider (typically
-             * `compositeToolProvider(substrateProvider, mcpProvider,
-             * appProvider)`) when you want `find_tool` discovery + lazy
-             * MCP/app-domain tool materialization.
-             */
-            toolProvider: ToolProvider? = null,
-            componentMetadata: List<ComponentMetadata> = emptyList(),
-            extraSystemNotes: String? = null,
-            dynamicSystemPromptSection: (() -> String)? = null,
-            extraVolatilePrefix: () -> String = { "" },
-            extraMemoryProviders: List<dev.weft.contracts.MemoryProvider> = emptyList(),
-            memoryStoreOverride: MemoryStore? = null,
-            conversationStoreOverride: ConversationStore? = null,
-            quotaPolicy: QuotaPolicy = QuotaPolicy(),
-            redactor: Redactor = Redactor(),
-            maxIterations: Int = MAX_ITERATIONS_DEFAULT,
-            /**
-             * MCP servers to discover tools from. Empty list = no MCP.
-             * Discovery runs in the background on [Dispatchers.IO]; the
-             * first [buildAgent] call awaits its completion. Same
-             * [networkPolicy] allowlist applies to MCP server hosts.
-             */
-            mcpServers: List<McpServerConfig> = emptyList(),
-            onMcpError: (McpServerConfig, Throwable) -> Unit = { _, _ -> },
-            mcpDiscoveryTimeout: Duration = DEFAULT_MCP_DISCOVERY_TIMEOUT,
-            /**
-             * Multi-agent registry. Empty list = auto-default single
-             * agent named [dev.weft.harness.agents.AgentDeclaration.DEFAULT_AGENT_NAME]
-             * (preserves pre-multi-agent behavior). Non-empty = each
-             * declaration becomes addressable via
-             * [WeftRuntime.buildAgent(agentName, ...)][buildAgent].
-             */
-            agents: List<dev.weft.harness.agents.AgentDeclaration> = emptyList(),
-        ): WeftRuntime {
-            val appContext = context.applicationContext
-            val database = WeftDatabaseFactory.create(
-                dev.weft.android.persistence.WeftPlatform(appContext),
-            )
-            val scheduledNotificationStore =
-                dev.weft.android.persistence.SqlDelightScheduledNotificationKeyStore(database)
-            return WeftRuntime(
-                context = appContext,
-                os = AndroidOsCapabilities.create(
-                    appContext,
-                    scheduledNotificationStore = scheduledNotificationStore,
-                ),
-                uiBridge = uiBridge,
-                appPromptPreamble = appPromptPreamble,
-                dataSources = dataSources,
-                networkPolicy = networkPolicy,
-                extraContextProviders = extraContextProviders,
-                extraToolsFactory = extraToolsFactory,
-                toolProviderOverride = toolProvider,
-                componentMetadata = componentMetadata,
-                extraSystemNotes = extraSystemNotes,
-                dynamicSystemPromptSection = dynamicSystemPromptSection,
-                extraVolatilePrefix = extraVolatilePrefix,
-                extraMemoryProviders = extraMemoryProviders,
-                memoryStoreOverride = memoryStoreOverride,
-                conversationStoreOverride = conversationStoreOverride,
-                quotaPolicy = quotaPolicy,
-                redactor = redactor,
-                maxIterations = maxIterations,
-                agents = agents,
-                mcpServers = mcpServers,
-                onMcpError = onMcpError,
-                mcpDiscoveryTimeout = mcpDiscoveryTimeout,
-                database = database,
-            )
-        }
-
+        // `create(...)` Android-convenience factory lives as a
+        // Companion-extension in `WeftRuntimeAndroid.kt` so the class
+        // declaration itself can lift to commonMain. iOS hosts write
+        // their own `create(WeftPlatform, …)` extension that wires the
+        // Darwin Ktor engine + their iOS-side OsCapabilities + a
+        // UIDevice-backed deviceSnapshotProvider.
     }
 }
 
