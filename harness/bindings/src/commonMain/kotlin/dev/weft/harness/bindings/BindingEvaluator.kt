@@ -1,9 +1,16 @@
-package dev.weft.harness.prompt.bindings
+package dev.weft.harness.bindings
 
 import dev.weft.contracts.DataSource
 import dev.weft.contracts.DataSourceRegistry
 import dev.weft.contracts.SortOrder
 import dev.weft.contracts.SortSpec
+import kotlinx.datetime.DateTimeUnit
+import kotlinx.datetime.LocalDate
+import kotlinx.datetime.TimeZone
+import kotlinx.datetime.atStartOfDayIn
+import kotlinx.datetime.isoDayNumber
+import kotlinx.datetime.minus
+import kotlinx.datetime.toLocalDateTime
 import kotlinx.serialization.json.JsonArray
 import kotlinx.serialization.json.JsonElement
 import kotlinx.serialization.json.JsonNull
@@ -14,8 +21,8 @@ import kotlinx.serialization.json.buildJsonArray
 import kotlinx.serialization.json.buildJsonObject
 import kotlinx.serialization.json.doubleOrNull
 import kotlinx.serialization.json.longOrNull
-import java.util.Calendar
-import java.util.TimeZone
+import kotlin.time.Clock
+import kotlin.time.ExperimentalTime
 
 /**
  * Pure evaluator for `$binding` expressions emitted by the agent in a
@@ -250,23 +257,24 @@ object BindingEvaluator {
     // "yesterday at this time" works.
 
     /** Recursively resolve $now / $today / $weekStart / $monthStart / $dateOffset. */
+    @OptIn(ExperimentalTime::class)
     private fun resolveDynamic(value: JsonElement): JsonElement {
         if (value !is JsonObject) return value
         // Each sentinel is identified by a leading $-prefixed key. If
         // none match, return the object unchanged (it's a regular value
         // object, not a sentinel).
         return when {
-            "\$now" in value -> JsonPrimitive(System.currentTimeMillis())
+            "\$now" in value -> JsonPrimitive(nowMillis())
             "\$today" in value -> {
                 val which = (value["\$today"] as? JsonPrimitive)?.content
                 JsonPrimitive(todayBoundary(which))
             }
-            "\$weekStart" in value -> JsonPrimitive(startOfPeriod(Calendar.WEEK_OF_YEAR))
-            "\$monthStart" in value -> JsonPrimitive(startOfPeriod(Calendar.MONTH))
+            "\$weekStart" in value -> JsonPrimitive(startOfWeek())
+            "\$monthStart" in value -> JsonPrimitive(startOfMonth())
             "\$dateOffset" in value -> {
                 val spec = value["\$dateOffset"] as? JsonObject ?: return value
                 val base = (resolveDynamic(spec["from"] ?: JsonObject(mapOf("\$now" to JsonPrimitive(true)))) as? JsonPrimitive)
-                    ?.longOrNull ?: System.currentTimeMillis()
+                    ?.longOrNull ?: nowMillis()
                 val days = (spec["days"] as? JsonPrimitive)?.longOrNull ?: 0L
                 val hours = (spec["hours"] as? JsonPrimitive)?.longOrNull ?: 0L
                 val minutes = (spec["minutes"] as? JsonPrimitive)?.longOrNull ?: 0L
@@ -276,30 +284,43 @@ object BindingEvaluator {
         }
     }
 
+    // KMP time helpers — kotlinx-datetime replacement for the previous
+    // java.util.Calendar-based versions. ISO week starts on Monday
+    // (matches what most calendar UIs render); local timezone resolves
+    // per platform clock.
+
+    @OptIn(ExperimentalTime::class)
+    private fun nowMillis(): Long = Clock.System.now().toEpochMilliseconds()
+
+    @OptIn(ExperimentalTime::class)
     private fun todayBoundary(which: String?): Long {
-        val cal = Calendar.getInstance(TimeZone.getDefault())
-        cal.set(Calendar.HOUR_OF_DAY, 0)
-        cal.set(Calendar.MINUTE, 0)
-        cal.set(Calendar.SECOND, 0)
-        cal.set(Calendar.MILLISECOND, 0)
-        if (which == "end") {
-            cal.add(Calendar.DAY_OF_MONTH, 1)
-            cal.add(Calendar.MILLISECOND, -1)
+        val tz = TimeZone.currentSystemDefault()
+        val today = Clock.System.now().toLocalDateTime(tz).date
+        val startOfDay = today.atStartOfDayIn(tz).toEpochMilliseconds()
+        return if (which == "end") {
+            // End-of-day = start-of-next-day minus 1ms.
+            startOfDay + 86_400_000L - 1L
+        } else {
+            startOfDay
         }
-        return cal.timeInMillis
     }
 
-    private fun startOfPeriod(periodField: Int): Long {
-        val cal = Calendar.getInstance(TimeZone.getDefault())
-        cal.set(Calendar.HOUR_OF_DAY, 0)
-        cal.set(Calendar.MINUTE, 0)
-        cal.set(Calendar.SECOND, 0)
-        cal.set(Calendar.MILLISECOND, 0)
-        when (periodField) {
-            Calendar.WEEK_OF_YEAR -> cal.set(Calendar.DAY_OF_WEEK, cal.firstDayOfWeek)
-            Calendar.MONTH -> cal.set(Calendar.DAY_OF_MONTH, 1)
-        }
-        return cal.timeInMillis
+    @OptIn(ExperimentalTime::class)
+    private fun startOfWeek(): Long {
+        val tz = TimeZone.currentSystemDefault()
+        val today = Clock.System.now().toLocalDateTime(tz).date
+        // isoDayNumber: 1 = Monday, 7 = Sunday. Subtract that many days
+        // minus one to land on the most recent Monday.
+        val weekStart = today.minus((today.dayOfWeek.isoDayNumber - 1).toLong(), DateTimeUnit.DAY)
+        return weekStart.atStartOfDayIn(tz).toEpochMilliseconds()
+    }
+
+    @OptIn(ExperimentalTime::class)
+    private fun startOfMonth(): Long {
+        val tz = TimeZone.currentSystemDefault()
+        val today = Clock.System.now().toLocalDateTime(tz).date
+        val monthStart = LocalDate(today.year, today.month, 1)
+        return monthStart.atStartOfDayIn(tz).toEpochMilliseconds()
     }
 
     // ─── Aggregation ──────────────────────────────────────────────────

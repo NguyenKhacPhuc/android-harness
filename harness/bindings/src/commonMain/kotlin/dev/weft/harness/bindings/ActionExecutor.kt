@@ -1,4 +1,4 @@
-package dev.weft.harness.prompt.bindings
+package dev.weft.harness.bindings
 
 import dev.weft.contracts.DataSourceRegistry
 import kotlinx.serialization.json.Json

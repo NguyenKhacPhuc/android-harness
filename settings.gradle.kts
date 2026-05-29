@@ -48,6 +48,11 @@ include(":harness:conversation")
 // buildUserParts, composeEffectiveText). Pure functions + data types, no agent
 // state. `:harness:agents` depends on this; standalone tooling can too.
 include(":harness:prompt")
+// Bindings — pure evaluator for $exec / $binding sentinels in
+// agent-emitted ComponentNode props. Lifted out of :harness:prompt so
+// the Compose layer can use them without taking a Koog-poisoned dep.
+// KMP-published; consumers run on Android + iOS.
+include(":harness:bindings")
 // Skills — app-handled slash-command primitives (Skill, SkillResult,
 // SkillRegistry, withHelp). Pure Kotlin, no Android deps.
 include(":harness:skills")

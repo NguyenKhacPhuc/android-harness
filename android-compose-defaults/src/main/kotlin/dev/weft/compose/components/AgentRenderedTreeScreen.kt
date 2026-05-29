@@ -170,7 +170,7 @@ public fun AgentRenderedTreeScreen(
                                     // the host's onAction for legacy
                                     // LLM-driven actions (opaque strings).
                                     val handled = dataSources?.let { sources ->
-                                        val isExec = dev.weft.harness.prompt.bindings.ActionExecutor
+                                        val isExec = dev.weft.harness.bindings.ActionExecutor
                                             .isExecAction(event.action)
                                         if (isExec) {
                                             android.util.Log.d(
@@ -178,7 +178,7 @@ public fun AgentRenderedTreeScreen(
                                                 "\$exec intercepted: sourceLabel=${event.sourceLabel}",
                                             )
                                         }
-                                        dev.weft.harness.prompt.bindings.ActionExecutor
+                                        dev.weft.harness.bindings.ActionExecutor
                                             .tryExecuteAction(event.action, sources)
                                             .handled
                                     } ?: false
