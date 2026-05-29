@@ -1,6 +1,8 @@
 package dev.weft.oauth
 
 import dev.weft.contracts.KeyVault
+import kotlinx.atomicfu.locks.SynchronizedObject
+import kotlinx.atomicfu.locks.synchronized
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import kotlinx.serialization.encodeToString
@@ -32,7 +34,16 @@ public class OAuthTokenStore(
     private val json: Json = DEFAULT_JSON,
 ) {
 
-    private val perConnectorLocks = java.util.concurrent.ConcurrentHashMap<String, Mutex>()
+    // ConcurrentHashMap isn't in commonMain; substitute a regular map
+    // guarded by SynchronizedObject + the kotlinx.atomicfu monitor
+    // intrinsic. Per-connector Mutex still gates the actual refresh so
+    // different connectors don't block each other.
+    private val perConnectorLocksMonitor = SynchronizedObject()
+    private val perConnectorLocks = mutableMapOf<String, Mutex>()
+    private fun lockFor(connectorId: String): Mutex =
+        synchronized(perConnectorLocksMonitor) {
+            perConnectorLocks.getOrPut(connectorId) { Mutex() }
+        }
 
     /** Persist the bundle for [connectorId], overwriting any previous value. */
     public suspend fun put(connectorId: String, tokens: TokenSet) {
@@ -60,7 +71,7 @@ public class OAuthTokenStore(
      * so every MCP call automatically uses a live token.
      */
     public suspend fun activeAccessToken(connectorId: String, config: OAuthConfig): String? {
-        val lock = perConnectorLocks.getOrPut(connectorId) { Mutex() }
+        val lock = lockFor(connectorId)
         return lock.withLock {
             val stored = get(connectorId) ?: return@withLock null
             if (!stored.isExpired()) return@withLock stored.accessToken

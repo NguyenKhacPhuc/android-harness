@@ -21,36 +21,21 @@ import kotlinx.serialization.Serializable
 import kotlinx.serialization.json.Json
 
 /**
- * OAuth 2.0 Authorization Code + PKCE client.
+ * Default Android implementation of [OAuthClient] backed by Custom
+ * Tabs (browser-driven authorize) + Ktor (token exchange). The
+ * interface itself lives in commonMain so iOS can ship a parallel
+ * `ASWebAuthenticationSession`-based impl when needed.
  *
- * One [OAuthClient] handles multiple configs / connectors. The [callbacks]
- * channel is shared across all concurrent flows; per-flow [Pkce.generateState]
- * disambiguates which redirect belongs to which `authorize()` invocation.
+ * The [callbacks] channel is shared across all concurrent flows;
+ * per-flow [Pkce.generateState] disambiguates which redirect belongs
+ * to which `authorize()` invocation.
  *
- * **Threading.** [authorize] suspends across user-driven UI (Custom Tabs).
- * Call it from a coroutine attached to the foreground lifecycle, not from
- * the agent loop directly — if the user dismisses the tab without
- * consenting, you want to know quickly. The default timeout is 5 minutes;
- * beyond that we return [OAuthResult.UserCancelled].
- */
-public interface OAuthClient {
-    /**
-     * Run the full Authorization Code + PKCE flow: open Custom Tabs,
-     * suspend for the redirect, exchange the code for tokens.
-     */
-    public suspend fun authorize(config: OAuthConfig): OAuthResult
-
-    /**
-     * Exchange [refreshToken] for a fresh access token. Most providers
-     * also rotate the refresh token; the caller should persist whatever
-     * comes back, not retain the original.
-     */
-    public suspend fun refresh(config: OAuthConfig, refreshToken: String): OAuthResult
-}
-
-/**
- * Default Android implementation backed by Custom Tabs (browser-driven
- * authorize) + Ktor (token exchange).
+ * **Threading.** [authorize] suspends across user-driven UI (Custom
+ * Tabs). Call it from a coroutine attached to the foreground
+ * lifecycle, not from the agent loop directly — if the user dismisses
+ * the tab without consenting, you want to know quickly. The default
+ * timeout is 5 minutes; beyond that we return
+ * [OAuthResult.UserCancelled].
  */
 public class AndroidOAuthClient(
     context: Context,

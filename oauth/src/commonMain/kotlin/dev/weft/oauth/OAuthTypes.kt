@@ -1,6 +1,8 @@
 package dev.weft.oauth
 
 import kotlinx.serialization.Serializable
+import kotlin.time.Clock
+import kotlin.time.ExperimentalTime
 
 /**
  * Per-connector OAuth configuration.
@@ -55,7 +57,8 @@ public data class TokenSet(
      * expiry so refreshes happen *before* the next request 401s. Default
      * 60s of skew covers clock drift + in-flight requests.
      */
-    public fun isExpired(skewMs: Long = DEFAULT_SKEW_MS, nowMs: Long = System.currentTimeMillis()): Boolean {
+    @OptIn(ExperimentalTime::class)
+    public fun isExpired(skewMs: Long = DEFAULT_SKEW_MS, nowMs: Long = Clock.System.now().toEpochMilliseconds()): Boolean {
         if (expiresAtEpochMs == 0L) return false
         return nowMs >= (expiresAtEpochMs - skewMs)
     }
