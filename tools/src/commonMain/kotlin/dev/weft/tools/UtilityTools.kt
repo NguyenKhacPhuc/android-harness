@@ -10,8 +10,8 @@ import kotlinx.serialization.json.JsonArray
 import kotlinx.serialization.json.JsonElement
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.JsonPrimitive
-import java.net.URI
-import java.util.regex.Pattern
+import dev.weft.tools.internal.percentDecode
+import io.ktor.http.Url
 import kotlin.math.roundToInt
 import kotlin.random.Random
 
@@ -76,21 +76,21 @@ class RegexMatchTool(ctx: WeftContext) :
     )
 
     override suspend fun executeWeft(args: Args): Result = runCatching {
-        val flags = if (args.ignoreCase) Pattern.CASE_INSENSITIVE else 0
-        val regex = Pattern.compile(args.pattern, flags)
+        // kotlin.text.Regex options are KMP-portable; IGNORE_CASE
+        // mirrors java.util.regex.Pattern.CASE_INSENSITIVE for the
+        // ASCII-letter case-folding the tool advertises.
+        val options = if (args.ignoreCase) setOf(RegexOption.IGNORE_CASE) else emptySet()
+        val regex = Regex(args.pattern, options)
         when (args.op.lowercase()) {
             "find" -> {
-                val matcher = regex.matcher(args.text)
                 val out = mutableListOf<Match>()
-                while (matcher.find()) {
-                    val groups = (1..matcher.groupCount()).map {
-                        runCatching { matcher.group(it) }.getOrNull()
-                    }
+                for (m in regex.findAll(args.text)) {
+                    val groups = m.groupValues.drop(1).map { it.ifEmpty { null } }
                     out += Match(
-                        match = matcher.group(),
+                        match = m.value,
                         groups = groups,
-                        start = matcher.start(),
-                        end = matcher.end(),
+                        start = m.range.first,
+                        end = m.range.last + 1,
                     )
                 }
                 Result(ok = true, matches = out)
@@ -98,9 +98,9 @@ class RegexMatchTool(ctx: WeftContext) :
             "replace" -> {
                 val replacement = args.replacement
                     ?: return@runCatching Result(ok = false, error = "replacement required for op=replace")
-                Result(ok = true, replaced = regex.matcher(args.text).replaceAll(replacement))
+                Result(ok = true, replaced = regex.replace(args.text, replacement))
             }
-            "split" -> Result(ok = true, parts = regex.split(args.text).toList())
+            "split" -> Result(ok = true, parts = regex.split(args.text))
             else -> Result(ok = false, error = "Unknown op '${args.op}'.")
         }
     }.getOrElse { Result(ok = false, error = it.message ?: "Regex error.") }
@@ -144,16 +144,20 @@ class UrlParseTool(ctx: WeftContext) :
     )
 
     override suspend fun executeWeft(args: Args): Result = runCatching {
-        val uri = URI(args.url)
-        val params = uri.query?.let { parseQuery(it) }
+        // Ktor's Url is KMP-friendly and handles RFC 3986 parsing. We
+        // expose `specifiedPort` (-1 when omitted) instead of `port`
+        // because Ktor fills in the scheme's default port when none was
+        // given — the original java.net.URI impl returned -1.
+        val uri = Url(args.url)
+        val params = uri.encodedQuery.takeIf { it.isNotEmpty() }?.let { parseQuery(it) }
         Result(
             ok = true,
-            scheme = uri.scheme,
-            host = uri.host,
-            port = uri.port.takeIf { it > 0 },
-            path = uri.path?.ifBlank { null },
+            scheme = uri.protocol.name,
+            host = uri.host.ifBlank { null },
+            port = uri.specifiedPort.takeIf { it > 0 },
+            path = uri.encodedPath.ifBlank { null },
             queryParams = params,
-            fragment = uri.fragment,
+            fragment = uri.fragment.ifBlank { null },
         )
     }.getOrElse { Result(ok = false, error = it.message ?: "Parse failed.") }
 
@@ -164,8 +168,7 @@ class UrlParseTool(ctx: WeftContext) :
             val eq = kv.indexOf('=')
             val k = if (eq < 0) kv else kv.substring(0, eq)
             val v = if (eq < 0) "" else kv.substring(eq + 1)
-            out.getOrPut(java.net.URLDecoder.decode(k, "UTF-8")) { mutableListOf() }
-                .add(java.net.URLDecoder.decode(v, "UTF-8"))
+            out.getOrPut(percentDecode(k)) { mutableListOf() }.add(percentDecode(v))
         }
         return out
     }
@@ -253,8 +256,14 @@ class ColorConvertTool(ctx: WeftContext) :
         )
     }
 
-    private fun formatHex(rgb: IntArray): String =
-        "#%02x%02x%02x".format(rgb[0], rgb[1], rgb[2])
+    private fun formatHex(rgb: IntArray): String = buildString {
+        append('#')
+        for (channel in rgb) {
+            val b = channel and 0xFF
+            append(HEX_LOWER[b ushr 4])
+            append(HEX_LOWER[b and 0x0F])
+        }
+    }
 
     @Suppress("MagicNumber")
     private fun rgbToHsl(rgb: IntArray): DoubleArray {
@@ -312,6 +321,7 @@ class ColorConvertTool(ctx: WeftContext) :
         const val MAX_PERCENT = 100.0
         const val HUE_FULL_DEG = 360.0
         const val MAX_HEX_RGB_LEN = 6
+        val HEX_LOWER: CharArray = "0123456789abcdef".toCharArray()
     }
 }
 

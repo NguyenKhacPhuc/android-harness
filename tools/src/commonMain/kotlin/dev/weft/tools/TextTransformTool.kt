@@ -5,10 +5,12 @@ import ai.koog.agents.core.tools.ToolParameterDescriptor
 import ai.koog.agents.core.tools.ToolParameterType
 import ai.koog.serialization.typeToken
 import kotlinx.serialization.Serializable
-import java.net.URLDecoder
-import java.net.URLEncoder
-import java.security.MessageDigest
-import java.util.Base64
+import dev.weft.tools.internal.base64Decode
+import dev.weft.tools.internal.base64Encode
+import dev.weft.tools.internal.computeDigest
+import dev.weft.tools.internal.percentDecode
+import dev.weft.tools.internal.percentEncode
+import dev.weft.tools.internal.toHexString
 
 /**
  * One tool, many string transforms. Use INSTEAD OF generating
@@ -72,24 +74,24 @@ class TextTransformTool(ctx: WeftContext) :
             "reverse" -> Result(ok = true, result = args.text.reversed())
             "base64_encode" -> Result(
                 ok = true,
-                result = Base64.getEncoder().encodeToString(args.text.toByteArray()),
+                result = base64Encode(args.text.encodeToByteArray()),
             )
             "base64_decode" -> Result(
                 ok = true,
-                result = String(Base64.getDecoder().decode(args.text)),
+                result = base64Decode(args.text).decodeToString(),
             )
             "hex_encode" -> Result(
                 ok = true,
-                result = args.text.toByteArray().joinToString("") { "%02x".format(it) },
+                result = args.text.encodeToByteArray().toHexString(),
             )
             "hex_decode" -> {
                 val bytes = ByteArray(args.text.length / 2) { i ->
                     args.text.substring(i * 2, i * 2 + 2).toInt(HEX_RADIX).toByte()
                 }
-                Result(ok = true, result = String(bytes))
+                Result(ok = true, result = bytes.decodeToString())
             }
-            "url_encode" -> Result(ok = true, result = URLEncoder.encode(args.text, "UTF-8"))
-            "url_decode" -> Result(ok = true, result = URLDecoder.decode(args.text, "UTF-8"))
+            "url_encode" -> Result(ok = true, result = percentEncode(args.text))
+            "url_decode" -> Result(ok = true, result = percentDecode(args.text))
             "length" -> Result(ok = true, length = args.text.length)
             else -> Result(ok = false, error = "Unknown op '${args.op}'.")
         }
@@ -172,8 +174,7 @@ class HashTool(ctx: WeftContext) : WeftTool<HashTool.Args, HashTool.Result>(
                 else -> error("Unsupported algorithm '${args.algorithm}'.")
             }
         }
-        val digest = MessageDigest.getInstance(alg)
-        val bytes = digest.digest(args.text.toByteArray())
-        Result(ok = true, digest = bytes.joinToString("") { "%02x".format(it) })
+        val bytes = computeDigest(alg, args.text.encodeToByteArray())
+        Result(ok = true, digest = bytes.toHexString())
     }.getOrElse { Result(ok = false, error = it.message ?: "Hash failed.") }
 }

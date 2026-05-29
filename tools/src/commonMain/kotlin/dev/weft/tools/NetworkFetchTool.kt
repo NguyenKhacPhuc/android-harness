@@ -7,6 +7,7 @@ import ai.koog.serialization.typeToken
 import dev.weft.tools.WeftContext
 import dev.weft.tools.WeftTool
 import dev.weft.security.NetworkPolicyException
+import dev.weft.tools.internal.base64Encode
 import io.ktor.client.HttpClient
 import io.ktor.client.request.headers
 import io.ktor.client.request.request
@@ -111,7 +112,7 @@ class NetworkFetchTool(
                 "json" -> runCatching { Json.parseToJsonElement(bodyText) }
                     .getOrElse { JsonPrimitive(bodyText) }
                 "text" -> JsonPrimitive(bodyText)
-                "bytes" -> JsonPrimitive(java.util.Base64.getEncoder().encodeToString(bodyText.toByteArray()))
+                "bytes" -> JsonPrimitive(base64Encode(bodyText.encodeToByteArray()))
                 else -> JsonPrimitive(bodyText)
             }
 

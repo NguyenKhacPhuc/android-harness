@@ -66,7 +66,9 @@ class AlarmSetTool(ctx: WeftContext) : WeftTool<AlarmSetTool.Args, String>(
             label = args.label,
         )
         return if (opened) {
-            val timeStr = "%02d:%02d".format(args.hour.coerceIn(0, 23), args.minute.coerceIn(0, 59))
+            val h = args.hour.coerceIn(0, 23).toString().padStart(2, '0')
+            val m = args.minute.coerceIn(0, 59).toString().padStart(2, '0')
+            val timeStr = "$h:$m"
             val labelSuffix = args.label?.takeIf { it.isNotBlank() }?.let { " '$it'" } ?: ""
             "Opened the clock app with a new alarm at $timeStr$labelSuffix. " +
                 "User needs to confirm it inside the app."
