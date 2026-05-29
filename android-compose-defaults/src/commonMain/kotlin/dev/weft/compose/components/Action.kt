@@ -35,6 +35,8 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import kotlinx.coroutines.delay
 import kotlinx.serialization.Serializable
+import kotlin.time.Clock
+import kotlin.time.ExperimentalTime
 
 /**
  * [ComponentCategory.ACTION] components — fire a semantic event when
@@ -283,14 +285,15 @@ public class CountdownComponent : WeftComponent<CountdownProps>(
     category = ComponentCategory.ACTION,
     propsSerializer = CountdownProps.serializer(),
 ) {
+    @OptIn(ExperimentalTime::class)
     @Composable
     override fun Render(props: CountdownProps, children: @Composable () -> Unit, onEvent: (ComponentEvent) -> Unit) {
-        val endsAt = remember(props.durationMs) { System.currentTimeMillis() + props.durationMs }
+        val endsAt = remember(props.durationMs) { Clock.System.now().toEpochMilliseconds() + props.durationMs }
         var remainingMs by remember(props.durationMs) { mutableLongStateOf(props.durationMs) }
 
         LaunchedEffect(endsAt) {
             while (true) {
-                val r = (endsAt - System.currentTimeMillis()).coerceAtLeast(0L)
+                val r = (endsAt - Clock.System.now().toEpochMilliseconds()).coerceAtLeast(0L)
                 remainingMs = r
                 if (r == 0L) {
                     onEvent(ComponentEvent.Action(action = props.onCompleteAction, sourceType = "Countdown", sourceLabel = "timer"))
@@ -317,7 +320,9 @@ public class CountdownComponent : WeftComponent<CountdownProps>(
         private const val COUNTDOWN_TICK_MS = 250L
         private fun formatCountdown(ms: Long): String {
             val totalSeconds = (ms + 500) / 1000
-            return "%d:%02d".format(totalSeconds / 60, totalSeconds % 60)
+            val secs = totalSeconds % 60
+            val secsStr = if (secs < 10) "0$secs" else secs.toString()
+            return "${totalSeconds / 60}:$secsStr"
         }
     }
 }

@@ -1,9 +1,8 @@
-// :substrate:android-compose-defaults — Material 3 palette + default surfaces.
+// :android-compose-defaults — Material 3 palette + default surfaces.
 //
-// The framework module (`:substrate:android-compose`) ships the Compose
-// abstraction layer apps subclass to add components: `WeftComponent`,
-// the registry, the bridge, the renderer. It deliberately knows nothing
-// about Material 3.
+// The framework module (`:android-compose`) ships the Compose abstraction
+// layer apps subclass to add components: `WeftComponent`, the registry,
+// the bridge, the renderer. It knows nothing about Material 3.
 //
 // This module bolts on the substrate's *default* implementations of every
 // app-facing surface so an app can be plug-and-play without rebuilding
@@ -18,25 +17,94 @@
 //     `askUser` / `confirmDestructive` / `showInfo`),
 //     `WeftOverlayHost` (toast + banner), `AgentRenderedTreePanel`
 //     and `AgentRenderedTreeScreen` (host the LLM's `ui_render` tree).
-//   • `WeftUi` convenience holder — bundles the default Coil
-//     image loader, the default palette + any extras, and the registry.
-//   • `ImageLoading.buildWeftImageLoader` — the default Coil setup.
+//   • `WeftUi` convenience holder — bundles the default Coil 3 image
+//     loader, the default palette + any extras, and the registry.
+//   • `ImageLoading.buildWeftImageLoader` — the default Coil 3 setup.
 //
-// Apps that want a custom palette omit this module entirely and assemble
-// their own `WeftComponentRegistry` from custom components against
-// the framework module. They lose the M3 surfaces too — apps in that
-// position are usually building their own design language anyway.
+// Now KMP-published (jvm + androidTarget + iosArm64 + iosSimulatorArm64).
+// Everything that's pure Compose Multiplatform (Material 3 + foundation +
+// icons + Coil 3) lives in commonMain. Only the WebView-backed components
+// (Embed.kt) stay in androidMain — WKWebView wrappers can land later as
+// iosMain when somebody needs `WebView` / `Html` on iOS.
 plugins {
+    alias(libs.plugins.kotlin.multiplatform)
     alias(libs.plugins.android.library)
-    alias(libs.plugins.kotlin.android)
     alias(libs.plugins.kotlin.compose)
     alias(libs.plugins.kotlin.serialization)
+    alias(libs.plugins.compose.multiplatform)
 }
 
-// Same `:foo:android-suffix` cycle guard as :substrate:android. Composite-
-// build consumers resolve us as `dev.weft:weft-android-compose-defaults`.
+// Same `:foo:android-suffix` cycle guard as :android. Composite-build
+// consumers resolve us as `dev.weft:weft-android-compose-defaults`.
 group = "dev.weft"
 base { archivesName.set("weft-android-compose-defaults") }
+
+kotlin {
+    jvmToolchain(17)
+    applyDefaultHierarchyTemplate()
+
+    jvm()
+    androidTarget {
+        compilerOptions {
+            jvmTarget.set(org.jetbrains.kotlin.gradle.dsl.JvmTarget.JVM_17)
+        }
+    }
+    iosArm64()
+    iosSimulatorArm64()
+
+    explicitApi()
+
+    sourceSets {
+        commonMain.dependencies {
+            // Framework module — exposes WeftComponent base, registry,
+            // ComposeUiBridge, TreeRenderer. Re-exported so apps don't
+            // have to depend on both modules just to register custom
+            // components.
+            api(project(":android-compose"))
+
+            // Compose Multiplatform — Material 3 + foundation + ui +
+            // material-icons-core (the core icon set the default palette
+            // pulls: Check, Close, Info, Warning, ArrowBack, …).
+            api(libs.compose.multiplatform.runtime)
+            api(libs.compose.multiplatform.foundation)
+            api(libs.compose.multiplatform.ui)
+            api(libs.compose.multiplatform.material3)
+            api(libs.compose.multiplatform.material.icons.core)
+
+            // Coil 3 — KMP image loading for the Image component. The
+            // network engine is target-specific (OkHttp on Android,
+            // Ktor on iOS — see the androidMain / iosMain blocks).
+            api(libs.coil.compose)
+
+            // kotlinx-datetime — replaces java.time.Instant / ZoneId in
+            // the Input / Macro date components.
+            implementation(libs.kotlinx.datetime)
+
+            implementation(libs.kotlinx.coroutines.core)
+
+            // Napier — KMP logger for the WeftBindings diagnostic tag
+            // emitted by AgentRenderedTreeScreen on `$exec` action
+            // interception. Host opts in via `Napier.base(DebugAntilog())`.
+            implementation(libs.napier)
+        }
+        androidMain.dependencies {
+            // Embed.kt's WebViewComponent + HtmlComponent depend on
+            // android.webkit.WebView. iOS gets to skip these two
+            // components until a WKWebView wrapper lands.
+            // Coil 3's OkHttp engine — pairs with the OkHttp Koog
+            // already pulls into the Android dep graph.
+            implementation(libs.coil.network.okhttp)
+        }
+        val iosMain by getting {
+            dependencies {
+                // Coil 3's KMP-native Ktor engine — uses the Darwin
+                // engine on iOS for HTTP fetches.
+                implementation(libs.coil.network.ktor3)
+                implementation(libs.ktor.client.core)
+            }
+        }
+    }
+}
 
 android {
     namespace = "dev.weft.compose.defaults"
@@ -46,38 +114,8 @@ android {
         minSdk = libs.versions.minSdk.get().toInt()
     }
 
-    buildFeatures {
-        compose = true
-    }
-
     compileOptions {
         sourceCompatibility = JavaVersion.VERSION_17
         targetCompatibility = JavaVersion.VERSION_17
     }
-}
-
-kotlin {
-    jvmToolchain(17)
-    compilerOptions {
-        jvmTarget.set(org.jetbrains.kotlin.gradle.dsl.JvmTarget.JVM_17)
-    }
-    explicitApi()
-}
-
-dependencies {
-    // Framework module — exposes WeftComponent base, registry,
-    // ComposeUiBridge, TreeRenderer. Re-exported so apps don't have to
-    // depend on both modules just to register custom components.
-    api(project(":android-compose"))
-
-    // Material 3 — the entire raison d'être of this module. Default
-    // surfaces render M3 dialogs / snackbars / sheets; the palette wraps
-    // M3 components.
-    api(platform(libs.androidx.compose.bom))
-    api(libs.androidx.compose.ui)
-    api(libs.androidx.compose.material3)
-
-    // Coil — only the ImageComponent uses it. If we ever split Image out,
-    // this dep moves with it.
-    api(libs.coil.compose)
 }

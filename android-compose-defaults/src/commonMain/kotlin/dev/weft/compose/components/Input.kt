@@ -38,9 +38,12 @@ import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
+import kotlinx.datetime.TimeZone
+import kotlinx.datetime.toLocalDateTime
 import kotlinx.serialization.Serializable
-import java.time.Instant
-import java.time.ZoneId
+import kotlin.time.Clock
+import kotlin.time.ExperimentalTime
+import kotlin.time.Instant
 
 /**
  * [ComponentCategory.INPUT] components — capture user data. Maintain
@@ -233,7 +236,7 @@ public class SliderComponent : WeftComponent<SliderProps>(
                 Row(modifier = Modifier.fillMaxWidth()) {
                     Text(props.label, style = MaterialTheme.typography.bodyMedium)
                     Spacer(Modifier.weight(1f))
-                    Text("%.2f".format(value), style = MaterialTheme.typography.labelMedium)
+                    Text(formatFloat2(value), style = MaterialTheme.typography.labelMedium)
                 }
             }
             Slider(
@@ -287,7 +290,7 @@ public class RangeSliderComponent : WeftComponent<RangeSliderProps>(
                     Text(props.label, style = MaterialTheme.typography.bodyMedium)
                     Spacer(modifier = Modifier.weight(1f))
                     Text(
-                        text = "%.2f – %.2f".format(range.start, range.endInclusive),
+                        text = "${formatFloat2(range.start)} – ${formatFloat2(range.endInclusive)}",
                         style = MaterialTheme.typography.labelMedium,
                     )
                 }
@@ -331,16 +334,16 @@ public class DatePickerComponent : WeftComponent<DatePickerProps>(
     layoutNotes = "Needs ~360dp horizontal — render at top level OR inside a Card with padding='none'. A normal padded Card squeezes the calendar grid until days overlap.",
     example = """{"type": "DatePicker", "props": {"id": "due_date", "label": "Due date"}}""",
 ) {
-    @OptIn(ExperimentalMaterial3Api::class)
+    @OptIn(ExperimentalMaterial3Api::class, ExperimentalTime::class)
     @Composable
     override fun Render(props: DatePickerProps, children: @Composable () -> Unit, onEvent: (ComponentEvent) -> Unit) {
         val state = rememberDatePickerState(
-            initialSelectedDateMillis = props.initialEpochMs ?: System.currentTimeMillis(),
+            initialSelectedDateMillis = props.initialEpochMs ?: Clock.System.now().toEpochMilliseconds(),
         )
         LaunchedEffect(state) {
             snapshotFlow { state.selectedDateMillis }.collect { ms ->
                 if (ms != null) {
-                    val iso = Instant.ofEpochMilli(ms).atZone(ZoneId.systemDefault()).toLocalDate().toString()
+                    val iso = isoDateFromEpochMs(ms)
                     onEvent(ComponentEvent.TextChanged(sourceId = props.id, value = iso))
                 }
             }
@@ -390,7 +393,7 @@ public class TimePickerComponent : WeftComponent<TimePickerProps>(
                 onEvent(
                     ComponentEvent.TextChanged(
                         sourceId = props.id,
-                        value = "%02d:%02d".format(h, m),
+                        value = "${pad2(h)}:${pad2(m)}",
                     ),
                 )
             }
@@ -437,8 +440,8 @@ public class DateRangePickerComponent : WeftComponent<DateRangePickerProps>(
             snapshotFlow { state.selectedStartDateMillis to state.selectedEndDateMillis }
                 .collect { (start, end) ->
                     if (start != null && end != null) {
-                        val startIso = Instant.ofEpochMilli(start).atZone(ZoneId.systemDefault()).toLocalDate().toString()
-                        val endIso = Instant.ofEpochMilli(end).atZone(ZoneId.systemDefault()).toLocalDate().toString()
+                        val startIso = isoDateFromEpochMs(start)
+                        val endIso = isoDateFromEpochMs(end)
                         onEvent(
                             ComponentEvent.TextChanged(
                                 sourceId = props.id,
@@ -520,3 +523,30 @@ public val InputComponents: List<WeftComponent<*>> = listOf(
     DateRangePickerComponent(),
     SegmentedButtonComponent(),
 )
+
+// ----- KMP helpers -----------------------------------------------------------
+// commonMain has no String.format / java.time, so we hand-roll the tiny
+// formatting + ISO-date helpers the date/time pickers need.
+
+/** "12.34" — 2-decimal float without depending on JVM's `String.format`. */
+private fun formatFloat2(value: Float): String {
+    val scaled = kotlin.math.round(value * 100f).toInt()
+    val sign = if (scaled < 0) "-" else ""
+    val abs = kotlin.math.abs(scaled)
+    val whole = abs / 100
+    val frac = abs % 100
+    val fracStr = if (frac < 10) "0$frac" else frac.toString()
+    return "$sign$whole.$fracStr"
+}
+
+/** "07", "12" — zero-padded two-digit int (clamped to 0..99). */
+private fun pad2(value: Int): String = if (value < 10) "0$value" else value.toString()
+
+/** "2026-05-29" — ISO local-date for the device's default time zone. */
+@OptIn(ExperimentalTime::class)
+private fun isoDateFromEpochMs(epochMs: Long): String {
+    val local = Instant.fromEpochMilliseconds(epochMs).toLocalDateTime(TimeZone.currentSystemDefault())
+    // .monthNumber is deprecated; .month.number isn't available in
+    // kotlinx-datetime 0.7.1, so we hand-derive via the enum ordinal.
+    return "${local.year}-${pad2(local.month.ordinal + 1)}-${pad2(local.day)}"
+}

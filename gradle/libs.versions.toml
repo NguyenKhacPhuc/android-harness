@@ -42,8 +42,10 @@ osmerionSqlite = "0.3.0"
 # AndroidX Security (Keystore + EncryptedSharedPreferences)
 androidxSecurity = "1.1.0-alpha06"
 
-# Coil — image loading for the Image component
-coil = "2.7.0"
+# Coil 3 — KMP-capable image loading for the Image component. The
+# :coil-compose artifact ships Compose-Multiplatform integration; pair
+# with :coil-network-okhttp on Android and :coil-network-ktor3 on iOS.
+coil = "3.0.4"
 
 # Napier — KMP logger. Routes to logcat on Android, os_log on iOS,
 # stdout on JVM. Host calls Napier.base(DebugAntilog()) once at
@@ -83,6 +85,8 @@ androidx-compose-material3 = { module = "androidx.compose.material3:material3" }
 compose-multiplatform-runtime = { module = "org.jetbrains.compose.runtime:runtime", version.ref = "composeMultiplatform" }
 compose-multiplatform-foundation = { module = "org.jetbrains.compose.foundation:foundation", version.ref = "composeMultiplatform" }
 compose-multiplatform-ui = { module = "org.jetbrains.compose.ui:ui", version.ref = "composeMultiplatform" }
+compose-multiplatform-material3 = { module = "org.jetbrains.compose.material3:material3", version.ref = "composeMultiplatform" }
+compose-multiplatform-material-icons-core = { module = "org.jetbrains.compose.material:material-icons-core", version.ref = "composeMultiplatform" }
 
 # Napier — KMP logger.
 napier = { module = "io.github.aakira:napier", version.ref = "napier" }
@@ -136,8 +140,13 @@ koog-agents = { module = "ai.koog:koog-agents", version.ref = "koog" }
 # needs a custom LLMClient until Koog republishes — deferred.
 koog-prompt-executor-openrouter-client = { module = "ai.koog:prompt-executor-openrouter-client", version.ref = "koog" }
 
-# Coil
-coil-compose = { module = "io.coil-kt:coil-compose", version.ref = "coil" }
+# Coil 3 — KMP image loading. :coil-compose has Compose Multiplatform
+# integration; pair with :coil-network-okhttp on Android (uses the
+# OkHttp engine consumers already pull for Ktor) and :coil-network-ktor3
+# on iOS / other targets.
+coil-compose = { module = "io.coil-kt.coil3:coil-compose", version.ref = "coil" }
+coil-network-okhttp = { module = "io.coil-kt.coil3:coil-network-okhttp", version.ref = "coil" }
+coil-network-ktor3 = { module = "io.coil-kt.coil3:coil-network-ktor3", version.ref = "coil" }
 
 # SQLDelight
 sqldelight-android-driver = { module = "app.cash.sqldelight:android-driver", version.ref = "sqldelight" }

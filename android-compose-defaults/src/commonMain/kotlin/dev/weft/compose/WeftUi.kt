@@ -1,7 +1,7 @@
 package dev.weft.compose
 
-import android.content.Context
-import coil.ImageLoader
+import coil3.ImageLoader
+import coil3.PlatformContext
 import dev.weft.compose.components.WeftComponent
 import dev.weft.compose.components.WeftComponentRegistry
 import dev.weft.compose.components.buildWeftImageLoader
@@ -32,7 +32,7 @@ import dev.weft.compose.components.defaultWeftComponents
  * registry, your own renderer. The SDK doesn't know the difference.
  */
 public class WeftUi(
-    context: Context,
+    context: PlatformContext,
     /**
      * App-specific components to register on top of (or instead of) the
      * substrate's built-in palette. With [includeDefaults] = true
@@ -55,7 +55,11 @@ public class WeftUi(
      */
     includeDefaults: Boolean = true,
 ) {
-    public val imageLoader: ImageLoader = buildWeftImageLoader(context.applicationContext)
+    // Coil 3's ImageLoader.Builder retains the PlatformContext internally.
+    // We deliberately don't reach for `Context.applicationContext` here —
+    // that's an Android-only field, and the convention on iOS is to pass
+    // whatever PlatformContext the call site has.
+    public val imageLoader: ImageLoader = buildWeftImageLoader(context)
 
     public val components: List<WeftComponent<*>> =
         if (includeDefaults) defaultWeftComponents(imageLoader) + extraComponents

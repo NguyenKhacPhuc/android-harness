@@ -173,10 +173,9 @@ public fun AgentRenderedTreeScreen(
                                         val isExec = dev.weft.harness.bindings.ActionExecutor
                                             .isExecAction(event.action)
                                         if (isExec) {
-                                            android.util.Log.d(
-                                                "WeftBindings",
-                                                "\$exec intercepted: sourceLabel=${event.sourceLabel}",
-                                            )
+                                            io.github.aakira.napier.Napier.d(tag = "WeftBindings") {
+                                                "\$exec intercepted: sourceLabel=${event.sourceLabel}"
+                                            }
                                         }
                                         dev.weft.harness.bindings.ActionExecutor
                                             .tryExecuteAction(event.action, sources)

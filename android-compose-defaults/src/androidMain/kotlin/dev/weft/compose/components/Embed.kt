@@ -195,8 +195,12 @@ public class HtmlComponent : WeftComponent<HtmlProps>(
     }
 }
 
-/** All [ComponentCategory.EMBED] components shipped with the substrate. */
-public val EmbedComponents: List<WeftComponent<*>> = listOf(
+/**
+ * Android's [ComponentCategory.EMBED] palette — backed by
+ * `android.webkit.WebView`. iOS provides an empty actual until a
+ * WKWebView wrapper ships.
+ */
+public actual val EmbedComponents: List<WeftComponent<*>> = listOf(
     WebViewComponent(),
     HtmlComponent(),
 )

@@ -42,7 +42,11 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.collectLatest
+import kotlinx.datetime.TimeZone
+import kotlinx.datetime.toLocalDateTime
 import kotlinx.serialization.Serializable
+import kotlin.time.Clock
+import kotlin.time.ExperimentalTime
 
 /**
  * [ComponentCategory.MACRO] components — behaviorally-complete widgets.
@@ -73,7 +77,7 @@ public class TimerComponent : WeftComponent<TimerProps>(
 ) {
     @Composable
     override fun Render(props: TimerProps, children: @Composable () -> Unit, onEvent: (ComponentEvent) -> Unit) {
-        var endsAt by remember(props.durationMs) { mutableLongStateOf(System.currentTimeMillis() + props.durationMs) }
+        var endsAt by remember(props.durationMs) { mutableLongStateOf(nowMs() + props.durationMs) }
         var remainingMs by remember(props.durationMs) { mutableLongStateOf(props.durationMs) }
         var isPaused by remember(props.durationMs) { mutableStateOf(false) }
         var hasCompleted by remember(props.durationMs) { mutableStateOf(false) }
@@ -81,7 +85,7 @@ public class TimerComponent : WeftComponent<TimerProps>(
         LaunchedEffect(endsAt, isPaused, hasCompleted) {
             if (isPaused || hasCompleted) return@LaunchedEffect
             while (true) {
-                val r = (endsAt - System.currentTimeMillis()).coerceAtLeast(0L)
+                val r = (endsAt - nowMs()).coerceAtLeast(0L)
                 remainingMs = r
                 if (r == 0L) {
                     hasCompleted = true
@@ -120,7 +124,7 @@ public class TimerComponent : WeftComponent<TimerProps>(
                     if (props.showPause && !hasCompleted) {
                         OutlinedButton(onClick = {
                             if (isPaused) {
-                                endsAt = System.currentTimeMillis() + remainingMs
+                                endsAt = nowMs() + remainingMs
                                 isPaused = false
                             } else {
                                 isPaused = true
@@ -129,7 +133,7 @@ public class TimerComponent : WeftComponent<TimerProps>(
                     }
                     if (props.showReset) {
                         OutlinedButton(onClick = {
-                            endsAt = System.currentTimeMillis() + props.durationMs
+                            endsAt = nowMs() + props.durationMs
                             remainingMs = props.durationMs
                             isPaused = false
                             hasCompleted = false
@@ -139,7 +143,7 @@ public class TimerComponent : WeftComponent<TimerProps>(
                         OutlinedButton(onClick = {
                             val newRemaining = remainingMs + props.extendByMs
                             remainingMs = newRemaining
-                            if (!isPaused) endsAt = System.currentTimeMillis() + newRemaining
+                            if (!isPaused) endsAt = nowMs() + newRemaining
                             if (hasCompleted) hasCompleted = false
                         }) { Text("+${props.extendByMs / 60_000}m") }
                     }
@@ -178,7 +182,7 @@ public class StopwatchComponent : WeftComponent<StopwatchProps>(
             if (!isRunning) return@LaunchedEffect
             val base = elapsedMs
             while (isRunning) {
-                elapsedMs = base + (System.currentTimeMillis() - startedAt)
+                elapsedMs = base + (nowMs() - startedAt)
                 delay(STOPWATCH_TICK_MS)
             }
         }
@@ -208,7 +212,7 @@ public class StopwatchComponent : WeftComponent<StopwatchProps>(
                     OutlinedButton(onClick = { laps.add(elapsedMs) }) { Text("Lap") }
                 } else {
                     Button(onClick = {
-                        startedAt = System.currentTimeMillis()
+                        startedAt = nowMs()
                         isRunning = true
                     }) { Text(if (elapsedMs == 0L) "Start" else "Resume") }
                     OutlinedButton(onClick = {
@@ -431,7 +435,7 @@ public class DateCountdownComponent : WeftComponent<DateCountdownProps>(
     @OptIn(ExperimentalMaterial3Api::class)
     @Composable
     override fun Render(props: DateCountdownProps, children: @Composable () -> Unit, onEvent: (ComponentEvent) -> Unit) {
-        val defaultStart = remember { System.currentTimeMillis() + DEFAULT_TARGET_OFFSET_MS }
+        val defaultStart = remember { nowMs() + DEFAULT_TARGET_OFFSET_MS }
         // SelectableDates: allow the user to tap only today + future on the
         // calendar. The agent's `initialEpochMs` can still be in the past
         // (it's shown for transparency so the user sees what Claude picked),
@@ -439,11 +443,11 @@ public class DateCountdownComponent : WeftComponent<DateCountdownProps>(
         val futureOnly = remember {
             object : SelectableDates {
                 override fun isSelectableDate(utcTimeMillis: Long): Boolean {
-                    val todayStartMs = System.currentTimeMillis() - (System.currentTimeMillis() % MILLIS_PER_DAY)
+                    val todayStartMs = nowMs() - (nowMs() % MILLIS_PER_DAY)
                     return utcTimeMillis >= todayStartMs - MILLIS_PER_DAY
                 }
                 override fun isSelectableYear(year: Int): Boolean {
-                    val nowYear = java.time.LocalDate.now().year
+                    val nowYear = currentYear()
                     return year >= nowYear
                 }
             }
@@ -455,7 +459,7 @@ public class DateCountdownComponent : WeftComponent<DateCountdownProps>(
         // Initialize synchronously so the first frame shows the right value
         // (avoids a "0 days" flash before the LaunchedEffect ticks).
         val initialTarget = props.initialEpochMs ?: defaultStart
-        var remainingMs by remember { mutableLongStateOf(initialTarget - System.currentTimeMillis()) }
+        var remainingMs by remember { mutableLongStateOf(initialTarget - nowMs()) }
         var hasArrived by remember { mutableStateOf(false) }
 
         // collectLatest: when the user changes the selected date, cancel
@@ -465,14 +469,14 @@ public class DateCountdownComponent : WeftComponent<DateCountdownProps>(
             snapshotFlow { state.selectedDateMillis }.collectLatest { target ->
                 hasArrived = false
                 if (target == null) return@collectLatest
-                val initialDiff = target - System.currentTimeMillis()
+                val initialDiff = target - nowMs()
                 if (initialDiff < 0) {
                     // Past date — don't tick, don't fire onArrived; just show the negative value.
                     remainingMs = initialDiff
                     return@collectLatest
                 }
                 while (true) {
-                    val r = target - System.currentTimeMillis()
+                    val r = target - nowMs()
                     remainingMs = r
                     if (r <= 0L) {
                         if (!hasArrived) {
@@ -535,15 +539,27 @@ private const val DATE_COUNTDOWN_TICK_MS = 1000L
 private const val MILLIS_PER_DAY = 24L * 60 * 60 * 1000
 private const val DEFAULT_TARGET_OFFSET_MS = 30L * MILLIS_PER_DAY
 
+// commonMain has no `System.currentTimeMillis` / `java.time.LocalDate`, so
+// these tiny wrappers stand in for the wall-clock + format helpers the
+// timers use.
+@OptIn(ExperimentalTime::class)
+private fun nowMs(): Long = Clock.System.now().toEpochMilliseconds()
+
+@OptIn(ExperimentalTime::class)
+private fun currentYear(): Int =
+    Clock.System.now().toLocalDateTime(TimeZone.currentSystemDefault()).year
+
+private fun pad2(value: Long): String = if (value < 10) "0$value" else value.toString()
+
 private fun formatTimer(ms: Long): String {
     val totalSeconds = (ms + 500) / 1000
-    return "%d:%02d".format(totalSeconds / 60, totalSeconds % 60)
+    return "${totalSeconds / 60}:${pad2(totalSeconds % 60)}"
 }
 
 private fun formatStopwatch(ms: Long): String {
     val totalSeconds = ms / 1000
     val tenths = (ms % 1000) / 100
-    return "%d:%02d.%d".format(totalSeconds / 60, totalSeconds % 60, tenths)
+    return "${totalSeconds / 60}:${pad2(totalSeconds % 60)}.$tenths"
 }
 
 private fun formatDateCountdown(ms: Long): String {
@@ -557,8 +573,8 @@ private fun formatDateCountdown(ms: Long): String {
     val seconds = totalSeconds % 60
     val body = when {
         days > 0 -> "$days days"
-        hours > 0 -> "%d:%02d:%02d".format(hours, minutes, seconds)
-        else -> "%d:%02d".format(minutes, seconds)
+        hours > 0 -> "$hours:${pad2(minutes)}:${pad2(seconds)}"
+        else -> "$minutes:${pad2(seconds)}"
     }
     return if (isPast) "$body ago" else body
 }
