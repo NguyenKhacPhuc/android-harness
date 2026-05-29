@@ -1,3 +1,5 @@
+@file:OptIn(kotlin.time.ExperimentalTime::class)
+
 package dev.weft.harness.testing
 
 import ai.koog.agents.core.tools.ToolDescriptor
@@ -12,7 +14,8 @@ import ai.koog.prompt.message.ResponseMetaInfo
 import ai.koog.prompt.streaming.StreamFrame
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.flow
-import java.util.concurrent.atomic.AtomicInteger
+import kotlinx.atomicfu.atomic
+import kotlin.time.Clock
 import kotlin.time.ExperimentalTime
 import kotlin.time.Instant
 
@@ -45,19 +48,19 @@ public class FakeWeftLLM(
     private val rules: List<Rule> = emptyList(),
     script: List<FakeStep> = emptyList(),
     private val onUnscripted: UnscriptedPolicy = UnscriptedPolicy.Throw,
-    private val nowMs: () -> Long = { System.currentTimeMillis() },
+    private val nowMs: () -> Long = { Clock.System.now().toEpochMilliseconds() },
 ) : PromptExecutor() {
 
     private val scriptQueue: ArrayDeque<FakeStep> = ArrayDeque(script)
-    private val callCounter = AtomicInteger(0)
-    private val toolIdCounter = AtomicInteger(0)
+    private val callCounter = atomic(0)
+    private val toolIdCounter = atomic(0)
 
     /** Captured calls — tests assert against this for "was the agent called with X?" */
     private val _calls: MutableList<RecordedCall> = mutableListOf()
     public val calls: List<RecordedCall> get() = _calls.toList()
 
     /** Total non-streaming + streaming calls served. */
-    public val callCount: Int get() = callCounter.get()
+    public val callCount: Int get() = callCounter.value
 
     @OptIn(ExperimentalTime::class)
     override suspend fun execute(
@@ -150,7 +153,7 @@ public class FakeWeftLLM(
                 throw FakeLlmException(
                     "FakeWeftLLM: no rule matched and script is empty. " +
                         "Last user message: '$lastUser'. " +
-                        "Call #${callCounter.get() + 1}.",
+                        "Call #${callCounter.value + 1}.",
                 )
             }
         }
@@ -198,7 +201,7 @@ public class FakeWeftLLM(
         private val rules: MutableList<Rule> = mutableListOf()
         private val script: MutableList<FakeStep> = mutableListOf()
         private var policy: UnscriptedPolicy = UnscriptedPolicy.Throw
-        private var nowMs: () -> Long = { System.currentTimeMillis() }
+        private var nowMs: () -> Long = { Clock.System.now().toEpochMilliseconds() }
 
         /** Add a rule. First non-null match across rules wins. */
         public fun rule(rule: Rule): Builder = apply { rules += rule }
@@ -272,7 +275,7 @@ public sealed class FakeStep {
     public data class CallTool(
         public val name: String,
         public val argsJson: String,
-        public val id: String = "tu_fake_${System.nanoTime() % 9999}",
+        public val id: String = "tu_fake_${Clock.System.now().toEpochMilliseconds() % 9999}",
     ) : FakeStep()
 
     /** Multiple tool calls in one response (parallel tools). */
@@ -294,7 +297,7 @@ public sealed class FakeStep {
 public data class ToolCallSpec(
     public val name: String,
     public val argsJson: String,
-    public val id: String = "tu_fake_${System.nanoTime() % 9999}",
+    public val id: String = "tu_fake_${Clock.System.now().toEpochMilliseconds() % 9999}",
 )
 
 /** A rule sees the prompt + model + tools and optionally produces a step. */

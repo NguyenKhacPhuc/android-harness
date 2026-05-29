@@ -83,7 +83,7 @@ import dev.weft.contracts.WifiInfo
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.buildJsonObject
 import kotlinx.serialization.json.put
-import java.util.concurrent.atomic.AtomicLong
+import kotlinx.atomicfu.atomic
 
 /**
  * In-memory [OsCapabilities] with recording stubs for every sub-capability.
@@ -149,7 +149,7 @@ public class FakeNotifications : Notifications {
     public val shown: MutableList<NotificationSpec> = mutableListOf()
     public val scheduled: MutableList<Pair<NotificationSpec, ScheduleSpec>> = mutableListOf()
     public val cancelled: MutableList<NotificationHandle> = mutableListOf()
-    private val idGen = AtomicLong(0)
+    private val idGen = atomic(0L)
 
     override suspend fun showNow(spec: NotificationSpec): NotificationHandle {
         shown += spec
@@ -171,7 +171,7 @@ public class FakeCalendar : Calendar {
     public val created: MutableList<CalendarEvent> = mutableListOf()
     public val updated: MutableList<Pair<CalendarEventId, CalendarPatch>> = mutableListOf()
     public val deleted: MutableList<CalendarEventId> = mutableListOf()
-    private val idGen = AtomicLong(0)
+    private val idGen = atomic(0L)
 
     override suspend fun read(filter: CalendarFilter): List<CalendarEvent> = nextRead
     override suspend fun create(event: CalendarEvent): CalendarEventId {
@@ -417,7 +417,7 @@ public class FakePdf : Pdf {
     public val extractTextCalls: MutableList<Triple<String, String?, Int>> = mutableListOf()
     public val renderPagesCalls: MutableList<Triple<String, List<Int>?, Float>> = mutableListOf()
     public val createCalls: MutableList<Triple<String, String, String>> = mutableListOf()
-    private val idGen = AtomicLong(0)
+    private val idGen = atomic(0L)
 
     override suspend fun extractText(uri: String, pageRange: String?, maxPages: Int): PdfTextResult {
         extractTextCalls += Triple(uri, pageRange, maxPages)
@@ -512,7 +512,7 @@ public class FakeVolume : Volume {
     public val setCalls: MutableList<Pair<VolumeStream, Float>> = mutableListOf()
     public var setSucceeds: Boolean = true
 
-    override suspend fun get(stream: VolumeStream): Float = streams.getOrDefault(stream, 0.5f)
+    override suspend fun get(stream: VolumeStream): Float = streams[stream] ?: 0.5f
     override suspend fun set(stream: VolumeStream, normalized: Float): Boolean {
         setCalls += stream to normalized
         if (setSucceeds) streams[stream] = normalized.coerceIn(0f, 1f)
