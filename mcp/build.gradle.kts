@@ -3,6 +3,10 @@
 // they appear in the system prompt and route through the normal agent
 // loop alongside the substrate's built-in capabilities.
 //
+// Zero `android.*` imports in source — code was always KMP-portable,
+// just hadn't gotten the multiplatform plugin. Now KMP-published so
+// iOS hosts can connect to MCP servers the same way Android hosts do.
+//
 // What's in scope for v1:
 //   • JSON-RPC over HTTP (POST request → JSON response). SSE deferred —
 //     adequate for any server that doesn't initiate messages back.
@@ -16,7 +20,8 @@
 // Spec target: 2024-11-05.
 
 plugins {
-    alias(libs.plugins.kotlin.jvm)
+    alias(libs.plugins.kotlin.multiplatform)
+    alias(libs.plugins.android.library)
     alias(libs.plugins.kotlin.serialization)
 }
 
@@ -24,35 +29,51 @@ base { archivesName.set("weft-mcp") }
 
 kotlin {
     jvmToolchain(17)
-    compilerOptions {
-        jvmTarget.set(org.jetbrains.kotlin.gradle.dsl.JvmTarget.JVM_17)
+    applyDefaultHierarchyTemplate()
+
+    jvm()
+    androidTarget {
+        compilerOptions {
+            jvmTarget.set(org.jetbrains.kotlin.gradle.dsl.JvmTarget.JVM_17)
+        }
     }
+    iosArm64()
+    iosSimulatorArm64()
+
     explicitApi()
+
+    sourceSets {
+        commonMain.dependencies {
+            api(project(":contracts"))
+            api(project(":tools"))
+            implementation(project(":security"))
+            api(libs.kotlinx.serialization.json)
+            implementation(libs.ktor.client.core)
+            implementation(libs.ktor.client.content.negotiation)
+            implementation(libs.ktor.serialization.kotlinx.json)
+            implementation(libs.kotlinx.coroutines.core)
+            implementation(libs.kotlinx.atomicfu)
+        }
+        commonTest.dependencies {
+            implementation(libs.kotest.assertions.core)
+            implementation(libs.kotlinx.coroutines.test)
+        }
+        jvmTest.dependencies {
+            implementation(libs.kotest.runner.junit5)
+        }
+    }
 }
 
-java {
-    sourceCompatibility = JavaVersion.VERSION_17
-    targetCompatibility = JavaVersion.VERSION_17
+android {
+    namespace = "dev.weft.mcp"
+    compileSdk = libs.versions.compileSdk.get().toInt()
+    defaultConfig {
+        minSdk = libs.versions.minSdk.get().toInt()
+    }
+    compileOptions {
+        sourceCompatibility = JavaVersion.VERSION_17
+        targetCompatibility = JavaVersion.VERSION_17
+    }
 }
 
-dependencies {
-    api(project(":contracts"))
-    // :tools — McpRemoteTool extends WeftTool. api so consumers of
-    // :mcp see the WeftTool type without an extra dep.
-    api(project(":tools"))
-    // :security — for NetworkPolicy + whitelistingHttpClient.
-    implementation(project(":security"))
-
-    api(libs.kotlinx.serialization.json)
-
-    implementation(libs.ktor.client.core)
-    implementation(libs.ktor.client.content.negotiation)
-    implementation(libs.ktor.serialization.kotlinx.json)
-    implementation(libs.kotlinx.coroutines.core)
-
-    testImplementation(libs.kotest.runner.junit5)
-    testImplementation(libs.kotest.assertions.core)
-    testImplementation(libs.kotlinx.coroutines.test)
-}
-
-tasks.test { useJUnitPlatform() }
+tasks.named<Test>("jvmTest") { useJUnitPlatform() }

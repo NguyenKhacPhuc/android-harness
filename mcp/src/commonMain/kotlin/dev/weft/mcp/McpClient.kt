@@ -16,7 +16,7 @@ import kotlinx.serialization.encodeToString
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.encodeToJsonElement
-import java.util.concurrent.atomic.AtomicLong
+import kotlinx.atomicfu.atomic
 
 /**
  * Minimal Model Context Protocol client.
@@ -65,7 +65,7 @@ public class HttpMcpClient(
     private val json: Json = DEFAULT_JSON,
 ) : McpClient {
 
-    private val nextId = AtomicLong(0)
+    private val nextId = atomic(0L)
 
     public companion object {
         public val DEFAULT_JSON: Json = Json {
