@@ -4,7 +4,10 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
-import java.util.UUID
+import kotlin.time.Clock
+import kotlin.time.ExperimentalTime
+import kotlin.uuid.ExperimentalUuidApi
+import kotlin.uuid.Uuid
 
 /**
  * Persistence + lookup for [AgentTrace]s. The substrate creates a single
@@ -72,6 +75,7 @@ interface TraceStore {
  * dropped silently. The plan calls for SQLite + size-cap by bytes; this
  * approximation is enough to ship a viewer.
  */
+@OptIn(ExperimentalTime::class, ExperimentalUuidApi::class)
 class InMemoryTraceStore(private val maxTraces: Int = DEFAULT_MAX_TRACES) : TraceStore {
 
     private val _traces: MutableStateFlow<List<AgentTrace>> = MutableStateFlow(emptyList())
@@ -86,7 +90,7 @@ class InMemoryTraceStore(private val maxTraces: Int = DEFAULT_MAX_TRACES) : Trac
         val trace = AgentTrace(
             id = id,
             conversationId = conversationId,
-            startEpochMs = System.currentTimeMillis(),
+            startEpochMs = Clock.System.now().toEpochMilliseconds(),
             userMessage = userMessage,
             parentTraceId = parentTraceId,
         )
@@ -97,7 +101,7 @@ class InMemoryTraceStore(private val maxTraces: Int = DEFAULT_MAX_TRACES) : Trac
     override suspend fun completeTrace(traceId: String, finalAssistantMessage: String?) {
         mutate(traceId) {
             it.copy(
-                endEpochMs = System.currentTimeMillis(),
+                endEpochMs = Clock.System.now().toEpochMilliseconds(),
                 finalAssistantMessage = finalAssistantMessage,
                 status = TraceStatus.COMPLETED,
             )
@@ -107,7 +111,7 @@ class InMemoryTraceStore(private val maxTraces: Int = DEFAULT_MAX_TRACES) : Trac
     override suspend fun failTrace(traceId: String, errorMessage: String) {
         mutate(traceId) {
             it.copy(
-                endEpochMs = System.currentTimeMillis(),
+                endEpochMs = Clock.System.now().toEpochMilliseconds(),
                 status = TraceStatus.FAILED,
                 errorMessage = errorMessage,
             )
@@ -120,7 +124,7 @@ class InMemoryTraceStore(private val maxTraces: Int = DEFAULT_MAX_TRACES) : Trac
             it.copy(
                 llmCalls = it.llmCalls + LlmCallTrace(
                     id = id,
-                    startEpochMs = System.currentTimeMillis(),
+                    startEpochMs = Clock.System.now().toEpochMilliseconds(),
                     model = model,
                 ),
             )
@@ -142,7 +146,7 @@ class InMemoryTraceStore(private val maxTraces: Int = DEFAULT_MAX_TRACES) : Trac
                 llmCalls = t.llmCalls.map { call ->
                     if (call.id == llmCallId) {
                         call.copy(
-                            endEpochMs = System.currentTimeMillis(),
+                            endEpochMs = Clock.System.now().toEpochMilliseconds(),
                             inputTokens = inputTokens,
                             outputTokens = outputTokens,
                             totalTokens = totalTokens,
@@ -163,7 +167,7 @@ class InMemoryTraceStore(private val maxTraces: Int = DEFAULT_MAX_TRACES) : Trac
             it.copy(
                 toolCalls = it.toolCalls + ToolCallTrace(
                     id = id,
-                    startEpochMs = System.currentTimeMillis(),
+                    startEpochMs = Clock.System.now().toEpochMilliseconds(),
                     toolName = toolName,
                     argsPreview = argsPreview,
                 ),
@@ -178,7 +182,7 @@ class InMemoryTraceStore(private val maxTraces: Int = DEFAULT_MAX_TRACES) : Trac
                 toolCalls = t.toolCalls.map { call ->
                     if (call.id == toolCallId) {
                         call.copy(
-                            endEpochMs = System.currentTimeMillis(),
+                            endEpochMs = Clock.System.now().toEpochMilliseconds(),
                             resultPreview = resultPreview,
                             status = ToolStatus.COMPLETED,
                         )
@@ -196,7 +200,7 @@ class InMemoryTraceStore(private val maxTraces: Int = DEFAULT_MAX_TRACES) : Trac
                 toolCalls = t.toolCalls.map { call ->
                     if (call.id == toolCallId) {
                         call.copy(
-                            endEpochMs = System.currentTimeMillis(),
+                            endEpochMs = Clock.System.now().toEpochMilliseconds(),
                             status = ToolStatus.FAILED,
                             errorMessage = errorMessage,
                         )
@@ -222,7 +226,7 @@ class InMemoryTraceStore(private val maxTraces: Int = DEFAULT_MAX_TRACES) : Trac
         }
     }
 
-    private fun newId(prefix: String): String = "$prefix-${UUID.randomUUID().toString().take(8)}"
+    private fun newId(prefix: String): String = "$prefix-${Uuid.random().toString().take(8)}"
 
     companion object {
         const val DEFAULT_MAX_TRACES: Int = 100

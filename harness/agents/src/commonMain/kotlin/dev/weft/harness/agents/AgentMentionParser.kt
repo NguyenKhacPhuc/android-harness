@@ -24,7 +24,10 @@ package dev.weft.harness.agents
  */
 object AgentMentionParser {
 
-    private val MENTION_REGEX = Regex("^@([a-z0-9_-]+)(?:\\s+(.*))?$", RegexOption.DOT_MATCHES_ALL)
+    // `(?s)` inline flag enables DOTALL/DOT_MATCHES_ALL — needed so the
+    // body `(.*)` can span multiple lines. `RegexOption.DOT_MATCHES_ALL`
+    // is JVM-only; the inline flag is portable to K/N.
+    private val MENTION_REGEX = Regex("(?s)^@([a-z0-9_-]+)(?:\\s+(.*))?$")
 
     /**
      * Parse [input] into an optional agent name and the body text. The

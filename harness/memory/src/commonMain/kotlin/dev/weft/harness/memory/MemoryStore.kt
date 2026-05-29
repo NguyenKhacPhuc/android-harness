@@ -5,7 +5,10 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
 import kotlinx.serialization.Serializable
-import java.util.UUID
+import kotlin.time.Clock
+import kotlin.time.ExperimentalTime
+import kotlin.uuid.ExperimentalUuidApi
+import kotlin.uuid.Uuid
 
 /**
  * Persistent storage for agent-curated memories.
@@ -70,6 +73,7 @@ enum class MemoryScope {
  * matching. Persistence (SQLDelight + FTS5) lands in the persistence pass
  * tracked in `docs/follow-ups.md`.
  */
+@OptIn(ExperimentalTime::class, ExperimentalUuidApi::class)
 class InMemoryMemoryStore : MemoryStore {
 
     private val _memories: MutableStateFlow<List<MemoryEntry>> = MutableStateFlow(emptyList())
@@ -78,11 +82,11 @@ class InMemoryMemoryStore : MemoryStore {
     override suspend fun store(content: String, tags: List<String>, scope: MemoryScope): MemoryEntry {
         require(scope != MemoryScope.ANY) { "Cannot store with scope=ANY — pick SESSION or PERMANENT" }
         val entry = MemoryEntry(
-            id = "mem-${UUID.randomUUID().toString().take(12)}",
+            id = "mem-${Uuid.random().toString().take(12)}",
             content = content,
             tags = tags.distinct(),
             scope = scope,
-            storedAtEpochMs = System.currentTimeMillis(),
+            storedAtEpochMs = Clock.System.now().toEpochMilliseconds(),
         )
         _memories.update { listOf(entry) + it }
         return entry

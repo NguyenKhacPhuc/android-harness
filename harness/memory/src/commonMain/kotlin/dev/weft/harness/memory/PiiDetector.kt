@@ -35,12 +35,18 @@ class PiiDetector(
     /** Replace every match with `[REDACTED-<kind>]` for safe display in a confirmation prompt. */
     fun redact(text: String, matches: List<PiiMatch> = scan(text)): String {
         if (matches.isEmpty()) return text
+        // commonMain StringBuilder doesn't expose the JVM
+        // replace(startIndex, endIndex, value) overload — assemble the
+        // result by splicing around each match instead. We walk
+        // descending so later matches don't shift earlier indices.
         val sorted = matches.sortedByDescending { it.start }
-        val sb = StringBuilder(text)
+        var result = text
         for (m in sorted) {
-            sb.replace(m.start, m.endExclusive, "[REDACTED-${m.kind.name}]")
+            result = result.substring(0, m.start) +
+                "[REDACTED-${m.kind.name}]" +
+                result.substring(m.endExclusive)
         }
-        return sb.toString()
+        return result
     }
 
     companion object {

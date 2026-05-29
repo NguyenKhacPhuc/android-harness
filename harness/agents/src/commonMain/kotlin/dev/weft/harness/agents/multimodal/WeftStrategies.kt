@@ -15,7 +15,7 @@ import dev.weft.contracts.ToolProvider
 import dev.weft.harness.prompt.multimodal.WeftUserInput
 import dev.weft.harness.prompt.multimodal.buildUserParts
 import dev.weft.tools.ResolvedWeftTool
-import java.util.concurrent.atomic.AtomicInteger
+import kotlinx.atomicfu.atomic
 import kotlin.coroutines.coroutineContext
 
 /**
@@ -93,7 +93,7 @@ internal fun weftSingleRunStrategy(
         // effectively per-turn state. Reset on each strategy construction
         // because each call to `strategy { … }` produces a fresh
         // AIAgentGraphStrategy with its own closure.
-        val guardRetries = AtomicInteger(0)
+        val guardRetries = atomic(0)
 
         val nodeCallLLM by node<WeftUserInput, Message.Assistant>("weft_call_llm") { input ->
             llm.writeSession {
@@ -163,7 +163,7 @@ internal fun weftSingleRunStrategy(
             val hasToolCalls = msg.parts.any { it is MessagePart.Tool.Call }
             if (hasToolCalls) return@node msg
             if (!narrateGuardEnabled) return@node msg
-            if (guardRetries.get() > 0) return@node msg
+            if (guardRetries.value > 0) return@node msg
             if (!looksLikeNarrateWithoutEmit(msg.textContent())) return@node msg
 
             guardRetries.incrementAndGet()

@@ -37,7 +37,8 @@ import dev.weft.harness.reliability.withRetry
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.SharedFlow
 import kotlinx.coroutines.flow.asSharedFlow
-import java.util.UUID
+import kotlin.uuid.ExperimentalUuidApi
+import kotlin.uuid.Uuid
 
 /**
  * A multi-turn wrapper around Koog's [AIAgent] with built-in observability,
@@ -55,6 +56,7 @@ import java.util.UUID
  *
  * Cost: a new AIAgent + ToolRegistry per send. Negligible.
  */
+@OptIn(ExperimentalUuidApi::class)
 class WeftAgent(
     private val executor: PromptExecutor,
     /**
@@ -83,7 +85,7 @@ class WeftAgent(
      * Empty string disables.
      */
     private val volatilePrefixSupplier: () -> String = { "" },
-    private val conversationId: String = UUID.randomUUID().toString(),
+    private val conversationId: String = Uuid.random().toString(),
     private val maxIterations: Int = MAX_ITERATIONS_DEFAULT,
     /**
      * Per-LLM-call `max_tokens` budget. Koog's Anthropic client defaults to
@@ -581,7 +583,7 @@ class WeftAgent(
      */
     suspend fun newChat() {
         history.clear()
-        val newId = conversationStore?.newConversation() ?: UUID.randomUUID().toString()
+        val newId = conversationStore?.newConversation() ?: Uuid.random().toString()
         _conversationId.value = newId
     }
 

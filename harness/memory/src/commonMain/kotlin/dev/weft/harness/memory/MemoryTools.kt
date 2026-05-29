@@ -8,7 +8,12 @@ import dev.weft.contracts.AskKind
 import dev.weft.contracts.UserAnswer
 import dev.weft.tools.WeftContext
 import dev.weft.tools.WeftTool
+import kotlinx.datetime.Instant as KxInstant
+import kotlinx.datetime.TimeZone
+import kotlinx.datetime.toLocalDateTime
 import kotlinx.serialization.Serializable
+import kotlin.time.Clock
+import kotlin.time.ExperimentalTime
 
 /**
  * `memory_store` — the LLM asks the substrate to remember a fact about the
@@ -186,7 +191,8 @@ class MemoryRecallTool(
             tags = args.tags,
             limit = args.limit,
         )
-        val now = System.currentTimeMillis()
+        @OptIn(ExperimentalTime::class)
+        val now = Clock.System.now().toEpochMilliseconds()
         return Result(
             matches = hits.map {
                 Result.Match(
@@ -221,9 +227,11 @@ internal fun labelProvenance(nowMs: Long, storedAtMs: Long): String {
         ageMs < MEM_MS_PER_HOUR -> "stored ${ageMs / MEM_MS_PER_MIN}m ago"
         ageMs < MEM_MS_PER_DAY -> "stored ${ageMs / MEM_MS_PER_HOUR}h ago"
         ageMs < 7 * MEM_MS_PER_DAY -> "stored ${ageMs / MEM_MS_PER_DAY}d ago"
-        else -> "stored on ${java.time.Instant.ofEpochMilli(storedAtMs)
-            .atZone(java.time.ZoneId.systemDefault())
-            .toLocalDate()}"
+        else -> "stored on ${
+            KxInstant.fromEpochMilliseconds(storedAtMs)
+                .toLocalDateTime(TimeZone.currentSystemDefault())
+                .date
+        }"
     }
 }
 
@@ -361,7 +369,8 @@ class MemoryCompactTool(
         // rows. We do NOT trust LLM-supplied summaries here — using the
         // current store content keeps the user honest about what's about
         // to disappear.
-        val now = System.currentTimeMillis()
+        @OptIn(ExperimentalTime::class)
+        val now = Clock.System.now().toEpochMilliseconds()
         val previewLines = mutableListOf<String>()
         previewLines += "The agent wants to consolidate ${validActions.size} memory " +
             (if (validActions.size == 1) "group:" else "groups:")

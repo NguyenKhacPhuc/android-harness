@@ -1,20 +1,14 @@
-// The agent core — WeftAgent, sub-agents, model routing, cache binders,
-// multimodal handling, streaming. Pure-JVM, no Android dependencies.
-// Apps using the substrate consume this transitively via `:android`'s
-// `api(project(":harness:agents"))` declaration.
+// :harness:agents — WeftAgent, sub-agents, model routing, multimodal
+// handling, streaming.
 //
-// Lives here (instead of inside `:android`) so:
-//   - Tests can exercise WeftAgent / SubAgentRunner without an emulator.
-//   - A future iOS / desktop port can reuse the agent logic against
-//     non-Android stores + tools.
-//   - The dependency boundary "agent logic vs Android wiring" is enforced
-//     by the build, not just by package naming.
-//
-// Android-specific composition root + persistence stays in `:android`:
-// WeftRuntime, SqlDelight* stores, AndroidOsCapabilities, etc.
+// KMP-published now that every transitive (:contracts, :tools, the
+// :harness:* utility chain, Koog) ships iOS klibs at Kotlin 2.3.10
+// ABI. Source uses only `java.util.UUID` + one `AtomicInteger` —
+// both swap to `kotlin.uuid.Uuid` + `kotlinx.atomicfu.atomic`.
 
 plugins {
-    alias(libs.plugins.kotlin.jvm)
+    alias(libs.plugins.kotlin.multiplatform)
+    alias(libs.plugins.android.library)
     alias(libs.plugins.kotlin.serialization)
 }
 
@@ -22,44 +16,51 @@ base { archivesName.set("weft-harness-agents") }
 
 kotlin {
     jvmToolchain(17)
-    compilerOptions {
-        jvmTarget.set(org.jetbrains.kotlin.gradle.dsl.JvmTarget.JVM_17)
+    applyDefaultHierarchyTemplate()
+
+    jvm()
+    androidTarget {
+        compilerOptions {
+            jvmTarget.set(org.jetbrains.kotlin.gradle.dsl.JvmTarget.JVM_17)
+        }
+    }
+    iosArm64()
+    iosSimulatorArm64()
+
+    sourceSets {
+        commonMain.dependencies {
+            api(project(":contracts"))
+            api(project(":tools"))
+            api(project(":harness:behavior"))
+            api(project(":harness:conversation"))
+            api(project(":harness:cost"))
+            api(project(":harness:memory"))
+            api(project(":harness:observability"))
+            api(project(":harness:reliability"))
+            api(project(":harness:prompt"))
+            api(libs.koog.agents)
+            implementation(libs.kotlinx.atomicfu)
+        }
+        commonTest.dependencies {
+            implementation(libs.kotest.assertions.core)
+            implementation(libs.kotlinx.coroutines.test)
+        }
+        jvmTest.dependencies {
+            implementation(libs.kotest.runner.junit5)
+        }
     }
 }
 
-java {
-    sourceCompatibility = JavaVersion.VERSION_17
-    targetCompatibility = JavaVersion.VERSION_17
+android {
+    namespace = "dev.weft.harness.agents"
+    compileSdk = libs.versions.compileSdk.get().toInt()
+    defaultConfig {
+        minSdk = libs.versions.minSdk.get().toInt()
+    }
+    compileOptions {
+        sourceCompatibility = JavaVersion.VERSION_17
+        targetCompatibility = JavaVersion.VERSION_17
+    }
 }
 
-dependencies {
-    // Shared interfaces (ContextProvider, MemoryProvider, etc.).
-    api(project(":contracts"))
-    // WeftTool base + tool context — sub-agents and delegate tools build on these.
-    api(project(":tools"))
-
-    // Cross-cutting harness modules WeftAgent uses directly. `api` exposure
-    // because callers constructing a WeftAgent need to import these types
-    // (TraceStore, UsageStore, QuotaPolicy, …) to wire it up.
-    api(project(":harness:behavior"))
-    api(project(":harness:conversation"))
-    api(project(":harness:cost"))
-    api(project(":harness:memory"))
-    api(project(":harness:observability"))
-    api(project(":harness:reliability"))
-    // Prompt-shaping primitives (assembleSystemPrompt, CacheBinder,
-    // WeftUserInput, buildUserParts, composeEffectiveText). The agent
-    // module consumes them; downstream consumers (`:android`) also need
-    // them when building the runtime so we surface as api().
-    api(project(":harness:prompt"))
-
-    // Koog (LLM client + strategy graph). `api` because WeftAgent's
-    // constructor surfaces Koog types directly.
-    api(libs.koog.agents)
-
-    testImplementation(libs.kotest.runner.junit5)
-    testImplementation(libs.kotest.assertions.core)
-    testImplementation(libs.kotlinx.coroutines.test)
-}
-
-tasks.test { useJUnitPlatform() }
+tasks.named<Test>("jvmTest") { useJUnitPlatform() }
