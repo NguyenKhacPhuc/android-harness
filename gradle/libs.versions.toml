@@ -41,6 +41,11 @@ androidxSecurity = "1.1.0-alpha06"
 # Coil — image loading for the Image component
 coil = "2.7.0"
 
+# Napier — KMP logger. Routes to logcat on Android, os_log on iOS,
+# stdout on JVM. Host calls Napier.base(DebugAntilog()) once at
+# startup to opt in; otherwise the logger no-ops.
+napier = "2.7.1"
+
 # Logging
 slf4j = "2.0.16"
 
@@ -73,6 +78,9 @@ androidx-compose-material3 = { module = "androidx.compose.material3:material3" }
 compose-multiplatform-runtime = { module = "org.jetbrains.compose.runtime:runtime", version.ref = "composeMultiplatform" }
 compose-multiplatform-foundation = { module = "org.jetbrains.compose.foundation:foundation", version.ref = "composeMultiplatform" }
 compose-multiplatform-ui = { module = "org.jetbrains.compose.ui:ui", version.ref = "composeMultiplatform" }
+
+# Napier — KMP logger.
+napier = { module = "io.github.aakira:napier", version.ref = "napier" }
 
 # Ktor
 ktor-client-core = { module = "io.ktor:ktor-client-core", version.ref = "ktor" }

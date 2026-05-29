@@ -86,6 +86,12 @@ kotlin {
             api(libs.compose.multiplatform.ui)
 
             implementation(libs.kotlinx.coroutines.core)
+
+            // Napier — cross-platform logger for the WeftBindings
+            // diagnostic tags. Substrate emits; host opts in via
+            // `Napier.base(DebugAntilog())` at app startup. No-op
+            // until then, so production builds stay quiet.
+            implementation(libs.napier)
         }
     }
 }

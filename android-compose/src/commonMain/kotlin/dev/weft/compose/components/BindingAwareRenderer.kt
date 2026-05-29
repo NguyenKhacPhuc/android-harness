@@ -10,6 +10,7 @@ import dev.weft.contracts.ComponentNode
 import dev.weft.contracts.ComponentRegistry
 import dev.weft.contracts.DataSourceRegistry
 import dev.weft.harness.bindings.BindingEvaluator
+import io.github.aakira.napier.Napier
 import kotlinx.coroutines.flow.merge
 import kotlinx.serialization.json.JsonArray
 import kotlinx.serialization.json.JsonElement
@@ -51,17 +52,16 @@ public fun BindingAwareRenderer(
     // Diagnostic — only logs once per tree change. If no sources show
     // up here, the tree has no `$binding` props (or the walker missed
     // them); display values won't refresh on data changes. Visible on
-    // Android via `adb logcat | grep WeftBindings`, on iOS via the
-    // Xcode console. `println` is used (not platform-specific loggers)
-    // because this file is shared across androidMain + iosMain via
-    // commonMain; an expect/actual logger is the natural extension if
-    // these traces ever stop being throwaway.
+    // Android via `adb logcat -s WeftBindings`, on iOS via the Xcode
+    // console (Napier's iOS antilog routes through os_log).
+    //
+    // Silent until the host calls `Napier.base(DebugAntilog())` at
+    // startup — production builds without that init stay quiet.
     LaunchedEffect(tree, referencedSources) {
-        println(
-            "WeftBindings: Tree composed: referencedSources=" +
-                "${referencedSources.map { it.name }} " +
-                "(empty list = no \$binding sentinels found in tree props)",
-        )
+        Napier.d(tag = "WeftBindings") {
+            "Tree composed: referencedSources=${referencedSources.map { it.name }} " +
+                "(empty list = no \$binding sentinels found in tree props)"
+        }
     }
 
     // Subscribe to every referenced source's `changes` flow; merge into
@@ -71,10 +71,10 @@ public fun BindingAwareRenderer(
         if (referencedSources.isEmpty()) return@produceState
         val merged = referencedSources.map { it.changes }.merge()
         merged.collect {
-            println(
-                "WeftBindings: Source-change tick from one of " +
-                    "${referencedSources.map { s -> s.name }}; resolving tree again",
-            )
+            Napier.d(tag = "WeftBindings") {
+                "Source-change tick from one of " +
+                    "${referencedSources.map { s -> s.name }}; resolving tree again"
+            }
             value = value + 1
         }
     }
@@ -84,7 +84,7 @@ public fun BindingAwareRenderer(
     // the in-flight resolution shows the *previous* resolved tree.
     val resolvedTree by produceState(initialValue = tree, key1 = tree, key2 = tick) {
         val resolved = resolveTree(tree, sources)
-        println("WeftBindings: resolveTree complete (tick=$tick)")
+        Napier.d(tag = "WeftBindings") { "resolveTree complete (tick=$tick)" }
         value = resolved
     }
 
