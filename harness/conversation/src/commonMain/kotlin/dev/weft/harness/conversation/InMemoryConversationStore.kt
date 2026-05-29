@@ -1,11 +1,16 @@
 package dev.weft.harness.conversation
 
+import kotlinx.atomicfu.locks.SynchronizedObject
+import kotlinx.atomicfu.locks.synchronized
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.map
-import java.util.UUID
+import kotlin.time.Clock
+import kotlin.time.ExperimentalTime
+import kotlin.uuid.ExperimentalUuidApi
+import kotlin.uuid.Uuid
 
 /**
  * Process-local [ConversationStore]. Newest thread first by last activity;
@@ -23,9 +28,10 @@ import java.util.UUID
  * through `MutableStateFlow.update`, but the message map is mutated by
  * reference. Use one instance per logical "user" / test.
  */
+@OptIn(ExperimentalTime::class, ExperimentalUuidApi::class)
 public class InMemoryConversationStore(
     private val maxConversations: Int = DEFAULT_MAX_CONVERSATIONS,
-    private val clock: () -> Long = System::currentTimeMillis,
+    private val clock: () -> Long = { Clock.System.now().toEpochMilliseconds() },
 ) : ConversationStore {
 
     private val _conversations: MutableStateFlow<List<ConversationSummary>> =
@@ -33,7 +39,10 @@ public class InMemoryConversationStore(
 
     /** Per-thread message lists keyed by conversation id. Mutated under [lock]. */
     private val messagesByThread: MutableMap<String, MutableList<PersistedMessage>> = mutableMapOf()
-    private val lock = Any()
+    // SynchronizedObject + kotlinx.atomicfu.locks.synchronized give us
+    // commonMain monitor semantics — the same blocking critical-section
+    // shape as `kotlin.synchronized` on JVM, just spelled differently.
+    private val lock = SynchronizedObject()
 
     public override val conversations: StateFlow<List<ConversationSummary>> =
         _conversations.asStateFlow()
@@ -55,7 +64,7 @@ public class InMemoryConversationStore(
         _conversations.value.firstOrNull()?.id
 
     public override suspend fun newConversation(): String {
-        val id = "conv-${UUID.randomUUID().toString().take(CONVERSATION_ID_LEN)}"
+        val id = "conv-${Uuid.random().toString().take(CONVERSATION_ID_LEN)}"
         val now = clock()
         synchronized(lock) {
             messagesByThread[id] = mutableListOf()
@@ -90,7 +99,7 @@ public class InMemoryConversationStore(
         agentName: String,
     ) {
         val now = clock()
-        val msgId = "msg-${UUID.randomUUID().toString().take(MESSAGE_ID_LEN)}"
+        val msgId = "msg-${Uuid.random().toString().take(MESSAGE_ID_LEN)}"
         synchronized(lock) {
             val msgs = messagesByThread[conversationId] ?: return  // unknown thread — no-op
             val nextSeq = (msgs.maxOfOrNull { it.seq } ?: -1L) + 1L

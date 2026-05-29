@@ -3,8 +3,10 @@ package dev.weft.harness.reliability
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlin.time.Clock
 import kotlin.time.Duration
 import kotlin.time.Duration.Companion.seconds
+import kotlin.time.ExperimentalTime
 
 /**
  * Simple consecutive-failure circuit breaker.
@@ -28,7 +30,8 @@ class CircuitBreaker(
      * compute "retry in Xs" without re-reading config from elsewhere.
      */
     val openDuration: Duration = DEFAULT_OPEN_DURATION,
-    private val nowEpochMs: () -> Long = System::currentTimeMillis,
+    @OptIn(ExperimentalTime::class)
+    private val nowEpochMs: () -> Long = { Clock.System.now().toEpochMilliseconds() },
 ) {
     private val _state: MutableStateFlow<State> = MutableStateFlow(State.Closed(failureCount = 0))
 

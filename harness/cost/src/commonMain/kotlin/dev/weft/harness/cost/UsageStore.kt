@@ -4,8 +4,11 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
-import java.time.LocalDate
-import java.time.ZoneId
+import kotlinx.datetime.LocalDate
+import kotlinx.datetime.TimeZone
+import kotlinx.datetime.toLocalDateTime
+import kotlin.time.Clock
+import kotlin.time.ExperimentalTime
 
 /**
  * Aggregates token usage + dollar cost across turns. Per-conversation,
@@ -71,9 +74,12 @@ interface UsageStore {
  * Use this for tests, or in apps that don't need usage to survive
  * restart. Production apps should use `SqlDelightUsageStore`.
  */
+@OptIn(ExperimentalTime::class)
 class InMemoryUsageStore(
     private val priceTable: PriceTable = PriceTable(),
-    private val nowProvider: () -> LocalDate = { LocalDate.now(ZoneId.systemDefault()) },
+    private val nowProvider: () -> LocalDate = {
+        Clock.System.now().toLocalDateTime(TimeZone.currentSystemDefault()).date
+    },
 ) : UsageStore {
     private val _totals: MutableStateFlow<UsageTotals> = MutableStateFlow(UsageTotals())
     override val totals: StateFlow<UsageTotals> = _totals.asStateFlow()
@@ -178,4 +184,19 @@ sealed class QuotaState {
 }
 
 class QuotaExceededException(val usdToday: Double, val capUsd: Double) :
-    RuntimeException("Daily cost cap reached: \$%.2f used of \$%.2f cap".format(usdToday, capUsd))
+    RuntimeException(
+        "Daily cost cap reached: \$${formatUsd(usdToday)} used of \$${formatUsd(capUsd)} cap",
+    )
+
+/**
+ * Format [value] as a 2-decimal-place USD amount — KMP replacement for
+ * `"%.2f".format(value)`. Rounds half-up via `roundToLong`.
+ */
+private fun formatUsd(value: Double): String {
+    val scaled = (value * 100.0 + if (value >= 0) 0.5 else -0.5).toLong()
+    val sign = if (scaled < 0L) "-" else ""
+    val abs = if (scaled < 0L) -scaled else scaled
+    val whole = abs / 100L
+    val frac = (abs % 100L).toString().padStart(2, '0')
+    return "$sign$whole.$frac"
+}

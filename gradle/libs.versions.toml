@@ -17,6 +17,10 @@ activityCompose = "1.9.3"
 # module (which serves Android, JVM, and iOS targets).
 composeMultiplatform = "1.7.3"
 
+# kotlinx.atomicfu — KMP atomic primitives + `synchronized(...)`
+# replacement for commonMain. Used by :harness:conversation.
+atomicfu = "0.27.0"
+
 # Coroutines & Serialization
 coroutines = "1.9.0"
 serializationJson = "1.7.3"
@@ -64,6 +68,7 @@ kotlinx-coroutines-android = { module = "org.jetbrains.kotlinx:kotlinx-coroutine
 kotlinx-coroutines-test = { module = "org.jetbrains.kotlinx:kotlinx-coroutines-test", version.ref = "coroutines" }
 kotlinx-serialization-json = { module = "org.jetbrains.kotlinx:kotlinx-serialization-json", version.ref = "serializationJson" }
 kotlinx-datetime = { module = "org.jetbrains.kotlinx:kotlinx-datetime", version = "0.7.1" }
+kotlinx-atomicfu = { module = "org.jetbrains.kotlinx:atomicfu", version.ref = "atomicfu" }
 
 # Compose (Android)
 androidx-compose-bom = { module = "androidx.compose:compose-bom", version.ref = "composeBom" }
