@@ -1,7 +1,7 @@
 // :harness:memory — MemoryStore + memory tools.
 //
 // Pure Kotlin + Koog (no SQLDelight here; the SQL-backed impl lives in
-// :substrate:android). Single java.util.UUID call swapped for
+// :runtime). Single java.util.UUID call swapped for
 // kotlin.uuid.Uuid so the module goes KMP.
 
 plugins {

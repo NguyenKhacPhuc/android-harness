@@ -1,4 +1,4 @@
-// :android-devtools — opt-in debug panel for inspecting a live WeftRuntime.
+// :devtools — opt-in debug panel for inspecting a live WeftRuntime.
 //
 // Apps wrap their root composable with `WeftDevTools(runtime = ...) { App() }`
 // in debug builds. A floating action button opens a bottom-sheet with tabs:
@@ -25,10 +25,12 @@ plugins {
     alias(libs.plugins.compose.multiplatform)
 }
 
-// Same `:foo:android-suffix` cycle guard as the other Android libraries —
-// keeps Maven coords distinct from any app's own `:android` module.
+// Distinct group keeps the Maven coords from clashing with any host
+// app's own `:devtools` module if they happen to publish one too.
+// Composite-build consumers resolve us as
+// `dev.weft.devtools:weft-devtools`.
 group = "dev.weft.devtools"
-base { archivesName.set("weft-android-devtools") }
+base { archivesName.set("weft-devtools") }
 
 kotlin {
     jvmToolchain(17)
@@ -49,7 +51,7 @@ kotlin {
             // Weft runtime — devtools reads systemPrompt, traceStore, tools
             // list, usageStore. Reaches across module boundaries on purpose;
             // this is debug surface, not production code.
-            implementation(project(":android"))
+            implementation(project(":runtime"))
             implementation(project(":tools"))
             implementation(project(":contracts"))
             implementation(project(":harness:observability"))

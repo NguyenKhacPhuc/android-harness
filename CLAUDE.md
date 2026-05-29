@@ -5,11 +5,11 @@ for these tokens. Deeper reads live under `docs/`.
 
 ## What this repo is
 
-Weft is an Android substrate for building LLM-orchestrated apps. The
-agent calls device tools, renders Compose UI, persists conversations,
-remembers facts. Apps depend on `:android` (+ optionally
-`:android-compose`, `:android-compose-defaults`) and register their
-own tools / components on top.
+Weft is a KMP substrate (Android + iOS) for building LLM-orchestrated
+apps. The agent calls device tools, renders Compose UI, persists
+conversations, remembers facts. Apps depend on `:runtime` (+ optionally
+`:compose`, `:compose-defaults`) and register their own tools /
+components on top.
 
 Reference app: <https://github.com/NguyenKhacPhuc/undercurrent> —
 sibling repo. Use it as the canonical example of host-app wiring.
@@ -34,7 +34,9 @@ identity / UX / branding → app.
 - `:tools` — built-in `WeftTool` subclasses + the `WeftContext` / base
   class machinery. **~30 tools today**; new app-specific tools go in
   the host app, not here.
-- `:os-bridge` — Android impl of the OS capability interfaces.
+- `:os-bridge` — Android impls of the OS capability interfaces. KMP
+  module with empty iOS targets; iOS hosts implement OsCapabilities
+  themselves against CoreLocation / Vision / PDFKit / etc.
 - `:security` — `NetworkPolicy` + `Redactor`.
 - `:harness:agents` — `WeftAgent`. Streaming, model routing, regenerate.
 - `:harness:prompt` — prompt assembly, cache binder, multimodal input.
@@ -42,9 +44,23 @@ identity / UX / branding → app.
 - `:harness:{reliability,observability,cost,behavior,skills}` — the
   agent-loop wrap.
 - `:mcp` — MCP client. `:oauth` — OAuth 2.0 + PKCE for per-user auth.
-- `:android` — composition root, `WeftRuntime.create(...)`.
-- `:android-compose` / `:android-compose-defaults` — UI surface.
-- `:android-devtools` — debug overlay.
+- `:runtime` — composition root, `WeftRuntime.create(...)`. Android-bound
+  today (KMP-published with empty iOS targets); iOS hosts wire their own
+  composition via host-defined factories (see undercurrent's
+  `IosWeftAgentFactory`).
+- `:compose` / `:compose-defaults` — UI surface. `:compose` is fully
+  commonMain (Compose Multiplatform); `:compose-defaults` is commonMain
+  except `:compose-defaults`'s WebView / Html (androidMain — wraps
+  `android.webkit.WebView`; iOS gets an empty `EmbedComponents` actual).
+- `:devtools` — debug overlay. KMP-published with empty iOS targets
+  (panel reads androidMain-only `WeftRuntime`).
+
+> **Naming history.** Modules used to be `:android` / `:android-compose`
+> / `:android-compose-defaults` / `:android-devtools` from when the
+> substrate was Android-only. After the KMP migration the prefix is
+> misleading — the renames dropped it. Old composite-build
+> substitutions like `dev.weft:weft-android` are now
+> `dev.weft:weft-runtime` (and similar for the others).
 
 ## Build target quirks (will bite you)
 
@@ -103,16 +119,19 @@ skipped.
 
 - **`internal`/`public` discipline.** Substrate modules export only
   what host apps need; everything else is `internal`. If you add a
-  type that should be reachable from `:android` or further, mark it
+  type that should be reachable from `:runtime` or further, mark it
   `public`.
 - **No emojis in code or commits** unless the user explicitly asks.
-- **KMP status — partial.** Three modules are now KMP-published
-  (jvm + androidTarget + iosArm64 + iosSimulatorArm64):
-  `:contracts`, `:security`, `:harness:skills`. All other modules
-  remain JVM or Android-only — the rest of `:harness:*` + `:tools` +
-  `:mcp` block on Koog 1.0.0 publishing only JVM + Android variants.
-  Wider KMP-ification (the full agent loop on iOS) needs either
-  upstream Koog iOS targets or a Ktor-based LLM client rewrite.
+- **KMP status — every module ships KMP artifacts now**
+  (jvm + androidTarget + iosArm64 + iosSimulatorArm64). What lives in
+  commonMain vs androidMain varies: `:contracts`, `:security`,
+  `:harness:*`, `:mcp`, `:oauth`, `:compose`, `:tools` are fully or
+  mostly commonMain. `:runtime`, `:os-bridge`, `:devtools`, and the
+  WebView/Html bits of `:compose-defaults` stay androidMain — they
+  bind Android APIs (Context-backed composition root, ML Kit, Play
+  Services, `android.webkit.WebView`). iOS hosts wire equivalents in
+  their own iosMain (see undercurrent's `IosWeftAgentFactory` +
+  iOS-side OsCapabilities impls).
 - **SQLDelight** for any persistent storage. See `:harness:memory`
   and `:harness:conversation` for the pattern.
 - **Permissions live in two places.** The `Permission` enum lives in
@@ -131,7 +150,7 @@ skipped.
 
 # Build a specific module.
 ./gradlew :tools:build
-./gradlew :android:assembleDebug
+./gradlew :runtime:assembleDebug
 
 # Most useful when iterating on a tool:
 ./gradlew :tools:compileKotlin

@@ -50,7 +50,7 @@ Tracked here so they show up in code review:
   assistant turns.
   [`AgentMentionParser`](../harness/agents/src/main/kotlin/dev/weft/harness/agents/AgentMentionParser.kt)
   parses `@agent body` from chat input;
-  [`AgentSelector`](../android-compose-defaults/src/main/kotlin/dev/weft/compose/components/AgentSelector.kt)
+  [`AgentSelector`](../compose-defaults/src/commonMain/kotlin/dev/weft/compose/components/AgentSelector.kt)
   is the default Material 3 picker composable. Reference-app dogfood
   (Undercurrent registers a "writer" agent, the selector renders above
   the chat input when more than one agent is registered, assistant
@@ -115,8 +115,8 @@ plugs into the existing `SubAgentRunner` machinery — sub-agents
 become a special case of multi-agent.
 
 Estimated scope: ~1500-2000 LOC across `:harness:agents` (registry,
-routing) + `:android` (DI) + maybe `:android-compose-defaults` (the
-selector). Substantial. Worth a focused multi-session effort.
+routing) + `:runtime` (DI) + maybe `:compose-defaults` (the selector).
+Substantial. Worth a focused multi-session effort.
 
 ## Pluggable strategy — design sketch
 

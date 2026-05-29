@@ -5,7 +5,7 @@
 - **Tracks:** `architecture-vision.md` § Active misalignments →
   "`runBlocking` on suspend factories"
 - **Estimated scope:** ~250–400 LOC (factory signature change in
-  `:android`, MCP discovery lifecycle moves into the runtime, three
+  `:runtime`, MCP discovery lifecycle moves into the runtime, three
   `runBlocking` call sites in the reference app deleted).
 
 ## Why this exists

@@ -12,7 +12,7 @@
 //     a round-trip through the LLM. Pure data over JSON; no Compose,
 //     no platform.
 //
-// Lifted out of `:harness:prompt` so the `:android-compose` layer (and
+// Lifted out of `:harness:prompt` so the `:compose` layer (and
 // any future iOS-Compose / web layer) can depend on this WITHOUT
 // pulling Koog transitively. Same package as before
 // (`dev.weft.harness.prompt.bindings.*`) to avoid breaking existing

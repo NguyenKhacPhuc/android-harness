@@ -74,10 +74,10 @@ flowchart TB
         h_testing[":harness:testing"]
     end
 
-    android[":android<br/>composition root"]
-    a_compose[":android-compose"]
-    a_defaults[":android-compose-defaults"]
-    a_devtools[":android-devtools"]
+    runtime[":runtime<br/>composition root"]
+    compose[":compose"]
+    a_defaults[":compose-defaults"]
+    a_devtools[":devtools"]
 
     tools --> contracts
     security --> contracts
@@ -103,24 +103,24 @@ flowchart TB
     h_agents --> h_beh
     h_testing --> tools
 
-    android --> osbridge
-    android --> security
-    android --> h_agents
-    android --> h_skills
-    android --> mcp
-    android --> oauth
-    a_compose --> contracts
-    a_compose --> tools
-    a_defaults --> a_compose
-    a_devtools --> android
+    runtime --> osbridge
+    runtime --> security
+    runtime --> h_agents
+    runtime --> h_skills
+    runtime --> mcp
+    runtime --> oauth
+    compose --> contracts
+    compose --> tools
+    a_defaults --> compose
+    a_devtools --> runtime
 ```
 
 **Takeaway.** `:contracts` sits at the bottom — pure Kotlin
 interfaces, no Android, no Koog. Everything else builds up.
-`:android` is the composition root that wires the real
-implementations. `:android-compose*` is the UI layer apps depend on
+`:runtime` is the composition root that wires the real
+implementations. `:compose*` is the UI layer apps depend on
 when they want the stock Compose surface; apps with custom UI
-depend only on `:android-compose` (no Material).
+depend only on `:compose` (no Material).
 
 ---
 

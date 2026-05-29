@@ -1,11 +1,11 @@
-// :android — the SDK that consumer apps depend on.
+// :runtime — the SDK that consumer apps depend on.
 //
 // Contains everything app-agnostic that an Android app needs to host the
 // substrate: the WeftRuntime composition root, the Android-specific
 // device snapshot, persistence (SQLDelight + Android Keystore), and the
 // MCP / Koog plumbing the agent loop needs.
 //
-// App authors `implementation(project(":android"))` and write
+// App authors `implementation(project(":runtime"))` and write
 // their own ChatScreen + theming + navigation against the substrate's
 // state flows.
 //
@@ -61,13 +61,13 @@ sqldelight {
     }
 }
 
-// Module path was `:substrate:android` historically, where it shared the
-// "android" suffix with the consuming app and tripped AGP's resource
-// processing into a self-referential dep cycle. We keep the
-// `dev.weft` group + `weft-android` archives name so composite-build
-// consumers resolve us as `dev.weft:weft-android`.
+// Module path was `:substrate:android` historically, where it shared
+// the "android" suffix with the consuming app and tripped AGP's
+// resource processing into a self-referential dep cycle. After the KMP
+// migration the path is just `:runtime`; the archives name follows.
+// Composite-build consumers resolve us as `dev.weft:weft-runtime`.
 group = "dev.weft"
-base { archivesName.set("weft-android") }
+base { archivesName.set("weft-runtime") }
 
 kotlin {
     jvmToolchain(17)
@@ -107,7 +107,7 @@ kotlin {
             api(project(":harness:memory"))
             api(project(":harness:conversation"))
             // Agent core (WeftAgent, sub-agents, routing, multimodal, cache,
-            // streaming). KMP-published; :android keeps the composition
+            // streaming). KMP-published; :runtime keeps the composition
             // root (WeftRuntime), persistence (SqlDelight*), credentials
             // (Android Keystore), and OS-bridge wiring.
             api(project(":harness:agents"))

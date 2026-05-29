@@ -1,8 +1,8 @@
-// :android-compose-defaults — Material 3 palette + default surfaces.
+// :compose-defaults — Material 3 palette + default surfaces.
 //
-// The framework module (`:android-compose`) ships the Compose abstraction
-// layer apps subclass to add components: `WeftComponent`, the registry,
-// the bridge, the renderer. It knows nothing about Material 3.
+// The framework module (`:compose`) ships the Compose abstraction layer
+// apps subclass to add components: `WeftComponent`, the registry, the
+// bridge, the renderer. It knows nothing about Material 3.
 //
 // This module bolts on the substrate's *default* implementations of every
 // app-facing surface so an app can be plug-and-play without rebuilding
@@ -34,10 +34,11 @@ plugins {
     alias(libs.plugins.compose.multiplatform)
 }
 
-// Same `:foo:android-suffix` cycle guard as :android. Composite-build
-// consumers resolve us as `dev.weft:weft-android-compose-defaults`.
+// Unique Maven coordinate — same trick as :runtime / :compose, to keep
+// Gradle from confusing this with the consuming app on resources tasks.
+// Composite-build consumers resolve us as `dev.weft:weft-compose-defaults`.
 group = "dev.weft"
-base { archivesName.set("weft-android-compose-defaults") }
+base { archivesName.set("weft-compose-defaults") }
 
 kotlin {
     jvmToolchain(17)
@@ -60,7 +61,7 @@ kotlin {
             // ComposeUiBridge, TreeRenderer. Re-exported so apps don't
             // have to depend on both modules just to register custom
             // components.
-            api(project(":android-compose"))
+            api(project(":compose"))
 
             // Compose Multiplatform — Material 3 + foundation + ui +
             // material-icons-core (the core icon set the default palette

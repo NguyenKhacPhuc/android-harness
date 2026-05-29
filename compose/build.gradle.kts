@@ -1,4 +1,4 @@
-// :android-compose — Compose layer for the substrate's UI protocol.
+// :compose — Compose layer for the substrate's UI protocol.
 //
 // The contract layer (`:contracts`) defines what the substrate's UI half
 // is in framework-agnostic terms: `UiBridge`, `ComponentMetadata`,
@@ -27,8 +27,9 @@
 //   • Material 3 — TreeRenderer's error placeholder uses foundation-only
 //     `BasicText` so the framework stays palette-agnostic.
 //   • The default M3 palette (Text / Button / Column / …) — lives in
-//     `:android-compose-defaults`. That module stays Android-only for
-//     now (its WebView component pulls `android.webkit.WebView`).
+//     `:compose-defaults`. That module's WebView / Html components stay
+//     androidMain because they wrap `android.webkit.WebView`; the rest
+//     of the palette is commonMain.
 //   • Default surfaces (`PendingRequestRenderer`, `WeftOverlayHost`,
 //     `AgentRenderedTreePanel`, `AgentRenderedTreeScreen`) — also in
 //     `-defaults`, because they're M3-flavored too.
@@ -44,11 +45,11 @@ plugins {
     alias(libs.plugins.compose.multiplatform)
 }
 
-// Unique Maven coordinate — same trick as :android, to keep Gradle from
-// confusing this with the consuming app on resources tasks. Composite-
-// build consumers resolve us as `dev.weft:weft-android-compose`.
+// Unique Maven coordinate — same trick as :runtime, to keep Gradle
+// from confusing this with the consuming app on resources tasks.
+// Composite-build consumers resolve us as `dev.weft:weft-compose`.
 group = "dev.weft"
-base { archivesName.set("weft-android-compose") }
+base { archivesName.set("weft-compose") }
 
 kotlin {
     jvmToolchain(17)
@@ -80,7 +81,7 @@ kotlin {
             // Compose Multiplatform runtime + foundation (no Material 3).
             // The framework needs @Composable, Modifier, Column/padding (for
             // error placeholder), and BasicText. Everything else (M3
-            // surfaces, palette components) is in `:android-compose-defaults`.
+            // surfaces, palette components) is in `:compose-defaults`.
             api(libs.compose.multiplatform.runtime)
             api(libs.compose.multiplatform.foundation)
             api(libs.compose.multiplatform.ui)

@@ -6,8 +6,8 @@
 - **Depends on:** [strategy-hook.md](strategy-hook.md) — per-agent
   [WeftStrategy](strategy-hook.md) is a load-bearing assumption here.
 - **Estimated scope:** ~1500–2000 LOC across `:harness:agents` (registry
-  + delegation tool), `:android` (DI), conversation persistence
-  (agent attribution), and `:android-compose-defaults` (selector UI).
+  + delegation tool), `:runtime` (DI), conversation persistence
+  (agent attribution), and `:compose-defaults` (selector UI).
 
 ## Why this exists
 
@@ -170,7 +170,7 @@ Two sources of "which agent gets this":
    surface tracks the most recent assistant turn's `agentName` and uses
    it. Initial state: `DEFAULT_AGENT_NAME`.
 
-UI sketch (`:android-compose-defaults`): a small dropdown above the
+UI sketch (`:compose-defaults`): a small dropdown above the
 input field showing the active agent. Tap to switch. Power-user
 shortcut is the `@mention` syntax.
 
@@ -180,8 +180,8 @@ shortcut is the `@mention` syntax.
 | --- | --- | --- |
 | `:harness:agents` | `AgentDeclaration`, `AgentRegistry`, `delegate_to_agent`, `AgentMentionParser`, deletion of `SubAgentRunner` | ~600 |
 | `:harness:conversation` | `agentName` column + migration + API | ~80 |
-| `:android` | `WeftRuntime.agents` map, `create(agents = ...)` overload, wiring registry | ~250 |
-| `:android-compose-defaults` | Agent selector composable, `@mention` highlight in input field, per-turn label in chat list | ~400 |
+| `:runtime` | `WeftRuntime.agents` map, `create(agents = ...)` overload, wiring registry | ~250 |
+| `:compose-defaults` | Agent selector composable, `@mention` highlight in input field, per-turn label in chat list | ~400 |
 | Tests + fixtures | Multi-agent integration test, delegation round-trip test, mention parser tests | ~300 |
 | Docs | This file + an ADR codifying the decision after first ship | ~50 |
 
@@ -224,7 +224,7 @@ shake it out in the reference app before SDK consumers see it.
 3. **Phase 3 — conversation attribution.** SQLDelight migration; chat
    surface labels assistant turns.
 4. **Phase 4 — user UX.** `@mention` parser; agent selector composable
-   in `:android-compose-defaults`. Reference app (Undercurrent) ships
+   in `:compose-defaults`. Reference app (Undercurrent) ships
    a 2-agent config ("default" + "writer") to dogfood.
 
 Each phase is independently shippable; the v1.1 release can include

@@ -57,7 +57,7 @@ include(":harness:bindings")
 // SkillRegistry, withHelp). Pure Kotlin, no Android deps.
 include(":harness:skills")
 // Agent core (WeftAgent, sub-agents, routing, streaming strategy).
-// Pure-JVM, no Android deps; `:android` provides the composition root + the
+// Pure-JVM, no Android deps; `:runtime` provides the composition root + the
 // Android-specific persistence / OS bridge / credentials wiring on top.
 include(":harness:agents")
 // Testing fixtures — not a production dep. Apps use this via
@@ -69,25 +69,31 @@ include(":harness:testing")
 // is Compose-free. The Compose layer is split in two so apps can opt out
 // of the default Material 3 palette without rebuilding from scratch:
 //
-//   • `:android-compose`           — framework: WeftComponent abstract
-//                                    base, registry, ComposeUiBridge,
-//                                    TreeRenderer. Apps subclassing
-//                                    components depend on this. No M3,
-//                                    no Coil.
-//   • `:android-compose-defaults`  — default M3 palette + default
-//                                    surfaces + WeftUi helper. Apps that
-//                                    want plug-and-play UI depend on this;
-//                                    custom-palette apps don't.
+//   • `:compose`           — framework: WeftComponent abstract base,
+//                            registry, ComposeUiBridge, TreeRenderer.
+//                            Apps subclassing components depend on this.
+//                            No M3, no Coil.
+//   • `:compose-defaults`  — default M3 palette + default surfaces +
+//                            WeftUi helper. Apps that want plug-and-play
+//                            UI depend on this; custom-palette apps don't.
 //
-// Apps with a non-Compose UI depend on `:android` only.
-include(":android")
-include(":android-compose")
-include(":android-compose-defaults")
+// Apps with a non-Compose UI depend on `:runtime` only.
+//
+// Module names were `:android` / `:android-compose` / `:android-compose-defaults`
+// before the KMP migration; they shipped jvm + Android only at the time.
+// Now that every module publishes jvm + androidTarget + iosArm64 +
+// iosSimulatorArm64 the Android-claiming prefix was misleading, so the
+// paths dropped it. `:os-bridge` already didn't claim a platform; its
+// implementations stay androidMain-only but the contracts they
+// implement live in cross-platform `:contracts`.
+include(":runtime")
+include(":compose")
+include(":compose-defaults")
 
 // ----- Developer tooling -----
 // Opt-in debug overlay for inspecting a live WeftRuntime. Apps add
-// `implementation(project(":android-devtools"))` only in debug builds.
-include(":android-devtools")
+// `implementation(project(":devtools"))` only in debug builds.
+include(":devtools")
 
 // The Undercurrent reference app lives in a sibling git repo
 // (`../undercurrent`) and pulls this SDK in via composite build

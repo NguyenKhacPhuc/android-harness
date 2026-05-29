@@ -31,7 +31,7 @@ breaking changes between minor versions until 1.0.
   query, date arithmetic, random). Apps add their own by subclassing
   `WeftTool`.
 - **Components** are the nouns — Compose UI the LLM can *render*.
-  Built-ins ship in `:android-compose-defaults` (timers, forms, pickers,
+  Built-ins ship in `:compose-defaults` (timers, forms, pickers,
   galleries, lists, web). Apps register their own `WeftComponent`s and
   the LLM calls `ui_render` with props.
 - **Skills** are local fast-path verbs — slash-commands that resolve
@@ -75,10 +75,10 @@ breaking changes between minor versions until 1.0.
 | `:harness:skills` | `Skill`, `SkillRegistry`, `withHelp` — local slash-command fast-path. |
 | `:mcp` | Model Context Protocol client. Connect external MCP servers; their tools appear in the agent's registry as `{server}:{tool}`. |
 | `:oauth` | OAuth 2.0 + PKCE client for services behind per-user auth (Linear, Gmail, GitHub, …). |
-| `:android` | Composition root — `WeftRuntime.create(...)` wires the agent + persistence + OS bridges + tool catalog. |
-| `:android-compose` | Framework for custom UI components — `WeftComponent` base, registry, `ComposeUiBridge`, tree renderer. No Material dependency. |
-| `:android-compose-defaults` | Default M3 palette + a stock set of `WeftComponent`s. Opt-out: apps with custom design systems depend only on `:android-compose`. |
-| `:android-devtools` | Debug-build overlay for live runtime inspection. |
+| `:runtime` | Composition root — `WeftRuntime.create(...)` wires the agent + persistence + OS bridges + tool catalog. Android-bound today; iOS hosts wire their own composition. |
+| `:compose` | Framework for custom UI components — `WeftComponent` base, registry, `ComposeUiBridge`, tree renderer. No Material dependency. KMP (Compose Multiplatform). |
+| `:compose-defaults` | Default M3 palette + a stock set of `WeftComponent`s. Opt-out: apps with custom design systems depend only on `:compose`. KMP; WebView/Html stays androidMain. |
+| `:devtools` | Debug-build overlay for live runtime inspection. Android-only panel; KMP-published with empty iOS targets. |
 
 ## Providers
 
