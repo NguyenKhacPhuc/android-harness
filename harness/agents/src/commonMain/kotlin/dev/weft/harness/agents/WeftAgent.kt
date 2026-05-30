@@ -358,8 +358,16 @@ class WeftAgent(
     }
 
     /**
-     * Push an intent into the agent. Returns immediately — the work
-     * runs in [agentScope] and surfaces via [state] and [effects].
+     * Push an intent into the agent. Returns the [Job] backing the
+     * launched coroutine for intents that do background work, or
+     * `null` for intents that complete synchronously
+     * ([AgentIntent.ResetHistory] / [AgentIntent.CancelCurrentTurn] /
+     * [AgentIntent.ClearError]).
+     *
+     * Most callers ignore the return value — use [dispatchAndAwait]
+     * when you need to suspend until the intent's effects are visible
+     * (e.g. reading `state.value.conversationId` immediately after a
+     * `NewChat`).
      *
      * Multiple Send/Regenerate intents dispatched in quick succession
      * are NOT serialized by the agent — the caller should gate
@@ -371,31 +379,52 @@ class WeftAgent(
      * [AgentIntent.CancelCurrentTurn] is always safe to dispatch and
      * is a no-op when nothing is running.
      */
-    fun dispatch(intent: AgentIntent) {
-        when (intent) {
+    fun dispatch(intent: AgentIntent): Job? {
+        return when (intent) {
             is AgentIntent.Send -> launchTurn {
                 if (intent.streaming) {
+                    @Suppress("DEPRECATION")
                     sendStreaming(intent.text, intent.attachments, intent.tier).collect()
                 } else {
+                    @Suppress("DEPRECATION")
                     send(intent.text, intent.attachments, intent.tier)
                 }
             }
             is AgentIntent.SendEvent -> launchTurn {
-                sendEvent(intent.action, intent.sourceLabel, intent.fieldValues)
+                // Stream the synthetic UI-event message so callers
+                // observing `state.pendingAssistantDelta` see the
+                // reply incrementally — same projection model as a
+                // user-typed Send. See `composeEventMessage`.
+                val message = composeEventMessage(intent.action, intent.sourceLabel, intent.fieldValues)
+                @Suppress("DEPRECATION")
+                sendStreaming(message).collect()
             }
             is AgentIntent.Regenerate -> launchTurn {
                 if (intent.streaming) {
+                    @Suppress("DEPRECATION")
                     regenerateStreaming().collect()
                 } else {
+                    @Suppress("DEPRECATION")
                     regenerate()
                 }
             }
-            AgentIntent.NewChat -> agentScope.launch { newChat() }
-            is AgentIntent.Resume -> agentScope.launch { resume(intent.conversationId) }
-            AgentIntent.ResetHistory -> {
-                resetHistory()
+            AgentIntent.NewChat -> agentScope.launch {
+                @Suppress("DEPRECATION")
+                newChat()
             }
-            AgentIntent.CancelCurrentTurn -> currentTurnJob?.cancel()
+            is AgentIntent.Resume -> agentScope.launch {
+                @Suppress("DEPRECATION")
+                resume(intent.conversationId)
+            }
+            AgentIntent.ResetHistory -> {
+                @Suppress("DEPRECATION")
+                resetHistory()
+                null
+            }
+            AgentIntent.CancelCurrentTurn -> {
+                currentTurnJob?.cancel()
+                null
+            }
             AgentIntent.ClearError -> {
                 _state.update {
                     it.copy(
@@ -403,8 +432,36 @@ class WeftAgent(
                         turnStatus = if (it.turnStatus == TurnStatus.Failed) TurnStatus.Idle else it.turnStatus,
                     )
                 }
+                null
             }
         }
+    }
+
+    /**
+     * Suspend variant of [dispatch] — fires the intent and suspends
+     * until the launched work has completed. Use when the next line
+     * reads agent state that the intent mutates (typical example:
+     * reading [AgentState.conversationId] immediately after
+     * [AgentIntent.NewChat]).
+     *
+     * Returns when:
+     *
+     *   - For [AgentIntent.Send] / [AgentIntent.SendEvent] /
+     *     [AgentIntent.Regenerate] — the turn has finished (success,
+     *     failure, or cancellation).
+     *   - For [AgentIntent.NewChat] / [AgentIntent.Resume] — the new
+     *     conversation id is live in [state].
+     *   - For [AgentIntent.CancelCurrentTurn] — the cancelled turn's
+     *     coroutine has fully unwound.
+     *   - For sync intents ([AgentIntent.ResetHistory] /
+     *     [AgentIntent.ClearError]) — immediately (no work to await).
+     *
+     * Throws if the underlying turn threw an unhandled exception —
+     * mirrors what the deprecated `suspend send()` did before. For
+     * fire-and-forget UI dispatches, use [dispatch] and observe state.
+     */
+    suspend fun dispatchAndAwait(intent: AgentIntent) {
+        dispatch(intent)?.join()
     }
 
     /**
@@ -413,8 +470,11 @@ class WeftAgent(
      * responsibility via [AgentIntent.CancelCurrentTurn]. The job
      * pointer is cleared when [block] completes so a stale Job ref
      * isn't held across idle periods.
+     *
+     * Returns the launched [Job] so [dispatchAndAwait] can `.join()`
+     * on it.
      */
-    private fun launchTurn(block: suspend () -> Unit) {
+    private fun launchTurn(block: suspend () -> Unit): Job {
         val job = agentScope.launch {
             try {
                 block()
@@ -429,6 +489,7 @@ class WeftAgent(
             }
         }
         currentTurnJob = job
+        return job
     }
 
     /**
@@ -585,6 +646,7 @@ class WeftAgent(
                 onAttemptFailed = { attempt, cause, retryingInMs ->
                     val msg = if (retryingInMs != null) "attempt $attempt failed (${cause.message}), retrying in ${retryingInMs}ms" else "attempt $attempt failed: ${cause.message}"
                     _events.tryEmit(ToolEvent.Failed(toolName = "llm.retry", message = msg))
+                    _effects.tryEmit(AgentEffect.ToolFailed(toolName = "llm.retry", message = msg))
                     _effects.tryEmit(AgentEffect.Notify(message = msg))
                 },
             ) {
@@ -772,6 +834,7 @@ class WeftAgent(
                 onAttemptFailed = { attempt, cause, retryingInMs ->
                     val msg = if (retryingInMs != null) "attempt $attempt failed (${cause.message}), retrying in ${retryingInMs}ms" else "attempt $attempt failed: ${cause.message}"
                     _events.tryEmit(ToolEvent.Failed(toolName = "llm.retry", message = msg))
+                    _effects.tryEmit(AgentEffect.ToolFailed(toolName = "llm.retry", message = msg))
                     _effects.tryEmit(AgentEffect.Notify(message = msg))
                 },
             ) {
@@ -994,17 +1057,28 @@ class WeftAgent(
         sourceLabel: String? = null,
         fieldValues: Map<String, String> = emptyMap(),
     ): String {
-        val message = buildString {
-            append("[UI event] User tapped")
-            if (!sourceLabel.isNullOrBlank()) append(" '$sourceLabel'")
-            append(" (action=$action) on the rendered screen.")
-            if (fieldValues.isNotEmpty()) {
-                append("\nField values: ")
-                append(fieldValues.entries.joinToString { (k, v) -> "$k=\"$v\"" })
-            }
-        }
         @Suppress("DEPRECATION")
-        return send(message)
+        return send(composeEventMessage(action, sourceLabel, fieldValues))
+    }
+
+    /**
+     * Compose the synthetic "User tapped X" user-message text for a
+     * UI-event round-trip. Shared between the deprecated [sendEvent]
+     * and the new [dispatch] handler for [AgentIntent.SendEvent] so
+     * both wire up the same message shape.
+     */
+    private fun composeEventMessage(
+        action: String,
+        sourceLabel: String?,
+        fieldValues: Map<String, String>,
+    ): String = buildString {
+        append("[UI event] User tapped")
+        if (!sourceLabel.isNullOrBlank()) append(" '$sourceLabel'")
+        append(" (action=$action) on the rendered screen.")
+        if (fieldValues.isNotEmpty()) {
+            append("\nField values: ")
+            append(fieldValues.entries.joinToString { (k, v) -> "$k=\"$v\"" })
+        }
     }
 
     @OptIn(kotlin.time.ExperimentalTime::class)
@@ -1122,6 +1196,7 @@ class WeftAgent(
                             )
                         }
                         _events.tryEmit(ToolEvent.Starting(toolName = ctx.toolName, argsPreview = argsPreview))
+                        _effects.tryEmit(AgentEffect.ToolStarting(toolName = ctx.toolName, argsPreview = argsPreview))
                     }
                     onToolCallCompleted { ctx ->
                         val key = ctx.toolCallId ?: ctx.eventId
@@ -1136,6 +1211,7 @@ class WeftAgent(
                         )
                         removeActiveToolCall(key)
                         _events.tryEmit(ToolEvent.Completed(toolName = ctx.toolName))
+                        _effects.tryEmit(AgentEffect.ToolCompleted(toolName = ctx.toolName))
                     }
                     onToolCallFailed { ctx ->
                         val key = ctx.toolCallId ?: ctx.eventId
@@ -1144,6 +1220,7 @@ class WeftAgent(
                         traceStore.recordToolFailed(traceId, id, errorMessage = safeMessage)
                         removeActiveToolCall(key)
                         _events.tryEmit(ToolEvent.Failed(toolName = ctx.toolName, message = safeMessage))
+                        _effects.tryEmit(AgentEffect.ToolFailed(toolName = ctx.toolName, message = safeMessage))
                     }
                 }
             },
@@ -1277,6 +1354,7 @@ class WeftAgent(
                             )
                         }
                         _events.tryEmit(ToolEvent.Starting(toolName = ctx.toolName, argsPreview = argsPreview))
+                        _effects.tryEmit(AgentEffect.ToolStarting(toolName = ctx.toolName, argsPreview = argsPreview))
                         producerScope.trySend(StreamChunk.ToolStarting(toolName = ctx.toolName, argsPreview = argsPreview))
                     }
                     onToolCallCompleted { ctx ->
@@ -1292,6 +1370,7 @@ class WeftAgent(
                         )
                         removeActiveToolCall(key)
                         _events.tryEmit(ToolEvent.Completed(toolName = ctx.toolName))
+                        _effects.tryEmit(AgentEffect.ToolCompleted(toolName = ctx.toolName))
                         producerScope.trySend(StreamChunk.ToolCompleted(toolName = ctx.toolName))
                     }
                     onToolCallFailed { ctx ->
@@ -1301,6 +1380,7 @@ class WeftAgent(
                         traceStore.recordToolFailed(traceId, id, errorMessage = safeMessage)
                         removeActiveToolCall(key)
                         _events.tryEmit(ToolEvent.Failed(toolName = ctx.toolName, message = safeMessage))
+                        _effects.tryEmit(AgentEffect.ToolFailed(toolName = ctx.toolName, message = safeMessage))
                         producerScope.trySend(StreamChunk.ToolFailed(toolName = ctx.toolName, message = safeMessage))
                     }
                 }

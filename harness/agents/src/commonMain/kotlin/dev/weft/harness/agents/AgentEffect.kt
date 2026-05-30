@@ -50,4 +50,48 @@ public sealed interface AgentEffect {
         public val openedAtEpochMs: Long,
         public val openDurationMs: Long,
     ) : AgentEffect
+
+    // ── Tool lifecycle ────────────────────────────────────────────────
+    //
+    // Mirror of the (now deprecated) `ToolEvent` SharedFlow on
+    // [WeftAgent]. Subscribers that want to render tool bubbles in
+    // chat or surface retry chatter filter [AgentEffect] on these
+    // variants instead of subscribing to the legacy `events` flow.
+    //
+    // [AgentState.activeToolCalls] carries the in-flight snapshot for
+    // the "what's running RIGHT NOW" question; these effects carry
+    // the "what just happened" question. Most chat UIs need both.
+
+    /**
+     * A tool call is about to execute. [argsPreview] is the redacted +
+     * length-capped argument blob — same value that goes into
+     * [dev.weft.harness.observability.TraceStore].
+     */
+    public data class ToolStarting(
+        public val toolName: String,
+        public val argsPreview: String,
+    ) : AgentEffect
+
+    /**
+     * A tool call finished successfully. Tool result preview isn't
+     * surfaced on the effect (it goes to [TraceStore] only) — chat
+     * bubbles only need the name.
+     */
+    public data class ToolCompleted(
+        public val toolName: String,
+    ) : AgentEffect
+
+    /**
+     * A tool call threw. [message] is redacted; safe to surface in UI.
+     *
+     * **`toolName == "llm.retry"`** is a synthetic effect emitted by
+     * [WeftAgent]'s retry-with-circuit-breaker wrapper for failed LLM
+     * attempts that are being retried. Chat UIs typically filter
+     * these out of the scroll (the retry chatter would crowd the
+     * bubble view); telemetry sinks keep them.
+     */
+    public data class ToolFailed(
+        public val toolName: String,
+        public val message: String,
+    ) : AgentEffect
 }
