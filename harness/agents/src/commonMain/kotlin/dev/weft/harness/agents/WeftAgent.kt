@@ -23,20 +23,29 @@ import dev.weft.harness.conversation.PersistedRole
 import dev.weft.harness.agents.streaming.StreamChunk
 import dev.weft.harness.agents.streaming.streamingSingleRunStrategy
 import dev.weft.harness.prompt.composeEffectiveText
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.cancel
 import kotlinx.coroutines.channels.ProducerScope
 import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.SharedFlow
 import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.asSharedFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.channelFlow
+import kotlinx.coroutines.flow.collect
 import kotlinx.coroutines.flow.emitAll
 import kotlinx.coroutines.flow.flow
+import kotlinx.coroutines.flow.map
+import kotlinx.coroutines.flow.update
+import kotlinx.coroutines.launch
 import dev.weft.harness.reliability.CircuitBreaker
 import dev.weft.harness.reliability.RetryPolicy
 import dev.weft.harness.reliability.withRetry
-import kotlinx.coroutines.flow.MutableSharedFlow
-import kotlinx.coroutines.flow.SharedFlow
-import kotlinx.coroutines.flow.asSharedFlow
 import kotlin.uuid.ExperimentalUuidApi
 import kotlin.uuid.Uuid
 
@@ -236,6 +245,17 @@ class WeftAgent(
      * [newChat] or [resume] is called.
      */
     private val _conversationId: MutableStateFlow<String> = MutableStateFlow(conversationId)
+
+    /**
+     * Conversation id observable for hosts that haven't migrated to
+     * the unified [state] yet. Equivalent to
+     * `state.map { it.conversationId }` — kept as a dedicated
+     * StateFlow for back-compat.
+     */
+    @Deprecated(
+        message = "Read state.value.conversationId or observe state.map { it.conversationId } instead.",
+        replaceWith = ReplaceWith("state"),
+    )
     val currentConversationId: StateFlow<String> = _conversationId.asStateFlow()
 
     private val _events = MutableSharedFlow<ToolEvent>(
@@ -243,14 +263,212 @@ class WeftAgent(
         extraBufferCapacity = EVENT_BUFFER_CAPACITY,
     )
 
-    /** Tool-call events from the underlying Koog agent. Use to render trace bubbles in chat. */
+    /**
+     * Tool-call events from the underlying Koog agent.
+     *
+     * Kept for hosts on the legacy API. New code should subscribe to
+     * [state] for [AgentState.activeToolCalls] (current in-flight
+     * snapshot) and to [effects] for [AgentEffect.Notify] /
+     * one-shot signals. The unified [state] reflects the same
+     * tool-call lifecycle that this SharedFlow emits today.
+     */
+    @Deprecated(
+        message = "Subscribe to state.activeToolCalls + effects instead.",
+        replaceWith = ReplaceWith("state"),
+    )
     val events: SharedFlow<ToolEvent> = _events.asSharedFlow()
+
+    // ── Reactive surface (new in Phase 1 of the Flow-based refactor) ──────
+
+    /**
+     * Long-lived scope for intent-handling coroutines launched via
+     * [dispatch]. Survives across turns; cancelled implicitly when the
+     * process dies. The legacy `suspend` API (`send`, `sendStreaming`,
+     * etc.) continues to run on the *caller's* scope — only `dispatch`
+     * uses this one.
+     */
+    private val agentScope: CoroutineScope =
+        CoroutineScope(SupervisorJob() + Dispatchers.Default)
+
+    /**
+     * Tracks the [Job] for the currently-running [AgentIntent.Send] /
+     * [AgentIntent.Regenerate] / [AgentIntent.SendEvent] so
+     * [AgentIntent.CancelCurrentTurn] can cancel it.
+     */
+    private var currentTurnJob: Job? = null
+
+    private val _state: MutableStateFlow<AgentState> = MutableStateFlow(
+        AgentState.initial(
+            conversationId = conversationId,
+            agentName = agentName,
+            breaker = circuitBreaker.state.value,
+        ),
+    )
+
+    /**
+     * Unified reactive projection of this agent's runtime state.
+     *
+     * Updated automatically by both the new [dispatch] API and the
+     * deprecated suspending methods — every call site that mutates the
+     * agent's observable shape (history append, turn start/end, tool
+     * lifecycle, conversation switch, error, breaker tick) emits a new
+     * state value here.
+     *
+     * Hosts that want a one-stop subscription for chat UI should tail
+     * `state.history`, `state.turnStatus`, `state.pendingAssistantDelta`,
+     * and `state.activeToolCalls` instead of stitching together
+     * `events` + `currentConversationId` + the conversation store.
+     */
+    val state: StateFlow<AgentState> = _state.asStateFlow()
+
+    private val _effects: MutableSharedFlow<AgentEffect> = MutableSharedFlow(
+        replay = 0,
+        extraBufferCapacity = EVENT_BUFFER_CAPACITY,
+    )
+
+    /**
+     * One-shot signals — quota blocked, breaker opened, miscellaneous
+     * `Notify` messages from retry attempts and other turn-time events
+     * that don't belong on the [state] object.
+     */
+    val effects: SharedFlow<AgentEffect> = _effects.asSharedFlow()
+
+    init {
+        // Mirror the underlying CircuitBreaker into AgentState. The
+        // breaker is the canonical source of truth — we just project
+        // its state changes into the agent-level projection so hosts
+        // have a single subscription. Emit BreakerOpened as a one-shot
+        // effect on every Closed→Open transition.
+        agentScope.launch {
+            var lastWasOpen = circuitBreaker.state.value is CircuitBreaker.State.Open
+            circuitBreaker.state.collect { breakerState ->
+                _state.update { it.copy(breaker = breakerState) }
+                val nowOpen = breakerState is CircuitBreaker.State.Open
+                if (nowOpen && !lastWasOpen) {
+                    _effects.tryEmit(
+                        AgentEffect.BreakerOpened(
+                            openedAtEpochMs = (breakerState as CircuitBreaker.State.Open).openedAtEpochMs,
+                            openDurationMs = circuitBreaker.openDuration.inWholeMilliseconds,
+                        ),
+                    )
+                }
+                lastWasOpen = nowOpen
+            }
+        }
+    }
+
+    /**
+     * Push an intent into the agent. Returns immediately — the work
+     * runs in [agentScope] and surfaces via [state] and [effects].
+     *
+     * Multiple Send/Regenerate intents dispatched in quick succession
+     * are NOT serialized by the agent — the caller should gate
+     * dispatches behind `state.value.turnStatus == TurnStatus.Idle` to
+     * avoid interleaving (the underlying Koog AIAgent is single-turn
+     * per `agent.run` call, so two parallel turns share the same
+     * compactor + history reads in undefined order).
+     *
+     * [AgentIntent.CancelCurrentTurn] is always safe to dispatch and
+     * is a no-op when nothing is running.
+     */
+    fun dispatch(intent: AgentIntent) {
+        when (intent) {
+            is AgentIntent.Send -> launchTurn {
+                if (intent.streaming) {
+                    sendStreaming(intent.text, intent.attachments, intent.tier).collect()
+                } else {
+                    send(intent.text, intent.attachments, intent.tier)
+                }
+            }
+            is AgentIntent.SendEvent -> launchTurn {
+                sendEvent(intent.action, intent.sourceLabel, intent.fieldValues)
+            }
+            is AgentIntent.Regenerate -> launchTurn {
+                if (intent.streaming) {
+                    regenerateStreaming().collect()
+                } else {
+                    regenerate()
+                }
+            }
+            AgentIntent.NewChat -> agentScope.launch { newChat() }
+            is AgentIntent.Resume -> agentScope.launch { resume(intent.conversationId) }
+            AgentIntent.ResetHistory -> {
+                resetHistory()
+            }
+            AgentIntent.CancelCurrentTurn -> currentTurnJob?.cancel()
+            AgentIntent.ClearError -> {
+                _state.update {
+                    it.copy(
+                        lastError = null,
+                        turnStatus = if (it.turnStatus == TurnStatus.Failed) TurnStatus.Idle else it.turnStatus,
+                    )
+                }
+            }
+        }
+    }
+
+    /**
+     * Launch [block] in [agentScope] as the new "current turn" job —
+     * cancellation of the previous turn (if any) is the caller's
+     * responsibility via [AgentIntent.CancelCurrentTurn]. The job
+     * pointer is cleared when [block] completes so a stale Job ref
+     * isn't held across idle periods.
+     */
+    private fun launchTurn(block: suspend () -> Unit) {
+        val job = agentScope.launch {
+            try {
+                block()
+            } finally {
+                // Only clear if no NEW turn was launched after this one started.
+                // Use referential equality on Job — set at coroutine creation
+                // below so the closure captures the right ref.
+                val self = kotlin.coroutines.coroutineContext[Job]
+                if (currentTurnJob === self) {
+                    currentTurnJob = null
+                }
+            }
+        }
+        currentTurnJob = job
+    }
+
+    /**
+     * Convert the legacy private `HistoryEntry` list into the [Turn]
+     * sequence stored on [AgentState.history]. Called after every
+     * mutation of [history] inside the imperative methods so the
+     * reactive surface stays in lockstep.
+     */
+    private fun syncHistoryToState() {
+        val turns: List<Turn> = history.map { entry ->
+            when (entry.role) {
+                Role.USER -> Turn.User(entry.text)
+                Role.ASSISTANT -> Turn.Assistant(entry.text)
+            }
+        }
+        _state.update { it.copy(history = turns) }
+    }
+
+    /**
+     * Remove [key] from [AgentState.activeToolCalls]. Called from the
+     * Koog event handler when a tool finishes or fails. We don't
+     * transition [AgentState.turnStatus] back to [TurnStatus.Streaming]
+     * here — the next text delta will do it naturally, or the turn
+     * completion code will set Idle. Avoids a transient
+     * ToolRunning→Streaming→ToolRunning flutter when the LLM
+     * back-to-backs another tool call.
+     */
+    private fun removeActiveToolCall(key: String) {
+        _state.update { it.copy(activeToolCalls = it.activeToolCalls.filterNot { call -> call.id == key }) }
+    }
 
     /**
      * Text-only convenience overload. Equivalent to
      * `send(userText, attachments = emptyList())`. The most common path
      * stays string-shaped so existing callers don't change.
      */
+    @Deprecated(
+        message = "Dispatch AgentIntent.Send and observe state instead. Removed in Phase 3.",
+        replaceWith = ReplaceWith("dispatch(AgentIntent.Send(userText))"),
+    )
     suspend fun send(userText: String): String =
         send(userText, attachments = emptyList(), modelTier = null)
 
@@ -260,6 +478,10 @@ class WeftAgent(
      * normal heuristics — the picked tier comes straight from [modelTier].
      * Passing `null` is identical to the no-tier overload (normal routing).
      */
+    @Deprecated(
+        message = "Dispatch AgentIntent.Send and observe state instead. Removed in Phase 3.",
+        replaceWith = ReplaceWith("dispatch(AgentIntent.Send(userText, tier = modelTier))"),
+    )
     suspend fun send(
         userText: String,
         modelTier: dev.weft.harness.agents.routing.ModelTier?,
@@ -283,14 +505,33 @@ class WeftAgent(
      * disk. The agent's *current* turn always sees the full multimodal
      * input.
      */
+    @Deprecated(
+        message = "Dispatch AgentIntent.Send and observe state instead. Removed in Phase 3.",
+        replaceWith = ReplaceWith("dispatch(AgentIntent.Send(userText, attachments, modelTier, streaming = false))"),
+    )
     suspend fun send(
         userText: String,
         attachments: List<ai.koog.prompt.message.MessagePart.Attachment>,
         modelTier: dev.weft.harness.agents.routing.ModelTier? = null,
     ): String {
         val quotaState = quotaPolicy.check(usageStore.usdToday())
+        _state.update { it.copy(quota = quotaState) }
         if (quotaState is QuotaState.Blocked) {
+            _effects.tryEmit(
+                AgentEffect.QuotaBlocked(
+                    usdToday = quotaState.usdToday,
+                    capUsd = quotaState.thresholdUsd,
+                ),
+            )
             throw QuotaExceededException(quotaState.usdToday, quotaState.thresholdUsd)
+        }
+        _state.update {
+            it.copy(
+                turnStatus = TurnStatus.Sending,
+                lastError = null,
+                pendingAssistantDelta = "",
+                activeToolCalls = emptyList(),
+            )
         }
         hooks.onUserMessage(
             dev.weft.contracts.HookContext.UserMessage(
@@ -342,12 +583,9 @@ class WeftAgent(
                 policy = strategy.retry,
                 breaker = circuitBreaker,
                 onAttemptFailed = { attempt, cause, retryingInMs ->
-                    _events.tryEmit(
-                        ToolEvent.Failed(
-                            toolName = "llm.retry",
-                            message = if (retryingInMs != null) "attempt $attempt failed (${cause.message}), retrying in ${retryingInMs}ms" else "attempt $attempt failed: ${cause.message}",
-                        ),
-                    )
+                    val msg = if (retryingInMs != null) "attempt $attempt failed (${cause.message}), retrying in ${retryingInMs}ms" else "attempt $attempt failed: ${cause.message}"
+                    _events.tryEmit(ToolEvent.Failed(toolName = "llm.retry", message = msg))
+                    _effects.tryEmit(AgentEffect.Notify(message = msg))
                 },
             ) {
                 val agent = buildAgentForThisTurn(traceId, effectiveInput, modelTier)
@@ -363,6 +601,7 @@ class WeftAgent(
             }
             history += HistoryEntry(Role.USER, userText)
             history += HistoryEntry(Role.ASSISTANT, reply)
+            syncHistoryToState()
             // Persist both halves of the turn — only on success, matching
             // the in-memory history. A failed turn leaves no trace in
             // conversation_history, same as before.
@@ -383,6 +622,13 @@ class WeftAgent(
                     modelId = modelPool.standard.id,
                 ),
             )
+            _state.update {
+                it.copy(
+                    turnStatus = TurnStatus.Idle,
+                    pendingAssistantDelta = "",
+                    activeToolCalls = emptyList(),
+                )
+            }
             reply
         } catch (t: Throwable) {
             traceStore.failTrace(traceId, redactor.redact(t.message ?: t::class.simpleName.orEmpty()))
@@ -393,6 +639,14 @@ class WeftAgent(
                     cause = t,
                 ),
             )
+            _state.update {
+                it.copy(
+                    turnStatus = TurnStatus.Failed,
+                    lastError = t,
+                    pendingAssistantDelta = "",
+                    activeToolCalls = emptyList(),
+                )
+            }
             throw t
         }
         }  // close withContext(TraceContext)
@@ -412,6 +666,10 @@ class WeftAgent(
      * Text-only convenience overload — mirrors [send]. Pass attachments
      * via the [sendStreaming] overload taking a list.
      */
+    @Deprecated(
+        message = "Dispatch AgentIntent.Send and observe state instead. Removed in Phase 3.",
+        replaceWith = ReplaceWith("dispatch(AgentIntent.Send(userText))"),
+    )
     fun sendStreaming(userText: String): Flow<StreamChunk> =
         sendStreaming(userText, attachments = emptyList(), modelTier = null)
 
@@ -421,6 +679,10 @@ class WeftAgent(
      * router's normal heuristics; passing `null` is identical to the
      * no-tier overload.
      */
+    @Deprecated(
+        message = "Dispatch AgentIntent.Send and observe state instead. Removed in Phase 3.",
+        replaceWith = ReplaceWith("dispatch(AgentIntent.Send(userText, tier = modelTier))"),
+    )
     fun sendStreaming(
         userText: String,
         modelTier: dev.weft.harness.agents.routing.ModelTier?,
@@ -430,14 +692,33 @@ class WeftAgent(
      * Streaming variant of [send] with multimodal attachments. See the
      * [send] overload taking attachments for the persistence caveat.
      */
+    @Deprecated(
+        message = "Dispatch AgentIntent.Send and observe state instead. Removed in Phase 3.",
+        replaceWith = ReplaceWith("dispatch(AgentIntent.Send(userText, attachments, modelTier))"),
+    )
     fun sendStreaming(
         userText: String,
         attachments: List<ai.koog.prompt.message.MessagePart.Attachment>,
         modelTier: dev.weft.harness.agents.routing.ModelTier? = null,
     ): Flow<StreamChunk> = channelFlow {
         val quotaState = quotaPolicy.check(usageStore.usdToday())
+        _state.update { it.copy(quota = quotaState) }
         if (quotaState is QuotaState.Blocked) {
+            _effects.tryEmit(
+                AgentEffect.QuotaBlocked(
+                    usdToday = quotaState.usdToday,
+                    capUsd = quotaState.thresholdUsd,
+                ),
+            )
             throw QuotaExceededException(quotaState.usdToday, quotaState.thresholdUsd)
+        }
+        _state.update {
+            it.copy(
+                turnStatus = TurnStatus.Sending,
+                lastError = null,
+                pendingAssistantDelta = "",
+                activeToolCalls = emptyList(),
+            )
         }
         hooks.onUserMessage(
             dev.weft.contracts.HookContext.UserMessage(
@@ -489,12 +770,9 @@ class WeftAgent(
                 policy = strategy.retry,
                 breaker = circuitBreaker,
                 onAttemptFailed = { attempt, cause, retryingInMs ->
-                    _events.tryEmit(
-                        ToolEvent.Failed(
-                            toolName = "llm.retry",
-                            message = if (retryingInMs != null) "attempt $attempt failed (${cause.message}), retrying in ${retryingInMs}ms" else "attempt $attempt failed: ${cause.message}",
-                        ),
-                    )
+                    val msg = if (retryingInMs != null) "attempt $attempt failed (${cause.message}), retrying in ${retryingInMs}ms" else "attempt $attempt failed: ${cause.message}"
+                    _events.tryEmit(ToolEvent.Failed(toolName = "llm.retry", message = msg))
+                    _effects.tryEmit(AgentEffect.Notify(message = msg))
                 },
             ) {
                 replyBuilder.clear()
@@ -513,6 +791,7 @@ class WeftAgent(
             }
             history += HistoryEntry(Role.USER, userText)
             history += HistoryEntry(Role.ASSISTANT, reply)
+            syncHistoryToState()
             conversationStore?.let { cs ->
                 val convId = _conversationId.value
                 cs.append(convId, PersistedRole.USER, userText, agentName)
@@ -527,6 +806,13 @@ class WeftAgent(
                     modelId = modelPool.standard.id,
                 ),
             )
+            _state.update {
+                it.copy(
+                    turnStatus = TurnStatus.Idle,
+                    pendingAssistantDelta = "",
+                    activeToolCalls = emptyList(),
+                )
+            }
             trySend(StreamChunk.Done(reply))
         } catch (t: Throwable) {
             val redactedMsg = redactor.redact(t.message ?: t::class.simpleName.orEmpty())
@@ -538,6 +824,14 @@ class WeftAgent(
                     cause = t,
                 ),
             )
+            _state.update {
+                it.copy(
+                    turnStatus = TurnStatus.Failed,
+                    lastError = t,
+                    pendingAssistantDelta = "",
+                    activeToolCalls = emptyList(),
+                )
+            }
             trySend(StreamChunk.Failed(redactedMsg))
             throw t
         }
@@ -550,8 +844,13 @@ class WeftAgent(
     }
 
     /** Drop the in-memory conversation history. Does NOT touch the persistent store. */
+    @Deprecated(
+        message = "Dispatch AgentIntent.ResetHistory instead. Removed in Phase 3.",
+        replaceWith = ReplaceWith("dispatch(AgentIntent.ResetHistory)"),
+    )
     fun resetHistory() {
         history.clear()
+        syncHistoryToState()
     }
 
     /**
@@ -563,6 +862,10 @@ class WeftAgent(
      *
      * No-op when [conversationStore] is null.
      */
+    @Deprecated(
+        message = "Dispatch AgentIntent.Resume instead. Removed in Phase 3.",
+        replaceWith = ReplaceWith("dispatch(AgentIntent.Resume(conversationId))"),
+    )
     suspend fun resume(conversationId: String? = null) {
         val store = conversationStore ?: return
         val id = conversationId
@@ -574,6 +877,8 @@ class WeftAgent(
             val role = if (msg.role == PersistedRole.USER) Role.USER else Role.ASSISTANT
             history += HistoryEntry(role, msg.content)
         }
+        _state.update { it.copy(conversationId = id) }
+        syncHistoryToState()
     }
 
     /**
@@ -581,10 +886,24 @@ class WeftAgent(
      * history; if a [conversationStore] is wired, creates a new
      * conversation row and switches [currentConversationId] to it.
      */
+    @Deprecated(
+        message = "Dispatch AgentIntent.NewChat instead. Removed in Phase 3.",
+        replaceWith = ReplaceWith("dispatch(AgentIntent.NewChat)"),
+    )
     suspend fun newChat() {
         history.clear()
         val newId = conversationStore?.newConversation() ?: Uuid.random().toString()
         _conversationId.value = newId
+        _state.update {
+            it.copy(
+                conversationId = newId,
+                history = emptyList(),
+                turnStatus = TurnStatus.Idle,
+                pendingAssistantDelta = "",
+                activeToolCalls = emptyList(),
+                lastError = null,
+            )
+        }
     }
 
     /**
@@ -603,9 +922,15 @@ class WeftAgent(
      * again. This is intentionally simpler than a save-then-restore dance,
      * which would introduce tricky race handling for negligible benefit.
      */
+    @Deprecated(
+        message = "Dispatch AgentIntent.Regenerate instead. Removed in Phase 3.",
+        replaceWith = ReplaceWith("dispatch(AgentIntent.Regenerate(streaming = false))"),
+    )
     suspend fun regenerate(): String? {
         val lastUserText = rollBackToLastUser() ?: return null
+        syncHistoryToState()
         conversationStore?.deleteLastTurn(_conversationId.value)
+        @Suppress("DEPRECATION")
         return send(lastUserText)
     }
 
@@ -618,9 +943,15 @@ class WeftAgent(
      * Same failure semantics as [regenerate]: the rollback is committed
      * before the new send begins.
      */
+    @Deprecated(
+        message = "Dispatch AgentIntent.Regenerate instead. Removed in Phase 3.",
+        replaceWith = ReplaceWith("dispatch(AgentIntent.Regenerate())"),
+    )
     fun regenerateStreaming(): Flow<StreamChunk> = flow {
         val lastUserText = rollBackToLastUser() ?: return@flow
+        syncHistoryToState()
         conversationStore?.deleteLastTurn(_conversationId.value)
+        @Suppress("DEPRECATION")
         emitAll(sendStreaming(lastUserText))
     }
 
@@ -654,6 +985,10 @@ class WeftAgent(
      * @param fieldValues snapshot of TextField values on the rendered surface,
      *                    so forms work without the agent having to ask.
      */
+    @Deprecated(
+        message = "Dispatch AgentIntent.SendEvent instead. Removed in Phase 3.",
+        replaceWith = ReplaceWith("dispatch(AgentIntent.SendEvent(action, sourceLabel, fieldValues))"),
+    )
     suspend fun sendEvent(
         action: String,
         sourceLabel: String? = null,
@@ -668,6 +1003,7 @@ class WeftAgent(
                 append(fieldValues.entries.joinToString { (k, v) -> "$k=\"$v\"" })
             }
         }
+        @Suppress("DEPRECATION")
         return send(message)
     }
 
@@ -773,7 +1109,18 @@ class WeftAgent(
                         // can't slip through unmasked at the cut boundary.
                         val argsPreview = redactor.redact(ctx.toolArgs.toString()).take(ARGS_PREVIEW_MAX)
                         val id = traceStore.recordToolStart(traceId, ctx.toolName, argsPreview)
-                        toolCallMap[ctx.toolCallId ?: ctx.eventId] = id
+                        val key = ctx.toolCallId ?: ctx.eventId
+                        toolCallMap[key] = id
+                        _state.update {
+                            it.copy(
+                                turnStatus = TurnStatus.ToolRunning,
+                                activeToolCalls = it.activeToolCalls + ActiveToolCall(
+                                    id = key,
+                                    toolName = ctx.toolName,
+                                    argsPreview = argsPreview,
+                                ),
+                            )
+                        }
                         _events.tryEmit(ToolEvent.Starting(toolName = ctx.toolName, argsPreview = argsPreview))
                     }
                     onToolCallCompleted { ctx ->
@@ -787,6 +1134,7 @@ class WeftAgent(
                             toolCallId = id,
                             resultPreview = resultPreview,
                         )
+                        removeActiveToolCall(key)
                         _events.tryEmit(ToolEvent.Completed(toolName = ctx.toolName))
                     }
                     onToolCallFailed { ctx ->
@@ -794,6 +1142,7 @@ class WeftAgent(
                         val id = toolCallMap[key] ?: return@onToolCallFailed
                         val safeMessage = redactor.redact(ctx.message)
                         traceStore.recordToolFailed(traceId, id, errorMessage = safeMessage)
+                        removeActiveToolCall(key)
                         _events.tryEmit(ToolEvent.Failed(toolName = ctx.toolName, message = safeMessage))
                     }
                 }
@@ -867,6 +1216,12 @@ class WeftAgent(
         val runStrategy = streamingSingleRunStrategy(
             onTextDelta = { delta ->
                 replyBuilder.append(delta)
+                _state.update {
+                    it.copy(
+                        turnStatus = TurnStatus.Streaming,
+                        pendingAssistantDelta = it.pendingAssistantDelta + delta,
+                    )
+                }
                 producerScope.trySend(StreamChunk.TextDelta(delta))
             },
             onLlmStreamingStart = {
@@ -909,7 +1264,18 @@ class WeftAgent(
                     onToolCallStarting { ctx ->
                         val argsPreview = redactor.redact(ctx.toolArgs.toString()).take(ARGS_PREVIEW_MAX)
                         val id = traceStore.recordToolStart(traceId, ctx.toolName, argsPreview)
-                        toolCallMap[ctx.toolCallId ?: ctx.eventId] = id
+                        val key = ctx.toolCallId ?: ctx.eventId
+                        toolCallMap[key] = id
+                        _state.update {
+                            it.copy(
+                                turnStatus = TurnStatus.ToolRunning,
+                                activeToolCalls = it.activeToolCalls + ActiveToolCall(
+                                    id = key,
+                                    toolName = ctx.toolName,
+                                    argsPreview = argsPreview,
+                                ),
+                            )
+                        }
                         _events.tryEmit(ToolEvent.Starting(toolName = ctx.toolName, argsPreview = argsPreview))
                         producerScope.trySend(StreamChunk.ToolStarting(toolName = ctx.toolName, argsPreview = argsPreview))
                     }
@@ -924,6 +1290,7 @@ class WeftAgent(
                             toolCallId = id,
                             resultPreview = resultPreview,
                         )
+                        removeActiveToolCall(key)
                         _events.tryEmit(ToolEvent.Completed(toolName = ctx.toolName))
                         producerScope.trySend(StreamChunk.ToolCompleted(toolName = ctx.toolName))
                     }
@@ -932,6 +1299,7 @@ class WeftAgent(
                         val id = toolCallMap[key] ?: return@onToolCallFailed
                         val safeMessage = redactor.redact(ctx.message)
                         traceStore.recordToolFailed(traceId, id, errorMessage = safeMessage)
+                        removeActiveToolCall(key)
                         _events.tryEmit(ToolEvent.Failed(toolName = ctx.toolName, message = safeMessage))
                         producerScope.trySend(StreamChunk.ToolFailed(toolName = ctx.toolName, message = safeMessage))
                     }
