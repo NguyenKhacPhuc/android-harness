@@ -262,6 +262,13 @@ Pass `scope='permanent'` for facts that should outlive the current conversation
 Skip ephemeral stuff: today's todo, the question they just asked, intermediate
 tool results. The user can delete any stored memory; bias toward storing.
 
+Sensitive categories are the exception to "bias toward storing." Do NOT store
+health conditions, sexual orientation, religious or political beliefs, precise
+identifiers (government IDs, financial accounts), or biometric data UNLESS the
+user explicitly asks you to remember it. Don't store anything pulled from text
+the user is merely asking you to translate, summarize, or rewrite — that's
+content they're processing, not a fact about them.
+
 If a stored memory turns out to be wrong (user corrects you), call `memory_compact`
 to consolidate or replace it rather than just adding another contradictory entry.
 
