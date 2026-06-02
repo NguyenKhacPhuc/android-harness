@@ -13,15 +13,11 @@ import dev.weft.harness.conversation.ConversationStore
 import dev.weft.harness.cost.QuotaPolicy
 import dev.weft.harness.memory.MemoryStore
 import dev.weft.harness.observability.Redactor
-import dev.weft.mcp.HttpMcpClient
 import dev.weft.mcp.McpServerConfig
 import dev.weft.security.NetworkPolicy
-import dev.weft.security.whitelistingHttpClient
 import dev.weft.tools.WeftContext
 import dev.weft.tools.WeftTool
 import io.ktor.client.engine.darwin.Darwin
-import io.ktor.client.plugins.contentnegotiation.ContentNegotiation
-import io.ktor.serialization.kotlinx.json.json
 import kotlin.time.Duration
 
 /**
@@ -90,15 +86,18 @@ public fun WeftRuntime.Companion.create(
     agents: List<AgentDeclaration> = emptyList(),
 ): WeftRuntime {
     val database = WeftDatabaseFactory.create(platform)
-    return WeftRuntime(
+    return assembleWeftRuntime(
         os = os,
+        database = database,
+        networkEngine = Darwin.create(),
+        deviceSnapshotProvider = { iosDeviceSnapshot() },
         uiBridge = uiBridge,
         appPromptPreamble = appPromptPreamble,
         dataSources = dataSources,
         networkPolicy = networkPolicy,
         extraContextProviders = extraContextProviders,
         extraToolsFactory = extraToolsFactory,
-        toolProviderOverride = toolProvider,
+        toolProvider = toolProvider,
         componentMetadata = componentMetadata,
         extraSystemNotes = extraSystemNotes,
         dynamicSystemPromptSection = dynamicSystemPromptSection,
@@ -109,18 +108,9 @@ public fun WeftRuntime.Companion.create(
         quotaPolicy = quotaPolicy,
         redactor = redactor,
         maxIterations = maxIterations,
-        agents = agents,
         mcpServers = mcpServers,
         onMcpError = onMcpError,
         mcpDiscoveryTimeout = mcpDiscoveryTimeout,
-        database = database,
-        networkClient = whitelistingHttpClient(
-            engine = Darwin.create(),
-            policy = networkPolicy,
-            extraConfig = {
-                install(ContentNegotiation) { json(HttpMcpClient.DEFAULT_JSON) }
-            },
-        ),
-        deviceSnapshotProvider = { iosDeviceSnapshot() },
+        agents = agents,
     )
 }

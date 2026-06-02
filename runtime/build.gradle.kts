@@ -145,6 +145,12 @@ kotlin {
             // `network_fetch` plumbing. The engine (OkHttp / Darwin /
             // CIO / …) is wired per-platform in the host factory.
             api(libs.ktor.client.core)
+            // ContentNegotiation + JSON — installed by the shared
+            // `assembleWeftRuntime` factory so MCP discovery can reuse
+            // the allowlist client for JSON-RPC. Lives in commonMain so
+            // both platform factories share one composition.
+            implementation(libs.ktor.client.content.negotiation)
+            implementation(libs.ktor.serialization.kotlinx.json)
         }
 
         androidMain.dependencies {
@@ -183,12 +189,8 @@ kotlin {
                 // Ktor Darwin engine — wires the iOS network client
                 // for `WeftRuntime.create(...)`'s iOS factory.
                 implementation(libs.ktor.client.darwin)
-                // Ktor content-negotiation + json — the iOS factory
-                // installs ContentNegotiation on the network client
-                // so MCP discovery can reuse it (mirroring the Android
-                // factory).
-                implementation(libs.ktor.client.content.negotiation)
-                implementation(libs.ktor.serialization.kotlinx.json)
+                // ContentNegotiation + json now live in commonMain (the
+                // shared `assembleWeftRuntime` factory installs them).
             }
         }
 
