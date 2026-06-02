@@ -17,13 +17,9 @@ import dev.weft.harness.observability.Redactor
 import dev.weft.mcp.McpServerConfig
 import dev.weft.osbridge.AndroidOsCapabilities
 import dev.weft.security.NetworkPolicy
-import dev.weft.security.whitelistingHttpClient
 import dev.weft.tools.WeftContext
 import dev.weft.tools.WeftTool
-import dev.weft.mcp.HttpMcpClient
 import io.ktor.client.engine.okhttp.OkHttp
-import io.ktor.client.plugins.contentnegotiation.ContentNegotiation
-import io.ktor.serialization.kotlinx.json.json
 import kotlin.time.Duration
 
 /**
@@ -100,18 +96,21 @@ public fun WeftRuntime.Companion.create(
     val appContext = context.applicationContext
     val database = WeftDatabaseFactory.create(WeftPlatform(appContext))
     val scheduledNotificationStore = SqlDelightScheduledNotificationKeyStore(database)
-    return WeftRuntime(
+    return assembleWeftRuntime(
         os = AndroidOsCapabilities.create(
             appContext,
             scheduledNotificationStore = scheduledNotificationStore,
         ),
+        database = database,
+        networkEngine = OkHttp.create(),
+        deviceSnapshotProvider = { deviceSnapshot(appContext) },
         uiBridge = uiBridge,
         appPromptPreamble = appPromptPreamble,
         dataSources = dataSources,
         networkPolicy = networkPolicy,
         extraContextProviders = extraContextProviders,
         extraToolsFactory = extraToolsFactory,
-        toolProviderOverride = toolProvider,
+        toolProvider = toolProvider,
         componentMetadata = componentMetadata,
         extraSystemNotes = extraSystemNotes,
         dynamicSystemPromptSection = dynamicSystemPromptSection,
@@ -122,22 +121,9 @@ public fun WeftRuntime.Companion.create(
         quotaPolicy = quotaPolicy,
         redactor = redactor,
         maxIterations = maxIterations,
-        agents = agents,
         mcpServers = mcpServers,
         onMcpError = onMcpError,
         mcpDiscoveryTimeout = mcpDiscoveryTimeout,
-        database = database,
-        networkClient = whitelistingHttpClient(
-            engine = OkHttp.create(),
-            policy = networkPolicy,
-            // ContentNegotiation is installed up-front so MCP discovery
-            // can reuse `networkClient` for JSON-RPC over HTTP; the
-            // additional plugin only adds a no-op pipeline phase for
-            // calls that don't return JSON.
-            extraConfig = {
-                install(ContentNegotiation) { json(HttpMcpClient.DEFAULT_JSON) }
-            },
-        ),
-        deviceSnapshotProvider = { deviceSnapshot(appContext) },
+        agents = agents,
     )
 }
