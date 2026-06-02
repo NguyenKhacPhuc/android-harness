@@ -2,6 +2,7 @@ package dev.weft.compose.components
 import dev.weft.contracts.ComponentEvent
 import dev.weft.contracts.ComponentCategory
 
+import android.webkit.JavascriptInterface
 import android.webkit.WebView
 import android.webkit.WebViewClient
 import androidx.compose.foundation.layout.Column
@@ -11,10 +12,14 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.viewinterop.AndroidView
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.launch
 import kotlinx.serialization.Serializable
 
 /**
@@ -119,8 +124,16 @@ public data class HtmlProps(
  *
  * Different from [WebViewComponent]: that one loads a URL; this one
  * takes raw HTML directly via `loadDataWithBaseURL`.
+ *
+ * When constructed with a non-null [invoker] and rendered with
+ * `runScripts = true`, the page gains the `window.weft` bridge: its
+ * script can `callTool(name, args)` and `await` the host's result.
+ * Left `null` (the default), the WebView stays fully sandboxed — no
+ * `addJavascriptInterface`, exactly as before.
  */
-public class HtmlComponent : WeftComponent<HtmlProps>(
+public class HtmlComponent(
+    private val invoker: MiniAppActionInvoker? = null,
+) : WeftComponent<HtmlProps>(
     name = "Html",
     description = "Render a raw HTML snippet inline (no URL). Required: html (string). " +
         "Optional: title, height (token), runScripts (default false). " +
@@ -155,6 +168,11 @@ public class HtmlComponent : WeftComponent<HtmlProps>(
         // mini-app override (props.theme) wins over the inherited defaults.
         val tokens = rememberMiniAppThemeTokens().overlay(props.theme)
         val decorated = MiniAppTheme.decorate(props.html, tokens, props.runScripts)
+        // Bridge is live only when the host supplied an invoker AND the
+        // mini-app opted into scripts. Otherwise the WebView is sandboxed.
+        val bridge = remember(invoker) { invoker?.let { MiniAppBridge(it) } }
+        val bridged = bridge != null && props.runScripts
+        val scope = rememberCoroutineScope()
         Column(modifier = Modifier.fillMaxWidth()) {
             if (props.title.isNotBlank()) {
                 Text(
@@ -167,14 +185,19 @@ public class HtmlComponent : WeftComponent<HtmlProps>(
             AndroidView(
                 factory = { ctx ->
                     WebView(ctx).apply {
-                        // JS opt-in: still sandboxed (no addJavascriptInterface, no base URL
-                        // so cross-origin XHR is blocked). Default off — see HtmlProps.
+                        // JS opt-in. Sandboxed by default (no base URL → cross-origin
+                        // XHR blocked). The window.weft bridge is attached only when
+                        // `bridged` — see HtmlProps / HtmlComponent(invoker).
                         settings.javaScriptEnabled = props.runScripts
                         settings.defaultTextEncodingName = "utf-8"
                         // domStorage allows localStorage/sessionStorage in self-contained
                         // widgets — only available when scripts are enabled anyway.
                         settings.domStorageEnabled = props.runScripts
-                        webViewClient = WebViewClient()
+                        webViewClient = if (bridge != null && bridged) {
+                            attachWeftBridge(bridge, scope)
+                        } else {
+                            WebViewClient()
+                        }
                         loadDataWithBaseURL(null, decorated, "text/html", "utf-8", null)
                     }
                 },
@@ -205,6 +228,47 @@ public class HtmlComponent : WeftComponent<HtmlProps>(
         // Arbitrary tag id — must be unique within this View. Using a high
         // negative-ish constant to avoid clashing with framework ids.
         private const val R_ID_LAST_HTML = 0x7F00_AB01
+    }
+}
+
+/** Name the `window.weft` shim posts to — see [MiniAppBridge.jsShim]. */
+private const val JS_BRIDGE_NAME = "AndroidWeftBridge"
+
+/**
+ * Attach the `window.weft` bridge to this WebView: register the
+ * `@JavascriptInterface` transport and return a [WebViewClient] that
+ * injects the shim once the page has loaded. Result JS is evaluated
+ * back on the WebView's thread via [WebView.post].
+ */
+private fun WebView.attachWeftBridge(bridge: MiniAppBridge, scope: CoroutineScope): WebViewClient {
+    val webView = this
+    addJavascriptInterface(
+        AndroidWeftBridge(bridge, scope) { js -> webView.post { webView.evaluateJavascript(js, null) } },
+        JS_BRIDGE_NAME,
+    )
+    return object : WebViewClient() {
+        override fun onPageFinished(view: WebView?, url: String?) {
+            view?.evaluateJavascript(MiniAppBridge.jsShim("$JS_BRIDGE_NAME.postMessage(msg);"), null)
+        }
+    }
+}
+
+/**
+ * The `@JavascriptInterface` object the shim posts call payloads to.
+ * Runs the suspend dispatch off the JS thread on [scope], then hands
+ * the resolve/reject JS to [evalOnMain].
+ */
+private class AndroidWeftBridge(
+    private val bridge: MiniAppBridge,
+    private val scope: CoroutineScope,
+    private val evalOnMain: (String) -> Unit,
+) {
+    @JavascriptInterface
+    fun postMessage(payload: String) {
+        scope.launch {
+            val js = bridge.handle(payload)
+            if (js.isNotEmpty()) evalOnMain(js)
+        }
     }
 }
 
