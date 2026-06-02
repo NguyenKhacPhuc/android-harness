@@ -1,30 +1,31 @@
 package dev.weft.osbridge.clipboard
 
 import dev.weft.contracts.Clipboard
+import platform.UIKit.UIPasteboard
 
 /**
- * iOS stub for [Clipboard]. Every method throws [NotImplementedError]
- * via [TODO] until somebody wires the iOS-native API.
+ * iOS [Clipboard] backed by `UIPasteboard.generalPasteboard`.
  *
- * Native API to wrap: `UIKit.UIPasteboard.general` —
- * `.string` getter for read, `.string =` setter for write, and
- * `.items = []` (or `setItems([], options: [...])`) for clear. iOS 14+
- * shows a transient "Pasted from <app>" banner on read, equivalent to
- * Android's API 29+ toast.
+ * Empty strings read back as `null` to match the Android impl, which
+ * coerces an empty primary clip to `null`. iOS surfaces a transient
+ * "Pasted from <app>" banner on read (iOS 14+) — treat [read] as
+ * user-observable.
  *
- * Open so hosts can subclass and override individual methods as they
- * implement them piecewise.
- *
- * See `docs/architecture/ios-os-capabilities.md` for effort estimates,
- * priority ordering, and what substrate tools each method unblocks.
+ * Open so hosts can subclass and override individual methods.
  */
 public open class IosClipboard : Clipboard {
+
+    private val pasteboard: UIPasteboard
+        get() = UIPasteboard.generalPasteboard
+
     override suspend fun read(): String? =
-        TODO("IosClipboard.read — wrap UIPasteboard.general.string")
+        pasteboard.string?.takeIf { it.isNotEmpty() }
 
-    override suspend fun write(text: String): Unit =
-        TODO("IosClipboard.write — wrap UIPasteboard.general.string = text")
+    override suspend fun write(text: String) {
+        pasteboard.string = text
+    }
 
-    override suspend fun clear(): Unit =
-        TODO("IosClipboard.clear — wrap UIPasteboard.general.items = []")
+    override suspend fun clear() {
+        pasteboard.items = emptyList<Map<Any?, Any?>>()
+    }
 }
