@@ -181,6 +181,10 @@ kotlin {
 
         val iosMain by getting {
             dependencies {
+                // iOS OS bridge — lets the iOS `WeftRuntime.create(...)`
+                // factory default `os` to `IosOsCapabilities()`, mirroring
+                // how androidMain defaults to `AndroidOsCapabilities`.
+                implementation(project(":os-bridge"))
                 // SQLDelight's Native driver — wires the iosMain
                 // `createWeftDriver` actual. Bundles its own SQLite
                 // (Kotlin/Native links libsqlite3 from the system) so

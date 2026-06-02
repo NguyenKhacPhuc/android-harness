@@ -14,6 +14,7 @@ import dev.weft.harness.cost.QuotaPolicy
 import dev.weft.harness.memory.MemoryStore
 import dev.weft.harness.observability.Redactor
 import dev.weft.mcp.McpServerConfig
+import dev.weft.osbridge.IosOsCapabilities
 import dev.weft.security.NetworkPolicy
 import dev.weft.tools.WeftContext
 import dev.weft.tools.WeftTool
@@ -34,35 +35,39 @@ import kotlin.time.Duration
  *     so MCP discovery can reuse it.
  *   - `iosDeviceSnapshot()` for the per-turn volatile prefix.
  *
- * Unlike the Android factory there's **no default for [os]** — there's
- * no `IosOsCapabilities` yet because the OS-bridge layer still ships
- * androidMain-only impls. Hosts compose their own:
+ * [os] now defaults to [IosOsCapabilities] — a fully-wired capability
+ * set, the same one-call shape the Android factory offers. Implemented
+ * capabilities (KeyVault, Clipboard, Permissions, Haptics, Power,
+ * ImageOps, SystemInfo, Sharing, Intents) work out of the box; the rest
+ * are loud-failure stubs whose calls surface to the LLM as a tool error
+ * (never a crash). Override individual capabilities as you implement
+ * more, or pass a `FakeOsCapabilities` from `:harness:testing` for
+ * silent no-ops:
  *
  * ```kotlin
- * // In your iOS host:
- * val osCapabilities = FakeOsCapabilities(            // from :harness:testing
- *     location = MyCLLocationManagerLocation(),       // host-supplied
- *     keyVault = MyKeychainKeyVault(),                // host-supplied
- *     clipboard = MyUIPasteboardClipboard(),          // host-supplied
- *     // every other capability defaults to FakeXxx no-op
- * )
+ * // One call — no stand-ins needed:
  * val runtime = WeftRuntime.create(
  *     platform = WeftPlatform(),
- *     os = osCapabilities,
  *     uiBridge = composeUiBridge,
  *     appPromptPreamble = "You are MyApp's assistant.",
+ * )
+ *
+ * // …or override specific capabilities:
+ * WeftRuntime.create(
+ *     platform = WeftPlatform(),
+ *     os = IosOsCapabilities(location = MyCustomLocation()),
+ *     uiBridge = composeUiBridge,
+ *     appPromptPreamble = "…",
  * )
  * ```
  *
  * See `docs/architecture/ios-os-capabilities.md` for the implementation
- * backlog of every [dev.weft.contracts.OsCapabilities] sub-interface
- * (KeyVault, Notifications, Location, Vision, Pdf, …) — which iOS
- * native API to wrap, effort estimates, and which substrate tools each
- * one unblocks.
+ * backlog of the still-stubbed sub-interfaces (Vision, Pdf, Calendar,
+ * …) — which iOS native API to wrap and which tools each unblocks.
  */
 public fun WeftRuntime.Companion.create(
     platform: WeftPlatform,
-    os: OsCapabilities,
+    os: OsCapabilities = IosOsCapabilities(),
     uiBridge: UiBridge,
     appPromptPreamble: String,
     dataSources: List<DataSource> = emptyList(),
