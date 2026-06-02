@@ -114,6 +114,13 @@ public data class HtmlProps(
      * Default null ⇒ pure app inheritance.
      */
     val theme: MiniAppThemeOverride? = null,
+    /**
+     * Stable, non-sensitive identity for this mini-app. The host's scope
+     * resolver maps it to the approved action set enforced at the bridge.
+     * It carries identity only — never the grant itself — so an
+     * agent-authored value can't widen what the mini-app may reach.
+     */
+    val miniAppId: String? = null,
 )
 
 /**
@@ -130,9 +137,15 @@ public data class HtmlProps(
  * script can `callTool(name, args)` and `await` the host's result.
  * Left `null` (the default), the WebView stays fully sandboxed — no
  * `addJavascriptInterface`, exactly as before.
+ *
+ * [scopeResolver] (host-supplied) gates the bridge per mini-app: it
+ * maps the rendered mini-app's id to its approved action set, and the
+ * bridge refuses anything outside it. Left `null`, the bridge is
+ * ungated (trusted) — same as before scope enforcement landed.
  */
 public class HtmlComponent(
     private val invoker: MiniAppActionInvoker? = null,
+    private val scopeResolver: MiniAppScopeResolver? = null,
 ) : WeftComponent<HtmlProps>(
     name = "Html",
     description = "Render a raw HTML snippet inline (no URL). Required: html (string). " +
@@ -170,7 +183,9 @@ public class HtmlComponent(
         val decorated = MiniAppTheme.decorate(props.html, tokens, props.runScripts)
         // Bridge is live only when the host supplied an invoker AND the
         // mini-app opted into scripts. Otherwise the WebView is sandboxed.
-        val bridge = remember(invoker) { invoker?.let { MiniAppBridge(it) } }
+        // The host's scope resolver gates it to this mini-app's approved set.
+        val approved = scopeResolver?.invoke(props.miniAppId)
+        val bridge = remember(invoker, approved) { invoker?.let { MiniAppBridge(it, approved) } }
         val bridged = bridge != null && props.runScripts
         val scope = rememberCoroutineScope()
         Column(modifier = Modifier.fillMaxWidth()) {
