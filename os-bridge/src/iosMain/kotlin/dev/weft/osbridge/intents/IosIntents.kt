@@ -1,35 +1,70 @@
 package dev.weft.osbridge.intents
 
 import dev.weft.contracts.Intents
+import kotlinx.cinterop.ExperimentalForeignApi
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.suspendCancellableCoroutine
+import kotlinx.coroutines.withContext
 import kotlinx.serialization.json.JsonObject
+import platform.Foundation.NSCharacterSet
+import platform.Foundation.NSURL
+import platform.Foundation.URLQueryAllowedCharacterSet
+import platform.Foundation.stringByAddingPercentEncodingWithAllowedCharacters
+import platform.UIKit.UIApplication
+import kotlin.coroutines.resume
 
 /**
- * iOS stub for [Intents]. Every method throws [NotImplementedError]
- * via [TODO] until somebody wires the iOS-native API.
+ * iOS [Intents] via `UIApplication.openURL`. `openUrl` and `launchApp`
+ * open the system handler for a URL / app scheme; `openMapsDirections`
+ * builds an Apple Maps `maps.apple.com` URL. `openAlarmSet` returns
+ * false — iOS exposes no public Clock URL scheme.
  *
- * Native API to wrap: `UIKit.UIApplication.shared.open(_:options:completionHandler:)`
- * with custom URL schemes / universal links for launchApp, https:// or
- * the in-app `SFSafariViewController` for openUrl, Apple Maps URL scheme
- * (`http://maps.apple.com/?daddr=...&saddr=...&dirflg=d`) for directions,
- * and the Clock app has no public URL scheme — `openAlarmSet` likely
- * needs to return false on iOS unless a host provides a custom action.
+ * `inApp` is best-effort: this impl always opens externally (an in-app
+ * `SFSafariViewController` needs a host view controller to present
+ * from, which the substrate doesn't own).
  *
- * Open so hosts can subclass and override individual methods as they
- * implement them piecewise.
- *
- * See `docs/architecture/ios-os-capabilities.md` for effort estimates,
- * priority ordering, and what substrate tools each method unblocks.
+ * Open so hosts can subclass and override individual methods.
  */
+@OptIn(ExperimentalForeignApi::class)
 public open class IosIntents : Intents {
+
     override suspend fun launchApp(target: String, payload: JsonObject?): Boolean =
-        TODO("IosIntents.launchApp — wrap UIApplication.shared.open(_:) with the target's URL scheme")
+        open(target)
 
     override suspend fun openUrl(url: String, inApp: Boolean): Boolean =
-        TODO("IosIntents.openUrl — wrap UIApplication.shared.open(_:) or present SFSafariViewController when inApp")
+        open(url)
 
-    override suspend fun openMapsDirections(to: String, from: String?, mode: String): Boolean =
-        TODO("IosIntents.openMapsDirections — wrap UIApplication.shared.open(_:) on a maps.apple.com URL with daddr/saddr/dirflg")
+    override suspend fun openMapsDirections(to: String, from: String?, mode: String): Boolean {
+        val dirflg = when (mode.lowercase()) {
+            "walking" -> "w"
+            "transit" -> "r"
+            else -> "d"
+        }
+        val query = buildString {
+            append("https://maps.apple.com/?daddr=").append(encode(to))
+            if (from != null) append("&saddr=").append(encode(from))
+            append("&dirflg=").append(dirflg)
+        }
+        return open(query)
+    }
 
-    override suspend fun openAlarmSet(hour: Int, minute: Int, label: String?): Boolean =
-        TODO("IosIntents.openAlarmSet — no public Clock URL scheme on iOS; return false or route via Shortcuts intent")
+    override suspend fun openAlarmSet(hour: Int, minute: Int, label: String?): Boolean = false
+
+    private suspend fun open(urlString: String): Boolean {
+        val url = NSURL.URLWithString(urlString) ?: return false
+        return withContext(Dispatchers.Main) {
+            val app = UIApplication.sharedApplication
+            if (!app.canOpenURL(url)) return@withContext false
+            suspendCancellableCoroutine { cont ->
+                app.openURL(url, options = emptyMap<Any?, Any?>()) { success ->
+                    cont.resume(success)
+                }
+            }
+        }
+    }
+
+    private fun encode(value: String): String =
+        (value as platform.Foundation.NSString)
+            .stringByAddingPercentEncodingWithAllowedCharacters(NSCharacterSet.URLQueryAllowedCharacterSet)
+            ?: value
 }
