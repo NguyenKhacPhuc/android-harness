@@ -7,6 +7,8 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
@@ -14,13 +16,21 @@ import androidx.compose.ui.viewinterop.UIKitView
 import dev.weft.contracts.ComponentCategory
 import dev.weft.contracts.ComponentEvent
 import kotlinx.cinterop.ExperimentalForeignApi
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.launch
 import kotlinx.serialization.Serializable
 import platform.CoreGraphics.CGRectMake
 import platform.Foundation.NSURL
 import platform.Foundation.NSURLRequest
+import platform.WebKit.WKScriptMessage
+import platform.WebKit.WKScriptMessageHandlerProtocol
+import platform.WebKit.WKUserContentController
+import platform.WebKit.WKUserScript
+import platform.WebKit.WKUserScriptInjectionTime
 import platform.WebKit.WKWebView
 import platform.WebKit.WKWebViewConfiguration
 import platform.WebKit.WKWebpagePreferences
+import platform.darwin.NSObject
 
 /**
  * iOS counterpart of the substrate's `:compose-defaults` androidMain
@@ -139,7 +149,9 @@ public data class HtmlProps(
     val theme: MiniAppThemeOverride? = null,
 )
 
-public class HtmlComponent : WeftComponent<HtmlProps>(
+public class HtmlComponent(
+    private val invoker: MiniAppActionInvoker? = null,
+) : WeftComponent<HtmlProps>(
     name = "Html",
     description = "Render a raw HTML snippet inline (no URL). Required: html (string). " +
         "Optional: title, height (token), runScripts (default false). " +
@@ -180,6 +192,11 @@ public class HtmlComponent : WeftComponent<HtmlProps>(
         // mini-app override (props.theme) wins over the inherited defaults.
         val tokens = rememberMiniAppThemeTokens().overlay(props.theme)
         val decorated = MiniAppTheme.decorate(props.html, tokens, props.runScripts)
+        // Bridge is live only when the host supplied an invoker AND the
+        // mini-app opted into scripts. Otherwise the WKWebView is sandboxed.
+        val bridge = remember(invoker) { invoker?.let { MiniAppBridge(it) } }
+        val bridged = bridge != null && props.runScripts
+        val scope = rememberCoroutineScope()
         Column(modifier = Modifier.fillMaxWidth()) {
             if (props.title.isNotBlank()) {
                 Text(
@@ -195,10 +212,27 @@ public class HtmlComponent : WeftComponent<HtmlProps>(
                     config.defaultWebpagePreferences = WKWebpagePreferences().apply {
                         allowsContentJavaScript = props.runScripts
                     }
+                    val handler = if (bridge != null && bridged) {
+                        IosWeftMessageHandler(bridge, scope).also { h ->
+                            config.userContentController.addScriptMessageHandler(h, name = WEFT_MESSAGE_NAME)
+                            config.userContentController.addUserScript(
+                                WKUserScript(
+                                    source = MiniAppBridge.jsShim(
+                                        "window.webkit.messageHandlers.$WEFT_MESSAGE_NAME.postMessage(msg);",
+                                    ),
+                                    injectionTime = WKUserScriptInjectionTime.WKUserScriptInjectionTimeAtDocumentStart,
+                                    forMainFrameOnly = true,
+                                ),
+                            )
+                        }
+                    } else {
+                        null
+                    }
                     val webView = WKWebView(
                         frame = CGRectMake(0.0, 0.0, 0.0, 0.0),
                         configuration = config,
                     )
+                    handler?.bind(webView)
                     webView.loadHTMLString(decorated, baseURL = null)
                     webView
                 },
@@ -209,6 +243,40 @@ public class HtmlComponent : WeftComponent<HtmlProps>(
                     webView.loadHTMLString(decorated, baseURL = null)
                 },
             )
+        }
+    }
+}
+
+/** Handler name the `window.weft` shim posts to — see [MiniAppBridge.jsShim]. */
+private const val WEFT_MESSAGE_NAME = "weft"
+
+/**
+ * `WKScriptMessageHandler` the injected shim posts call payloads to.
+ * Runs the suspend dispatch on [scope], then evaluates the
+ * resolve/reject JS back in the bound web view.
+ */
+@OptIn(ExperimentalForeignApi::class)
+private class IosWeftMessageHandler(
+    private val bridge: MiniAppBridge,
+    private val scope: CoroutineScope,
+) : NSObject(), WKScriptMessageHandlerProtocol {
+
+    private var webView: WKWebView? = null
+
+    fun bind(view: WKWebView) {
+        webView = view
+    }
+
+    override fun userContentController(
+        userContentController: WKUserContentController,
+        didReceiveScriptMessage: WKScriptMessage,
+    ) {
+        val payload = didReceiveScriptMessage.body as? String ?: return
+        scope.launch {
+            val js = bridge.handle(payload)
+            if (js.isNotEmpty()) {
+                webView?.evaluateJavaScript(js, completionHandler = null)
+            }
         }
     }
 }
