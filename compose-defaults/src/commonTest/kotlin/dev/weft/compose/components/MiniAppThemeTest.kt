@@ -1,0 +1,68 @@
+package dev.weft.compose.components
+
+import androidx.compose.ui.graphics.Color
+import io.kotest.matchers.shouldBe
+import io.kotest.matchers.string.shouldContain
+import io.kotest.matchers.string.shouldNotContain
+import kotlin.test.Test
+
+/**
+ * Pure-logic tests for the mini-app theme injection. The CSS/JS strings
+ * are produced from already-resolved tokens, so the whole thing is
+ * testable without Compose or a WebView. Reading the live MaterialTheme
+ * is a thin @Composable shim verified by compilation.
+ */
+class MiniAppThemeTest {
+
+    private val tokens = MiniAppThemeTokens(
+        primary = "#3366cc",
+        onPrimary = "#ffffff",
+        background = "#101418",
+        onBackground = "#e2e2e6",
+        surface = "#1a1f24",
+        onSurface = "#e2e2e6",
+        outline = "#8b9198",
+        bodyFontSizePx = 16f,
+    )
+
+    @Test
+    fun colorConvertsToSixDigitCssHex() {
+        Color(0xFF3366CC).toCssHex() shouldBe "#3366cc"
+        Color(0xFF000000).toCssHex() shouldBe "#000000"
+        Color(0xFFFFFFFF).toCssHex() shouldBe "#ffffff"
+    }
+
+    @Test
+    fun styleTagDeclaresThemeTokensAsCssCustomProperties() {
+        val style = MiniAppTheme.styleTag(tokens)
+        style shouldContain "<style>"
+        style shouldContain "--weft-color-primary: #3366cc"
+        style shouldContain "--weft-color-background: #101418"
+        // base rules pull from the tokens so a default mini-app reads native
+        style shouldContain "var(--weft-color-background)"
+        style shouldContain "var(--weft-color-on-background)"
+    }
+
+    @Test
+    fun themeScriptExposesTokensOnWindowWeftTheme() {
+        val script = MiniAppTheme.themeScript(tokens)
+        script shouldContain "window.weft = window.weft || {}"
+        script shouldContain "window.weft.theme"
+        script shouldContain "\"primary\":\"#3366cc\""
+    }
+
+    @Test
+    fun decoratePrependsStyleBeforeTheMiniAppHtml() {
+        val out = MiniAppTheme.decorate("<h1>Hi</h1>", tokens, includeThemeScript = false)
+        out.indexOf("<style>") shouldBe 0
+        (out.indexOf("<style>") < out.indexOf("<h1>Hi</h1>")) shouldBe true
+        out shouldNotContain "window.weft.theme"
+    }
+
+    @Test
+    fun decorateAddsThemeScriptOnlyWhenScriptsRequested() {
+        val out = MiniAppTheme.decorate("<h1>Hi</h1>", tokens, includeThemeScript = true)
+        out shouldContain "window.weft.theme"
+        (out.indexOf("window.weft.theme") < out.indexOf("<h1>Hi</h1>")) shouldBe true
+    }
+}
