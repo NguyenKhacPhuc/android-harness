@@ -92,4 +92,12 @@ class MiniAppBridgeTest {
         shim shouldContain "callTool"
         shim shouldContain "AndroidWeftBridge.postMessage(msg);"
     }
+
+    @Test
+    fun shimMergesOntoExistingWindowWeftSoThemeCoexists() {
+        val shim = MiniAppBridge.jsShim("AndroidWeftBridge.postMessage(msg);")
+        // must extend window.weft, not replace it (would drop window.weft.theme)
+        shim shouldContain "window.weft = window.weft || {}"
+        shim shouldContain "window.weft.callTool ="
+    }
 }

@@ -121,33 +121,34 @@ public class MiniAppBridge(
               if (window.weft && window.weft.callTool) { return; }
               var seq = 0;
               var pending = {};
-              window.weft = {
-                callTool: function (name, args) {
-                  return new Promise(function (resolve, reject) {
-                    var id = String(++seq);
-                    pending[id] = { resolve: resolve, reject: reject };
-                    var msg = JSON.stringify({
-                      id: id,
-                      name: name,
-                      args: (args === undefined ? null : args)
-                    });
-                    $postCall
+              // Merge onto any existing window.weft (e.g. the injected theme)
+              // rather than replacing it — the bridge and theme coexist.
+              window.weft = window.weft || {};
+              window.weft.callTool = function (name, args) {
+                return new Promise(function (resolve, reject) {
+                  var id = String(++seq);
+                  pending[id] = { resolve: resolve, reject: reject };
+                  var msg = JSON.stringify({
+                    id: id,
+                    name: name,
+                    args: (args === undefined ? null : args)
                   });
-                },
-                __resolve: function (id, payload) {
-                  var p = pending[id];
-                  if (!p) { return; }
-                  delete pending[id];
-                  var value;
-                  try { value = JSON.parse(payload); } catch (e) { value = payload; }
-                  p.resolve(value);
-                },
-                __reject: function (id, message) {
-                  var p = pending[id];
-                  if (!p) { return; }
-                  delete pending[id];
-                  p.reject(new Error(message));
-                }
+                  $postCall
+                });
+              };
+              window.weft.__resolve = function (id, payload) {
+                var p = pending[id];
+                if (!p) { return; }
+                delete pending[id];
+                var value;
+                try { value = JSON.parse(payload); } catch (e) { value = payload; }
+                p.resolve(value);
+              };
+              window.weft.__reject = function (id, message) {
+                var p = pending[id];
+                if (!p) { return; }
+                delete pending[id];
+                p.reject(new Error(message));
               };
             })();
         """.trimIndent()
