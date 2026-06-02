@@ -142,6 +142,11 @@ public class HtmlComponent : WeftComponent<HtmlProps>(
             "fill" -> Modifier.fillMaxWidth().height(HTML_FILL_DP.dp)
             else -> Modifier.height(HTML_WRAP_DP.dp)
         }
+        // Inject the app's theme so the mini-app reads as part of the app:
+        // CSS custom properties + base rules (always), plus window.weft.theme
+        // for scripts. Tokens track light/dark via MaterialTheme.
+        val tokens = rememberMiniAppThemeTokens()
+        val decorated = MiniAppTheme.decorate(props.html, tokens, props.runScripts)
         Column(modifier = Modifier.fillMaxWidth()) {
             if (props.title.isNotBlank()) {
                 Text(
@@ -162,18 +167,18 @@ public class HtmlComponent : WeftComponent<HtmlProps>(
                         // widgets — only available when scripts are enabled anyway.
                         settings.domStorageEnabled = props.runScripts
                         webViewClient = WebViewClient()
-                        loadDataWithBaseURL(null, props.html, "text/html", "utf-8", null)
+                        loadDataWithBaseURL(null, decorated, "text/html", "utf-8", null)
                     }
                 },
                 update = { webView ->
-                    // Reload only when html OR runScripts changed. runScripts changes
-                    // require recreating settings — track via a small composite key.
-                    val key = "${props.runScripts}:${props.html}"
+                    // Reload when the decorated document changes — covers html,
+                    // runScripts, AND a theme (light/dark) flip in one key.
+                    val key = "${props.runScripts}:$decorated"
                     val lastLoaded = webView.getTag(R_ID_LAST_HTML) as? String
                     if (lastLoaded != key) {
                         webView.settings.javaScriptEnabled = props.runScripts
                         webView.settings.domStorageEnabled = props.runScripts
-                        webView.loadDataWithBaseURL(null, props.html, "text/html", "utf-8", null)
+                        webView.loadDataWithBaseURL(null, decorated, "text/html", "utf-8", null)
                         webView.setTag(R_ID_LAST_HTML, key)
                     }
                 },

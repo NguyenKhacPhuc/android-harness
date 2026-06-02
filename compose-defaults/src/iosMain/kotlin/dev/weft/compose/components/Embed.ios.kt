@@ -167,6 +167,11 @@ public class HtmlComponent : WeftComponent<HtmlProps>(
             "fill" -> Modifier.fillMaxWidth().height(HTML_FILL_DP.dp)
             else -> Modifier.height(HTML_WRAP_DP.dp)
         }
+        // Inject the app's theme so the mini-app reads as part of the app:
+        // CSS custom properties + base rules (always), plus window.weft.theme
+        // for scripts. Tokens track light/dark via MaterialTheme.
+        val tokens = rememberMiniAppThemeTokens()
+        val decorated = MiniAppTheme.decorate(props.html, tokens, props.runScripts)
         Column(modifier = Modifier.fillMaxWidth()) {
             if (props.title.isNotBlank()) {
                 Text(
@@ -186,15 +191,14 @@ public class HtmlComponent : WeftComponent<HtmlProps>(
                         frame = CGRectMake(0.0, 0.0, 0.0, 0.0),
                         configuration = config,
                     )
-                    webView.loadHTMLString(props.html, baseURL = null)
+                    webView.loadHTMLString(decorated, baseURL = null)
                     webView
                 },
                 modifier = Modifier.fillMaxWidth().then(heightMod),
                 update = { webView ->
-                    // WKWebView's preferences are configured at init time;
-                    // runScripts change requires a fresh view, but
-                    // loadHTMLString recreates the document either way.
-                    webView.loadHTMLString(props.html, baseURL = null)
+                    // Reload the theme-decorated document — recomposition on a
+                    // light/dark flip yields new tokens, so the look updates.
+                    webView.loadHTMLString(decorated, baseURL = null)
                 },
             )
         }
