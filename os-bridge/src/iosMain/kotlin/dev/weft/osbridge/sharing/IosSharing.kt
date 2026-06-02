@@ -3,25 +3,63 @@ package dev.weft.osbridge.sharing
 import dev.weft.contracts.ShareContent
 import dev.weft.contracts.ShareTarget
 import dev.weft.contracts.Sharing
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.suspendCancellableCoroutine
+import kotlinx.coroutines.withContext
+import platform.Foundation.NSURL
+import platform.UIKit.UIActivityViewController
+import platform.UIKit.UIApplication
+import platform.UIKit.UIViewController
+import platform.UIKit.popoverPresentationController
+import kotlin.coroutines.resume
 
 /**
- * iOS stub for [Sharing]. Every method throws [NotImplementedError]
- * via [TODO] until somebody wires the iOS-native API.
+ * iOS [Sharing] via `UIActivityViewController`, presented from the
+ * top-most view controller of the key window. Returns true when the
+ * user completes a share action, false when they dismiss the sheet.
  *
- * Native API to wrap: `UIKit.UIActivityViewController` —
- * pass `activityItems: [Any]` containing the text / URL / file URL, then
- * present from the foreground `UIViewController`. For "specific app"
- * targets there's no public iOS API — the closest analogue is opening a
- * deep link via `UIApplication.shared.open(_:)` with the target app's
- * URL scheme.
+ * `ShareTarget.SpecificApp` has no public iOS analogue (the OS owns
+ * routing), so it falls back to the system share sheet.
  *
- * Open so hosts can subclass and override individual methods as they
- * implement them piecewise.
- *
- * See `docs/architecture/ios-os-capabilities.md` for effort estimates,
- * priority ordering, and what substrate tools each method unblocks.
+ * Open so hosts can subclass and override individual methods.
  */
 public open class IosSharing : Sharing {
-    override suspend fun share(content: ShareContent, target: ShareTarget): Boolean =
-        TODO("IosSharing.share — wrap UIActivityViewController with activityItems and present from the foreground UIViewController")
+
+    @Suppress("UNUSED_PARAMETER")
+    override suspend fun share(content: ShareContent, target: ShareTarget): Boolean {
+        val items = activityItems(content)
+        if (items.isEmpty()) return false
+        return withContext(Dispatchers.Main) {
+            val presenter = topViewController() ?: return@withContext false
+            suspendCancellableCoroutine { cont ->
+                val controller = UIActivityViewController(
+                    activityItems = items,
+                    applicationActivities = null,
+                )
+                controller.completionWithItemsHandler = { _, completed, _, _ ->
+                    if (cont.isActive) cont.resume(completed)
+                }
+                // iPad requires a popover anchor or the present call crashes.
+                controller.popoverPresentationController?.sourceView = presenter.view
+                presenter.presentViewController(controller, animated = true, completion = null)
+            }
+        }
+    }
+
+    private fun activityItems(content: ShareContent): List<Any> = buildList {
+        content.text?.let { add(it) }
+        content.url?.let { NSURL.URLWithString(it)?.let(::add) }
+        content.fileUri?.let { uri ->
+            val url = if (uri.startsWith("file://")) NSURL.URLWithString(uri) else NSURL.fileURLWithPath(uri)
+            url?.let(::add)
+        }
+    }
+
+    private fun topViewController(): UIViewController? {
+        var top = UIApplication.sharedApplication.keyWindow?.rootViewController ?: return null
+        while (true) {
+            top = top.presentedViewController ?: break
+        }
+        return top
+    }
 }
