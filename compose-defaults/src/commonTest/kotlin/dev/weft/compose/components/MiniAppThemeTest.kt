@@ -65,4 +65,28 @@ class MiniAppThemeTest {
         out shouldContain "window.weft.theme"
         (out.indexOf("window.weft.theme") < out.indexOf("<h1>Hi</h1>")) shouldBe true
     }
+
+    @Test
+    fun overlayWithNullIsIdentityPureAppInheritance() {
+        tokens.overlay(null) shouldBe tokens
+    }
+
+    @Test
+    fun overlayReplacesOnlyTheSpecifiedFields() {
+        val overridden = tokens.overlay(
+            MiniAppThemeOverride(primary = "#ff0000", bodyFontSizePx = 20f),
+        )
+        overridden.primary shouldBe "#ff0000"
+        overridden.bodyFontSizePx shouldBe 20f
+        // everything not named in the override stays the app default
+        overridden.background shouldBe tokens.background
+        overridden.onBackground shouldBe tokens.onBackground
+        overridden.surface shouldBe tokens.surface
+    }
+
+    @Test
+    fun overlayedTokensFlowThroughIntoTheInjectedCss() {
+        val overridden = tokens.overlay(MiniAppThemeOverride(primary = "#ff0000"))
+        MiniAppTheme.styleTag(overridden) shouldContain "--weft-color-primary: #ff0000"
+    }
 }

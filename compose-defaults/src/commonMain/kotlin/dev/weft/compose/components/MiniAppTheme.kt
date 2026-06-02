@@ -4,6 +4,7 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.remember
 import androidx.compose.ui.graphics.Color
+import kotlinx.serialization.Serializable
 import kotlin.math.roundToInt
 
 /**
@@ -26,6 +27,48 @@ public data class MiniAppThemeTokens(
     public val outline: String,
     public val bodyFontSizePx: Float,
 )
+
+/**
+ * A per-mini-app theme override. Every field is optional — a non-null
+ * value replaces the corresponding inherited app token, a null leaves
+ * it as the app default. Lets a single mini-app diverge from the app
+ * chrome (a distinct palette, a larger base font) while still
+ * inheriting everything it doesn't override.
+ *
+ * `@Serializable` so it can ride along in a mini-app's stored payload:
+ * the host catalog persists it per mini-app and the agent can author
+ * it declaratively. Applied via [MiniAppThemeTokens.overlay].
+ */
+@Serializable
+public data class MiniAppThemeOverride(
+    public val primary: String? = null,
+    public val onPrimary: String? = null,
+    public val background: String? = null,
+    public val onBackground: String? = null,
+    public val surface: String? = null,
+    public val onSurface: String? = null,
+    public val outline: String? = null,
+    public val bodyFontSizePx: Float? = null,
+)
+
+/**
+ * Overlay [override] onto these inherited app tokens: each non-null
+ * field in the override wins, everything else stays as the app default.
+ * A `null` override is the identity (pure app inheritance).
+ */
+public fun MiniAppThemeTokens.overlay(override: MiniAppThemeOverride?): MiniAppThemeTokens {
+    if (override == null) return this
+    return copy(
+        primary = override.primary ?: primary,
+        onPrimary = override.onPrimary ?: onPrimary,
+        background = override.background ?: background,
+        onBackground = override.onBackground ?: onBackground,
+        surface = override.surface ?: surface,
+        onSurface = override.onSurface ?: onSurface,
+        outline = override.outline ?: outline,
+        bodyFontSizePx = override.bodyFontSizePx ?: bodyFontSizePx,
+    )
+}
 
 /**
  * Builds the theme surface injected into a mini-app's HTML so it reads
