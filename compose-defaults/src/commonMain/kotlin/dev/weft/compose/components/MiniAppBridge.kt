@@ -2,6 +2,7 @@ package dev.weft.compose.components
 
 import kotlinx.coroutines.CancellationException
 import kotlinx.serialization.json.Json
+import kotlinx.serialization.json.JsonElement
 import kotlinx.serialization.json.JsonNull
 import kotlinx.serialization.json.contentOrNull
 import kotlinx.serialization.json.jsonObject
@@ -48,6 +49,20 @@ public data class MiniAppCall(
 public typealias MiniAppScopeResolver = (miniAppId: String?) -> Set<String>?
 
 /**
+ * Host-supplied per-mini-app state store backing `window.weft.getState`
+ * / `setState`. Keyed by the mini-app's id so one mini-app's state is
+ * isolated from another's. The substrate exposes the bridge API; the
+ * host owns the actual persistence (e.g. SQLDelight).
+ */
+public interface MiniAppStateStore {
+    /** The mini-app's saved state JSON, or `null` if it never saved any. */
+    public suspend fun get(miniAppId: String?): String?
+
+    /** Persist the mini-app's state JSON, replacing any prior value. */
+    public suspend fun set(miniAppId: String?, stateJson: String)
+}
+
+/**
  * Pure JS↔native marshalling core for the mini-app bridge. Platform
  * WebView wrappers (Android `@JavascriptInterface`, iOS
  * `WKScriptMessageHandler`) own only the transport: they hand the raw
@@ -68,6 +83,8 @@ public typealias MiniAppScopeResolver = (miniAppId: String?) -> Set<String>?
 public class MiniAppBridge(
     private val invoker: MiniAppActionInvoker,
     private val approvedActions: Set<String>? = null,
+    private val stateStore: MiniAppStateStore? = null,
+    private val miniAppId: String? = null,
     private val json: Json = DEFAULT_JSON,
 ) {
 
@@ -88,14 +105,49 @@ public class MiniAppBridge(
     }.getOrNull()
 
     /**
-     * Marshal one posted payload end-to-end: parse, dispatch to the
-     * host invoker, and return the JS to evaluate back in the page
-     * (`window.weft.__resolve(...)` / `__reject(...)`). Returns an empty
-     * string when the payload can't be parsed.
+     * Marshal one posted payload end-to-end and return the JS to
+     * evaluate back in the page (`window.weft.__resolve(...)` /
+     * `__reject(...)`). Routes by the message `kind`: state ops go to the
+     * [stateStore], everything else is a `callTool` dispatch. Returns an
+     * empty string when the payload can't be parsed.
      */
     public suspend fun handle(payload: String): String {
-        val call = parseCall(payload) ?: return ""
-        return dispatch(call)
+        val obj = runCatching { json.parseToJsonElement(payload).jsonObject }.getOrNull() ?: return ""
+        val id = obj["id"]?.jsonPrimitive?.contentOrNull ?: return ""
+        return when (obj["kind"]?.jsonPrimitive?.contentOrNull) {
+            KIND_GET_STATE -> getState(id)
+            KIND_SET_STATE -> setState(id, obj["state"])
+            else -> {
+                val call = parseCall(payload) ?: return ""
+                dispatch(call)
+            }
+        }
+    }
+
+    @Suppress("TooGenericExceptionCaught")
+    private suspend fun getState(id: String): String {
+        val store = stateStore ?: return rejectJs(id, "state not available")
+        return try {
+            // Never-saved → null, which JS resolves as `null` (not an error).
+            resolveJs(id, store.get(miniAppId) ?: "null")
+        } catch (cancel: CancellationException) {
+            throw cancel
+        } catch (failure: Throwable) {
+            rejectJs(id, failure.message ?: "getState failed")
+        }
+    }
+
+    @Suppress("TooGenericExceptionCaught")
+    private suspend fun setState(id: String, state: JsonElement?): String {
+        val store = stateStore ?: return rejectJs(id, "state not available")
+        return try {
+            store.set(miniAppId, state?.toString() ?: "null")
+            resolveJs(id, "true")
+        } catch (cancel: CancellationException) {
+            throw cancel
+        } catch (failure: Throwable) {
+            rejectJs(id, failure.message ?: "setState failed")
+        }
     }
 
     @Suppress("TooGenericExceptionCaught")
@@ -120,6 +172,9 @@ public class MiniAppBridge(
     }
 
     public companion object {
+        private const val KIND_GET_STATE = "getState"
+        private const val KIND_SET_STATE = "setState"
+
         public val DEFAULT_JSON: Json = Json {
             ignoreUnknownKeys = true
             isLenient = true
@@ -161,6 +216,21 @@ public class MiniAppBridge(
                   });
                   $postCall
                 });
+              };
+              function request(extra) {
+                return new Promise(function (resolve, reject) {
+                  var id = String(++seq);
+                  pending[id] = { resolve: resolve, reject: reject };
+                  extra.id = id;
+                  var msg = JSON.stringify(extra);
+                  $postCall
+                });
+              }
+              window.weft.getState = function () {
+                return request({ kind: "getState" });
+              };
+              window.weft.setState = function (state) {
+                return request({ kind: "setState", state: (state === undefined ? null : state) });
               };
               window.weft.__resolve = function (id, payload) {
                 var p = pending[id];
