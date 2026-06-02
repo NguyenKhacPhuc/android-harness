@@ -64,6 +64,11 @@ kotlin {
                 implementation(libs.kotlinx.coroutines.android)
             }
         }
+        iosMain.dependencies {
+            // Ktor Darwin engine for the iOS OAuth client's token exchange
+            // (ASWebAuthenticationSession drives the browser step).
+            implementation(libs.ktor.client.darwin)
+        }
         commonTest.dependencies {
             implementation(libs.kotest.assertions.core)
             implementation(libs.kotlinx.coroutines.test)
