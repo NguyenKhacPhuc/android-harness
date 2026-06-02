@@ -38,16 +38,36 @@ public data class MiniAppCall(
 )
 
 /**
+ * Host-supplied resolver from a mini-app's (declared, non-sensitive)
+ * id to the set of action names it may call — its declared scopes
+ * intersected with what the user approved. Returns `null` for an
+ * ungated mini-app (no enforcement) or an empty set for one with
+ * nothing approved (every call refused). The grant store + approval
+ * UX that back this live in the host.
+ */
+public typealias MiniAppScopeResolver = (miniAppId: String?) -> Set<String>?
+
+/**
  * Pure JS↔native marshalling core for the mini-app bridge. Platform
  * WebView wrappers (Android `@JavascriptInterface`, iOS
  * `WKScriptMessageHandler`) own only the transport: they hand the raw
  * JSON payload to [handle] and evaluate the returned JS string back in
- * the page. Everything in between — parsing, dispatch, the three
- * outcomes, and JS-string escaping — lives here so it can be unit
+ * the page. Everything in between — parsing, the scope gate, dispatch,
+ * the outcomes, and JS-string escaping — lives here so it can be unit
  * tested without a WebView.
+ *
+ * @param approvedActions the per-mini-app set of action names this
+ *   mini-app may call — its *declared* scopes intersected with what the
+ *   user *approved*, supplied by the host. A call to anything outside
+ *   the set is refused before the invoker runs. `null` means **ungated**
+ *   (a trusted bridge with no scope enforcement); an empty set means
+ *   gated with nothing approved (every call refused). The substrate
+ *   only enforces this set — it doesn't decide policy (host stories own
+ *   the offerable menu, approval UX, and grant store).
  */
 public class MiniAppBridge(
     private val invoker: MiniAppActionInvoker,
+    private val approvedActions: Set<String>? = null,
     private val json: Json = DEFAULT_JSON,
 ) {
 
@@ -79,8 +99,13 @@ public class MiniAppBridge(
     }
 
     @Suppress("TooGenericExceptionCaught")
-    private suspend fun dispatch(call: MiniAppCall): String =
-        try {
+    private suspend fun dispatch(call: MiniAppCall): String {
+        // Scope gate: a gated bridge refuses any action outside the
+        // approved set before the invoker ever runs. Ungated (null) skips.
+        if (approvedActions != null && call.name !in approvedActions) {
+            return rejectJs(call.id, "not permitted: ${call.name}")
+        }
+        return try {
             val result = invoker.invoke(call.name, call.argsJson)
             if (result == null) {
                 rejectJs(call.id, "no such action: ${call.name}")
@@ -92,6 +117,7 @@ public class MiniAppBridge(
         } catch (failure: Throwable) {
             rejectJs(call.id, failure.message ?: "action '${call.name}' failed")
         }
+    }
 
     public companion object {
         public val DEFAULT_JSON: Json = Json {

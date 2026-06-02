@@ -100,4 +100,55 @@ class MiniAppBridgeTest {
         shim shouldContain "window.weft = window.weft || {}"
         shim shouldContain "window.weft.callTool ="
     }
+
+    @Test
+    fun gatedBridgeAllowsAnApprovedAction() {
+        runBlocking {
+            var called = false
+            val bridge = MiniAppBridge(
+                MiniAppActionInvoker { _, _ -> called = true; """{"ok":true}""" },
+                approvedActions = setOf("get_time", "store_set"),
+            )
+            val js = bridge.handle("""{"id":"1","name":"get_time","args":{}}""")
+            called shouldBe true
+            js shouldStartWith "window.weft.__resolve("
+        }
+    }
+
+    @Test
+    fun gatedBridgeRefusesAnUndeclaredActionWithoutInvoking() {
+        runBlocking {
+            var called = false
+            val bridge = MiniAppBridge(
+                MiniAppActionInvoker { _, _ -> called = true; "{}" },
+                approvedActions = setOf("get_time"),
+            )
+            val js = bridge.handle("""{"id":"9","name":"delete_everything","args":{}}""")
+            // refused at the gate — the host invoker is never reached
+            called shouldBe false
+            js shouldStartWith "window.weft.__reject("
+            js shouldContain "not permitted: delete_everything"
+        }
+    }
+
+    @Test
+    fun anEmptyApprovedSetRefusesEverything() {
+        runBlocking {
+            val bridge = MiniAppBridge(
+                MiniAppActionInvoker { _, _ -> "{}" },
+                approvedActions = emptySet(),
+            )
+            val js = bridge.handle("""{"id":"1","name":"get_time","args":{}}""")
+            js shouldContain "not permitted: get_time"
+        }
+    }
+
+    @Test
+    fun aNullApprovedSetIsUngatedAndCallsThrough() {
+        runBlocking {
+            val bridge = MiniAppBridge(MiniAppActionInvoker { _, _ -> """{"ok":true}""" })
+            val js = bridge.handle("""{"id":"1","name":"anything","args":{}}""")
+            js shouldStartWith "window.weft.__resolve("
+        }
+    }
 }
