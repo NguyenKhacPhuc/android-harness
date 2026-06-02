@@ -53,9 +53,12 @@ import dev.weft.harness.observability.ToolStatus
 import dev.weft.harness.observability.TraceFeedback
 import dev.weft.harness.observability.TraceStatus
 import kotlinx.coroutines.launch
-import java.text.SimpleDateFormat
-import java.util.Date
-import java.util.Locale
+import kotlinx.datetime.TimeZone
+import kotlinx.datetime.todayIn
+import kotlinx.datetime.toLocalDateTime
+import kotlin.time.Clock
+import kotlin.time.ExperimentalTime
+import kotlin.time.Instant
 
 private enum class Tab(val label: String) {
     TRACES("Traces"),
@@ -372,7 +375,7 @@ private fun TraceMetaBlock(trace: AgentTrace) {
     Card(modifier = Modifier.fillMaxWidth(), shape = RoundedCornerShape(10.dp)) {
         Column(modifier = Modifier.padding(12.dp)) {
             Text("Conversation: ${trace.conversationId.take(8)}…", style = MaterialTheme.typography.bodySmall)
-            Text("Started: ${timeFormat.format(Date(trace.startEpochMs))}", style = MaterialTheme.typography.bodySmall)
+            Text("Started: ${formatTime(trace.startEpochMs)}", style = MaterialTheme.typography.bodySmall)
             trace.durationMs?.let { Text("Duration: ${it}ms", style = MaterialTheme.typography.bodySmall) }
             if (trace.totalTokens > 0) {
                 Text(
@@ -480,7 +483,20 @@ private fun ToolCallBlock(call: ToolCallTrace) {
     }
 }
 
-private val timeFormat = SimpleDateFormat("HH:mm:ss", Locale.getDefault())
+@OptIn(ExperimentalTime::class)
+private fun formatTime(epochMs: Long): String {
+    val dt = Instant.fromEpochMilliseconds(epochMs).toLocalDateTime(TimeZone.currentSystemDefault())
+    fun pad(n: Int) = n.toString().padStart(2, '0')
+    return "${pad(dt.hour)}:${pad(dt.minute)}:${pad(dt.second)}"
+}
+
+/** 4-decimal fixed-point, multiplatform (no java.util.Formatter). */
+private fun usd4(value: Double): String {
+    val scaled = kotlin.math.round(value * 10_000.0).toLong()
+    val sign = if (scaled < 0) "-" else ""
+    val abs = kotlin.math.abs(scaled)
+    return "$sign${abs / 10_000}.${(abs % 10_000).toString().padStart(4, '0')}"
+}
 
 private fun AgentTrace.statusLabel(): String = when (status) {
     TraceStatus.FAILED -> "FAILED"
@@ -624,24 +640,25 @@ private fun ToolsTab(runtime: WeftRuntime) {
 // ----- Cost tab: token + dollar totals ------------------------------------
 
 @Composable
+@OptIn(ExperimentalTime::class)
 private fun CostTab(runtime: WeftRuntime) {
     val totals by runtime.usageStore.totals.collectAsState()
-    val today = java.time.LocalDate.now().toString()
+    val today = Clock.System.todayIn(TimeZone.currentSystemDefault()).toString()
     val todayUsd = totals.byDay[today] ?: 0.0
 
     Column(
         modifier = Modifier.fillMaxWidth().padding(8.dp).verticalScroll(rememberScrollState()),
         verticalArrangement = Arrangement.spacedBy(12.dp),
     ) {
-        CostRow("Today", "$%.4f".format(todayUsd))
-        CostRow("Lifetime", "$%.4f".format(totals.lifetimeUsd))
+        CostRow("Today", "$${usd4(todayUsd)}")
+        CostRow("Lifetime", "$${usd4(totals.lifetimeUsd)}")
         CostRow("Input tokens", totals.lifetimeInputTokens.toString())
         CostRow("Output tokens", totals.lifetimeOutputTokens.toString())
         totals.lastCallModelId?.let { CostRow("Last model", it) }
         HorizontalDivider()
         Text("By day", style = MaterialTheme.typography.labelMedium)
-        totals.byDay.toSortedMap(compareByDescending { it }).forEach { (day, usd) ->
-            CostRow(day, "$%.4f".format(usd))
+        totals.byDay.entries.sortedByDescending { it.key }.forEach { (day, usd) ->
+            CostRow(day, "$${usd4(usd)}")
         }
     }
 }

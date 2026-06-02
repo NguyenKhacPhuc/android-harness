@@ -10,13 +10,10 @@
 //
 // Strictly opt-in. Apps that don't add this dep don't ship the debug code.
 //
-// **KMP status — partial.** This module is now KMP-published with empty
-// iOS targets. The sources stay in androidMain because the devtools panel
-// reads from a `WeftRuntime` (Context-bound, androidMain-only), and the
-// UI uses Android-only Compose helpers (`LocalClipboardManager`,
-// `SimpleDateFormat`). A future iOS port would need to: (a) wait for the
-// WeftRuntime composition root to lift into commonMain, and (b) swap
-// the Compose Android-isms for Compose Multiplatform equivalents.
+// **KMP status — commonMain.** The panel lives in commonMain and runs on
+// Android + iOS. `WeftRuntime` is now commonMain, the UI is Compose
+// Multiplatform, and the few JVM-isms (SimpleDateFormat / LocalDate /
+// String.format) were swapped for kotlinx-datetime + a small formatter.
 plugins {
     alias(libs.plugins.kotlin.multiplatform)
     alias(libs.plugins.android.library)
@@ -47,7 +44,7 @@ kotlin {
     explicitApi()
 
     sourceSets {
-        androidMain.dependencies {
+        commonMain.dependencies {
             // Weft runtime — devtools reads systemPrompt, traceStore, tools
             // list, usageStore. Reaches across module boundaries on purpose;
             // this is debug surface, not production code.
@@ -71,6 +68,9 @@ kotlin {
             implementation(libs.compose.multiplatform.material.icons.core)
 
             implementation(libs.kotlinx.serialization.json)
+            // kotlinx-datetime — multiplatform replacement for the panel's
+            // SimpleDateFormat / java.time.LocalDate usage.
+            implementation(libs.kotlinx.datetime)
         }
     }
 }
