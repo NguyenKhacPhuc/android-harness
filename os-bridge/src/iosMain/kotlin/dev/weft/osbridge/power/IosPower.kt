@@ -1,28 +1,33 @@
 package dev.weft.osbridge.power
 
 import dev.weft.contracts.Power
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
+import platform.UIKit.UIApplication
+import platform.UIKit.UIScreen
 
 /**
- * iOS stub for [Power]. Every method throws [NotImplementedError]
- * via [TODO] until somebody wires the iOS-native API.
+ * iOS [Power]. `keepScreenOn` toggles `UIApplication.idleTimerDisabled`
+ * (true pins the screen awake, false releases it). `setBrightness` sets
+ * `UIScreen.mainScreen.brightness`, which on iOS is system-wide (no
+ * per-window override) and persists after backgrounding — a normalized
+ * value below 0 is treated as a no-op.
  *
- * Native API to wrap: `UIApplication.shared.isIdleTimerDisabled = true`
- * for keepScreenOn (must be toggled on the main thread; setting back
- * to false releases the pin). `UIScreen.main.brightness = value` for
- * setBrightness — this is a SYSTEM-WIDE setter on iOS (no per-window
- * override like Android), so it persists even after the app
- * backgrounds. Use -1f to no-op since iOS has no "release" semantic.
+ * Both touch UIKit main-thread-affined state, so they run on the main
+ * dispatcher.
  *
- * Open so hosts can subclass and override individual methods as they
- * implement them piecewise.
- *
- * See `docs/architecture/ios-os-capabilities.md` for effort estimates,
- * priority ordering, and what substrate tools each method unblocks.
+ * Open so hosts can subclass and override individual methods.
  */
 public open class IosPower : Power {
-    override suspend fun keepScreenOn(enabled: Boolean): Boolean =
-        TODO("IosPower.keepScreenOn — wrap UIApplication.shared.isIdleTimerDisabled = enabled on the main thread")
 
-    override suspend fun setBrightness(normalized: Float): Boolean =
-        TODO("IosPower.setBrightness — wrap UIScreen.main.brightness = normalized (system-wide; no per-window override on iOS)")
+    override suspend fun keepScreenOn(enabled: Boolean): Boolean = withContext(Dispatchers.Main) {
+        UIApplication.sharedApplication.idleTimerDisabled = enabled
+        true
+    }
+
+    override suspend fun setBrightness(normalized: Float): Boolean = withContext(Dispatchers.Main) {
+        if (normalized < 0f) return@withContext false
+        UIScreen.mainScreen.brightness = normalized.coerceIn(0f, 1f).toDouble()
+        true
+    }
 }
