@@ -93,6 +93,13 @@ kotlin {
                 implementation(libs.kotest.assertions.core)
             }
         }
+
+        val iosTest by getting {
+            dependencies {
+                implementation(kotlin("test"))
+                implementation(libs.kotest.assertions.core)
+            }
+        }
     }
 }
 
