@@ -130,6 +130,13 @@ public data class HtmlProps(
      * emitting a self-contained widget that needs client-side behavior.
      */
     val runScripts: Boolean = false,
+    /**
+     * Optional per-mini-app theme override. Each non-null field replaces
+     * the inherited app token; null fields keep the app default. Lets one
+     * mini-app diverge from the app chrome while still inheriting the rest.
+     * Default null ⇒ pure app inheritance.
+     */
+    val theme: MiniAppThemeOverride? = null,
 )
 
 public class HtmlComponent : WeftComponent<HtmlProps>(
@@ -167,6 +174,12 @@ public class HtmlComponent : WeftComponent<HtmlProps>(
             "fill" -> Modifier.fillMaxWidth().height(HTML_FILL_DP.dp)
             else -> Modifier.height(HTML_WRAP_DP.dp)
         }
+        // Inject the app's theme so the mini-app reads as part of the app:
+        // CSS custom properties + base rules (always), plus window.weft.theme
+        // for scripts. Tokens track light/dark via MaterialTheme; a per
+        // mini-app override (props.theme) wins over the inherited defaults.
+        val tokens = rememberMiniAppThemeTokens().overlay(props.theme)
+        val decorated = MiniAppTheme.decorate(props.html, tokens, props.runScripts)
         Column(modifier = Modifier.fillMaxWidth()) {
             if (props.title.isNotBlank()) {
                 Text(
@@ -186,15 +199,14 @@ public class HtmlComponent : WeftComponent<HtmlProps>(
                         frame = CGRectMake(0.0, 0.0, 0.0, 0.0),
                         configuration = config,
                     )
-                    webView.loadHTMLString(props.html, baseURL = null)
+                    webView.loadHTMLString(decorated, baseURL = null)
                     webView
                 },
                 modifier = Modifier.fillMaxWidth().then(heightMod),
                 update = { webView ->
-                    // WKWebView's preferences are configured at init time;
-                    // runScripts change requires a fresh view, but
-                    // loadHTMLString recreates the document either way.
-                    webView.loadHTMLString(props.html, baseURL = null)
+                    // Reload the theme-decorated document — recomposition on a
+                    // light/dark flip yields new tokens, so the look updates.
+                    webView.loadHTMLString(decorated, baseURL = null)
                 },
             )
         }

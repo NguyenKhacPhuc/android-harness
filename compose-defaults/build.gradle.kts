@@ -88,6 +88,13 @@ kotlin {
             // interception. Host opts in via `Napier.base(DebugAntilog())`.
             implementation(libs.napier)
         }
+        commonTest.dependencies {
+            // Pure-logic tests for the mini-app surfaces (theme, bridge).
+            // kotlin.test @Test + kotest matchers — runs on every target;
+            // execute via :compose-defaults:jvmTest.
+            implementation(kotlin("test"))
+            implementation(libs.kotest.assertions.core)
+        }
         androidMain.dependencies {
             // Embed.kt's WebViewComponent + HtmlComponent depend on
             // android.webkit.WebView. iOS gets to skip these two

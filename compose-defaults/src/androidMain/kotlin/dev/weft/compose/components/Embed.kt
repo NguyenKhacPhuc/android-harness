@@ -102,6 +102,13 @@ public data class HtmlProps(
      * emitting a self-contained widget that needs client-side behavior.
      */
     val runScripts: Boolean = false,
+    /**
+     * Optional per-mini-app theme override. Each non-null field replaces
+     * the inherited app token; null fields keep the app default. Lets one
+     * mini-app diverge from the app chrome while still inheriting the rest.
+     * Default null ⇒ pure app inheritance.
+     */
+    val theme: MiniAppThemeOverride? = null,
 )
 
 /**
@@ -142,6 +149,12 @@ public class HtmlComponent : WeftComponent<HtmlProps>(
             "fill" -> Modifier.fillMaxWidth().height(HTML_FILL_DP.dp)
             else -> Modifier.height(HTML_WRAP_DP.dp)
         }
+        // Inject the app's theme so the mini-app reads as part of the app:
+        // CSS custom properties + base rules (always), plus window.weft.theme
+        // for scripts. Tokens track light/dark via MaterialTheme; a per
+        // mini-app override (props.theme) wins over the inherited defaults.
+        val tokens = rememberMiniAppThemeTokens().overlay(props.theme)
+        val decorated = MiniAppTheme.decorate(props.html, tokens, props.runScripts)
         Column(modifier = Modifier.fillMaxWidth()) {
             if (props.title.isNotBlank()) {
                 Text(
@@ -162,18 +175,18 @@ public class HtmlComponent : WeftComponent<HtmlProps>(
                         // widgets — only available when scripts are enabled anyway.
                         settings.domStorageEnabled = props.runScripts
                         webViewClient = WebViewClient()
-                        loadDataWithBaseURL(null, props.html, "text/html", "utf-8", null)
+                        loadDataWithBaseURL(null, decorated, "text/html", "utf-8", null)
                     }
                 },
                 update = { webView ->
-                    // Reload only when html OR runScripts changed. runScripts changes
-                    // require recreating settings — track via a small composite key.
-                    val key = "${props.runScripts}:${props.html}"
+                    // Reload when the decorated document changes — covers html,
+                    // runScripts, AND a theme (light/dark) flip in one key.
+                    val key = "${props.runScripts}:$decorated"
                     val lastLoaded = webView.getTag(R_ID_LAST_HTML) as? String
                     if (lastLoaded != key) {
                         webView.settings.javaScriptEnabled = props.runScripts
                         webView.settings.domStorageEnabled = props.runScripts
-                        webView.loadDataWithBaseURL(null, props.html, "text/html", "utf-8", null)
+                        webView.loadDataWithBaseURL(null, decorated, "text/html", "utf-8", null)
                         webView.setTag(R_ID_LAST_HTML, key)
                     }
                 },
