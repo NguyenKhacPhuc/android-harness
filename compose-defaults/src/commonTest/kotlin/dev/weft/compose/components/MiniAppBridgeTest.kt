@@ -217,4 +217,25 @@ class MiniAppBridgeTest {
         shim shouldContain "\"getState\""
         shim shouldContain "\"setState\""
     }
+
+    @Test
+    fun pushJsInvokesTheRegisteredOnDataCallback() {
+        val js = MiniAppBridge.pushJs("""{"price":42}""")
+        js shouldStartWith "window.weft.__data("
+        js shouldContain "price"
+    }
+
+    @Test
+    fun pushedDataIsEscapedIntoAJsStringLiteral() {
+        val js = MiniAppBridge.pushJs("tick \"now\"\nline")
+        js shouldContain "\\\"now\\\""
+        js shouldContain "\\n"
+    }
+
+    @Test
+    fun shimExposesOnDataAndDataDelivery() {
+        val shim = MiniAppBridge.jsShim("AndroidWeftBridge.postMessage(msg);")
+        shim shouldContain "window.weft.onData ="
+        shim shouldContain "window.weft.__data ="
+    }
 }
