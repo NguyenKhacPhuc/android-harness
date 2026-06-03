@@ -7,6 +7,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
@@ -224,6 +225,13 @@ public class HtmlComponent(
                 }
             }
         }
+        if (bridged) {
+            DisposableEffect(Unit) {
+                onDispose {
+                    webViewRef[0]?.evaluateJavaScript(MiniAppBridge.closeJs(), completionHandler = null)
+                }
+            }
+        }
         Column(modifier = Modifier.fillMaxWidth()) {
             if (props.title.isNotBlank()) {
                 Text(
@@ -248,6 +256,15 @@ public class HtmlComponent(
                                         "window.webkit.messageHandlers.$WEFT_MESSAGE_NAME.postMessage(msg);",
                                     ),
                                     injectionTime = WKUserScriptInjectionTime.WKUserScriptInjectionTimeAtDocumentStart,
+                                    forMainFrameOnly = true,
+                                ),
+                            )
+                            // Fire onOpen after the document (and its onOpen
+                            // registration) has parsed.
+                            config.userContentController.addUserScript(
+                                WKUserScript(
+                                    source = MiniAppBridge.openJs(),
+                                    injectionTime = WKUserScriptInjectionTime.WKUserScriptInjectionTimeAtDocumentEnd,
                                     forMainFrameOnly = true,
                                 ),
                             )
