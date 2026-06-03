@@ -7,6 +7,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.ui.Modifier
@@ -160,6 +161,7 @@ public class HtmlComponent(
     private val invoker: MiniAppActionInvoker? = null,
     private val scopeResolver: MiniAppScopeResolver? = null,
     private val stateStore: MiniAppStateStore? = null,
+    private val dataSource: MiniAppDataSource? = null,
 ) : WeftComponent<HtmlProps>(
     name = "Html",
     description = "Render a raw HTML snippet inline (no URL). Required: html (string). " +
@@ -210,6 +212,18 @@ public class HtmlComponent(
         }
         val bridged = bridge != null && props.runScripts
         val scope = rememberCoroutineScope()
+        // Live updates pushed into the running mini-app. The holder lets a
+        // LaunchedEffect reach the live WKWebView; when the mini-app leaves
+        // composition the effect cancels and pushes stop.
+        val webViewRef = remember { arrayOfNulls<WKWebView>(1) }
+        val updates = remember(dataSource, props.miniAppId) { dataSource?.invoke(props.miniAppId) }
+        if (bridged && updates != null) {
+            LaunchedEffect(updates) {
+                updates.collect { dataJson ->
+                    webViewRef[0]?.evaluateJavaScript(MiniAppBridge.pushJs(dataJson), completionHandler = null)
+                }
+            }
+        }
         Column(modifier = Modifier.fillMaxWidth()) {
             if (props.title.isNotBlank()) {
                 Text(
@@ -245,6 +259,7 @@ public class HtmlComponent(
                         frame = CGRectMake(0.0, 0.0, 0.0, 0.0),
                         configuration = config,
                     )
+                    webViewRef[0] = webView
                     handler?.bind(webView)
                     webView.loadHTMLString(decorated, baseURL = null)
                     webView
