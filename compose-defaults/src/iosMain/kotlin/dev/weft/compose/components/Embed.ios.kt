@@ -159,6 +159,7 @@ public data class HtmlProps(
 public class HtmlComponent(
     private val invoker: MiniAppActionInvoker? = null,
     private val scopeResolver: MiniAppScopeResolver? = null,
+    private val stateStore: MiniAppStateStore? = null,
 ) : WeftComponent<HtmlProps>(
     name = "Html",
     description = "Render a raw HTML snippet inline (no URL). Required: html (string). " +
@@ -204,7 +205,9 @@ public class HtmlComponent(
         // mini-app opted into scripts. Otherwise the WKWebView is sandboxed.
         // The host's scope resolver gates it to this mini-app's approved set.
         val approved = scopeResolver?.invoke(props.miniAppId)
-        val bridge = remember(invoker, approved) { invoker?.let { MiniAppBridge(it, approved) } }
+        val bridge = remember(invoker, approved, stateStore, props.miniAppId) {
+            invoker?.let { MiniAppBridge(it, approved, stateStore, props.miniAppId) }
+        }
         val bridged = bridge != null && props.runScripts
         val scope = rememberCoroutineScope()
         Column(modifier = Modifier.fillMaxWidth()) {

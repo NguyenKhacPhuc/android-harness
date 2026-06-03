@@ -151,4 +151,70 @@ class MiniAppBridgeTest {
             js shouldStartWith "window.weft.__resolve("
         }
     }
+
+    /** In-memory state store keyed by mini-app id — the host's role, faked. */
+    private class FakeStateStore : MiniAppStateStore {
+        val saved = mutableMapOf<String?, String>()
+        override suspend fun get(miniAppId: String?): String? = saved[miniAppId]
+        override suspend fun set(miniAppId: String?, stateJson: String) {
+            saved[miniAppId] = stateJson
+        }
+    }
+
+    private fun noopInvoker() = MiniAppActionInvoker { _, _ -> null }
+
+    @Test
+    fun setStateThenGetStateRoundTripsTheSavedState() {
+        runBlocking {
+            val store = FakeStateStore()
+            val bridge = MiniAppBridge(noopInvoker(), stateStore = store, miniAppId = "counter")
+            bridge.handle("""{"id":"1","kind":"setState","state":{"count":3}}""")
+            val js = bridge.handle("""{"id":"2","kind":"getState"}""")
+            js shouldStartWith "window.weft.__resolve("
+            js shouldContain "count"
+            store.saved["counter"] shouldBe """{"count":3}"""
+        }
+    }
+
+    @Test
+    fun getStateForNeverSavedResolvesNullNotAnError() {
+        runBlocking {
+            val bridge = MiniAppBridge(noopInvoker(), stateStore = FakeStateStore(), miniAppId = "fresh")
+            val js = bridge.handle("""{"id":"1","kind":"getState"}""")
+            js shouldStartWith "window.weft.__resolve("
+            js shouldContain "null"
+        }
+    }
+
+    @Test
+    fun oneMiniAppsStateIsIsolatedFromAnothers() {
+        runBlocking {
+            val store = FakeStateStore()
+            val appA = MiniAppBridge(noopInvoker(), stateStore = store, miniAppId = "A")
+            val appB = MiniAppBridge(noopInvoker(), stateStore = store, miniAppId = "B")
+            appA.handle("""{"id":"1","kind":"setState","state":{"v":"a-only"}}""")
+            // B reads its own (empty) slot, never A's
+            val jsB = appB.handle("""{"id":"2","kind":"getState"}""")
+            jsB shouldStartWith "window.weft.__resolve("
+            (jsB.contains("a-only")) shouldBe false
+        }
+    }
+
+    @Test
+    fun stateOpsWithoutAStoreRejectAsNotAvailable() {
+        runBlocking {
+            val bridge = MiniAppBridge(noopInvoker(), miniAppId = "x")
+            bridge.handle("""{"id":"1","kind":"getState"}""") shouldContain "state not available"
+            bridge.handle("""{"id":"2","kind":"setState","state":{}}""") shouldContain "state not available"
+        }
+    }
+
+    @Test
+    fun shimExposesGetStateAndSetState() {
+        val shim = MiniAppBridge.jsShim("AndroidWeftBridge.postMessage(msg);")
+        shim shouldContain "window.weft.getState ="
+        shim shouldContain "window.weft.setState ="
+        shim shouldContain "\"getState\""
+        shim shouldContain "\"setState\""
+    }
 }
