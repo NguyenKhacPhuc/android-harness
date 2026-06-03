@@ -1,6 +1,7 @@
 package dev.weft.compose.components
 
 import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.flow.Flow
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonElement
 import kotlinx.serialization.json.JsonNull
@@ -61,6 +62,15 @@ public interface MiniAppStateStore {
     /** Persist the mini-app's state JSON, replacing any prior value. */
     public suspend fun set(miniAppId: String?, stateJson: String)
 }
+
+/**
+ * Host-supplied source of live updates pushed *into* a running mini-app,
+ * keyed by its id. Each emitted JSON string is delivered to the callback
+ * the mini-app registered via `window.weft.onData`. Returning `null`
+ * means no live updates for that mini-app. Collection is tied to the
+ * mini-app's on-screen lifetime, so updates stop once it's closed.
+ */
+public typealias MiniAppDataSource = (miniAppId: String?) -> Flow<String>?
 
 /**
  * Pure JS↔native marshalling core for the mini-app bridge. Platform
@@ -189,6 +199,16 @@ public class MiniAppBridge(
             "window.weft.__reject(${jsString(id)}, ${jsString(message)});"
 
         /**
+         * JS expression that pushes [dataJson] into a running mini-app —
+         * invokes the callback it registered via `window.weft.onData`.
+         * The host evaluates this in the live WebView; once the mini-app
+         * is closed (its WebView gone), there's nothing to evaluate into,
+         * so updates simply stop.
+         */
+        public fun pushJs(dataJson: String): String =
+            "window.weft.__data(${jsString(dataJson)});"
+
+        /**
          * The shared `window.weft` shim injected into a mini-app page.
          * Defines `callTool(name, args) -> Promise` plus the
          * `__resolve` / `__reject` entry points the native side calls.
@@ -231,6 +251,14 @@ public class MiniAppBridge(
               };
               window.weft.setState = function (state) {
                 return request({ kind: "setState", state: (state === undefined ? null : state) });
+              };
+              var dataCb = null;
+              window.weft.onData = function (cb) { dataCb = cb; };
+              window.weft.__data = function (payload) {
+                if (!dataCb) { return; }
+                var value;
+                try { value = JSON.parse(payload); } catch (e) { value = payload; }
+                dataCb(value);
               };
               window.weft.__resolve = function (id, payload) {
                 var p = pending[id];
