@@ -10,6 +10,7 @@ import dev.weft.android.persistence.SqlDelightScheduledNotificationKeyStore
 import dev.weft.android.persistence.WeftDatabaseFactory
 import dev.weft.android.persistence.WeftPlatform
 import dev.weft.harness.agents.AgentDeclaration
+import dev.weft.harness.agents.WeftAgent
 import dev.weft.harness.conversation.ConversationStore
 import dev.weft.harness.cost.QuotaPolicy
 import dev.weft.harness.memory.MemoryStore
@@ -77,6 +78,13 @@ public fun WeftRuntime.Companion.create(
     redactor: Redactor = Redactor(),
     maxIterations: Int = WeftRuntime.MAX_ITERATIONS_DEFAULT,
     /**
+     * Per-turn output token budget. Clamped to the active model's own
+     * ceiling, so a value above what the model supports is safe. Raise it
+     * for turns that emit large payloads (HTML mini-app documents, big
+     * `ui_render` trees) that the default would truncate.
+     */
+    maxOutputTokens: Int = WeftAgent.DEFAULT_MAX_OUTPUT_TOKENS,
+    /**
      * MCP servers to discover tools from. Empty list = no MCP.
      * Discovery runs in the background; the first `buildAgent` call
      * awaits its completion. The same [networkPolicy] allowlist applies
@@ -121,6 +129,7 @@ public fun WeftRuntime.Companion.create(
         quotaPolicy = quotaPolicy,
         redactor = redactor,
         maxIterations = maxIterations,
+        maxOutputTokens = maxOutputTokens,
         mcpServers = mcpServers,
         onMcpError = onMcpError,
         mcpDiscoveryTimeout = mcpDiscoveryTimeout,
