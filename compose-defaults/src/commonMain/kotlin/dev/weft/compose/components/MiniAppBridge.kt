@@ -64,6 +64,18 @@ public interface MiniAppStateStore {
 }
 
 /**
+ * Host-supplied handler for a mini-app's `window.weft.sendMessage(text)`:
+ * hands the mini-app's [miniAppId] + the message [text] to the assistant
+ * and returns its reply (resolves the Promise). Throwing rejects it. A
+ * `null` handler on the bridge means no assistant is wired — the call
+ * rejects with "assistant not available" rather than hanging. The host
+ * wires this to a real agent turn (host story `04-mini-app-asks-assistant`).
+ */
+public fun interface MiniAppAssistantHandler {
+    public suspend fun send(miniAppId: String?, text: String): String
+}
+
+/**
  * Host-supplied source of live updates pushed *into* a running mini-app,
  * keyed by its id. Each emitted JSON string is delivered to the callback
  * the mini-app registered via `window.weft.onData`. Returning `null`
@@ -95,6 +107,7 @@ public class MiniAppBridge(
     private val approvedActions: Set<String>? = null,
     private val stateStore: MiniAppStateStore? = null,
     private val miniAppId: String? = null,
+    private val assistant: MiniAppAssistantHandler? = null,
     private val json: Json = DEFAULT_JSON,
 ) {
 
@@ -127,6 +140,7 @@ public class MiniAppBridge(
         return when (obj["kind"]?.jsonPrimitive?.contentOrNull) {
             KIND_GET_STATE -> getState(id)
             KIND_SET_STATE -> setState(id, obj["state"])
+            KIND_SEND_MESSAGE -> sendMessage(id, obj["text"])
             else -> {
                 val call = parseCall(payload) ?: return ""
                 dispatch(call)
@@ -161,6 +175,20 @@ public class MiniAppBridge(
     }
 
     @Suppress("TooGenericExceptionCaught")
+    private suspend fun sendMessage(id: String, text: JsonElement?): String {
+        val handler = assistant ?: return rejectJs(id, "assistant not available")
+        val message = text?.jsonPrimitive?.contentOrNull
+            ?: return rejectJs(id, "sendMessage requires text")
+        return try {
+            resolveJs(id, handler.send(miniAppId, message))
+        } catch (cancel: CancellationException) {
+            throw cancel
+        } catch (failure: Throwable) {
+            rejectJs(id, failure.message ?: "sendMessage failed")
+        }
+    }
+
+    @Suppress("TooGenericExceptionCaught")
     private suspend fun dispatch(call: MiniAppCall): String {
         // Scope gate: a gated bridge refuses any action outside the
         // approved set before the invoker ever runs. Ungated (null) skips.
@@ -184,6 +212,7 @@ public class MiniAppBridge(
     public companion object {
         private const val KIND_GET_STATE = "getState"
         private const val KIND_SET_STATE = "setState"
+        private const val KIND_SEND_MESSAGE = "sendMessage"
 
         public val DEFAULT_JSON: Json = Json {
             ignoreUnknownKeys = true
@@ -259,6 +288,9 @@ public class MiniAppBridge(
               };
               window.weft.setState = function (state) {
                 return request({ kind: "setState", state: (state === undefined ? null : state) });
+              };
+              window.weft.sendMessage = function (text) {
+                return request({ kind: "sendMessage", text: (text === undefined ? null : text) });
               };
               var dataCb = null;
               window.weft.onData = function (cb) { dataCb = cb; };

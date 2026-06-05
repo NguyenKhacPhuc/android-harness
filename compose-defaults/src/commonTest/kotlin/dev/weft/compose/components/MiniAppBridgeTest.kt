@@ -256,4 +256,69 @@ class MiniAppBridgeTest {
         MiniAppBridge.closeJs() shouldContain "window.weft.__close"
         MiniAppBridge.closeJs() shouldContain "if (window.weft"
     }
+
+    @Test
+    fun sendMessageResolvesWithTheAssistantsReply() {
+        runBlocking {
+            val bridge = MiniAppBridge(
+                noopInvoker(),
+                assistant = MiniAppAssistantHandler { _, text -> "you said: $text" },
+            )
+            val js = bridge.handle("""{"id":"1","kind":"sendMessage","text":"hi"}""")
+            js shouldStartWith "window.weft.__resolve("
+            js shouldContain "you said: hi"
+            js shouldContain "\"1\""
+        }
+    }
+
+    @Test
+    fun sendMessageWithoutAHandlerRejectsAsNotAvailableNotHang() {
+        runBlocking {
+            val bridge = MiniAppBridge(noopInvoker())
+            val js = bridge.handle("""{"id":"2","kind":"sendMessage","text":"hi"}""")
+            js shouldStartWith "window.weft.__reject("
+            js shouldContain "assistant not available"
+            js shouldContain "\"2\""
+        }
+    }
+
+    @Test
+    fun sendMessageHandsTheMiniAppIdAndTextToTheHandler() {
+        runBlocking {
+            var seenId: String? = "unset"
+            var seenText = ""
+            val bridge = MiniAppBridge(
+                noopInvoker(),
+                miniAppId = "calc.1",
+                assistant = MiniAppAssistantHandler { id, text ->
+                    seenId = id
+                    seenText = text
+                    "ok"
+                },
+            )
+            bridge.handle("""{"id":"5","kind":"sendMessage","text":"plan my day"}""")
+            seenId shouldBe "calc.1"
+            seenText shouldBe "plan my day"
+        }
+    }
+
+    @Test
+    fun failingAssistantRejectsWithItsMessage() {
+        runBlocking {
+            val bridge = MiniAppBridge(
+                noopInvoker(),
+                assistant = MiniAppAssistantHandler { _, _ -> throw IllegalStateException("model down") },
+            )
+            val js = bridge.handle("""{"id":"6","kind":"sendMessage","text":"hi"}""")
+            js shouldStartWith "window.weft.__reject("
+            js shouldContain "model down"
+        }
+    }
+
+    @Test
+    fun shimExposesSendMessage() {
+        val shim = MiniAppBridge.jsShim("AndroidWeftBridge.postMessage(msg);")
+        shim shouldContain "window.weft.sendMessage ="
+        shim shouldContain "\"sendMessage\""
+    }
 }
