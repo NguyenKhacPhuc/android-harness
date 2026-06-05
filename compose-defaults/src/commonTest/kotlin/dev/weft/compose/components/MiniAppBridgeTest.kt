@@ -238,4 +238,22 @@ class MiniAppBridgeTest {
         shim shouldContain "window.weft.onData ="
         shim shouldContain "window.weft.__data ="
     }
+
+    @Test
+    fun shimExposesOnOpenAndOnCloseLifecycle() {
+        val shim = MiniAppBridge.jsShim("AndroidWeftBridge.postMessage(msg);")
+        shim shouldContain "window.weft.onOpen ="
+        shim shouldContain "window.weft.onClose ="
+        shim shouldContain "window.weft.__open ="
+        shim shouldContain "window.weft.__close ="
+    }
+
+    @Test
+    fun lifecycleJsFiresTheOpenAndCloseCallbacksDefensively() {
+        // guarded so firing before the shim exists is a no-op, not an error
+        MiniAppBridge.openJs() shouldContain "window.weft.__open"
+        MiniAppBridge.openJs() shouldContain "if (window.weft"
+        MiniAppBridge.closeJs() shouldContain "window.weft.__close"
+        MiniAppBridge.closeJs() shouldContain "if (window.weft"
+    }
 }

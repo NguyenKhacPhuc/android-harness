@@ -12,6 +12,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
@@ -205,6 +206,17 @@ public class HtmlComponent(
                 }
             }
         }
+        // The shim is injected at document start (prepended to the HTML) so
+        // window.weft exists before the mini-app's own script runs and can
+        // register onOpen/onData/onClose. Non-bridged mini-apps load as-is.
+        val loaded = if (bridged) "${bridgeHeadScript()}\n$decorated" else decorated
+        if (bridged) {
+            DisposableEffect(Unit) {
+                onDispose {
+                    webViewRef[0]?.evaluateJavascript(MiniAppBridge.closeJs(), null)
+                }
+            }
+        }
         Column(modifier = Modifier.fillMaxWidth()) {
             if (props.title.isNotBlank()) {
                 Text(
@@ -231,18 +243,18 @@ public class HtmlComponent(
                         } else {
                             WebViewClient()
                         }
-                        loadDataWithBaseURL(null, decorated, "text/html", "utf-8", null)
+                        loadDataWithBaseURL(null, loaded, "text/html", "utf-8", null)
                     }
                 },
                 update = { webView ->
-                    // Reload when the decorated document changes — covers html,
+                    // Reload when the loaded document changes — covers html,
                     // runScripts, AND a theme (light/dark) flip in one key.
-                    val key = "${props.runScripts}:$decorated"
+                    val key = "${props.runScripts}:$loaded"
                     val lastLoaded = webView.getTag(R_ID_LAST_HTML) as? String
                     if (lastLoaded != key) {
                         webView.settings.javaScriptEnabled = props.runScripts
                         webView.settings.domStorageEnabled = props.runScripts
-                        webView.loadDataWithBaseURL(null, decorated, "text/html", "utf-8", null)
+                        webView.loadDataWithBaseURL(null, loaded, "text/html", "utf-8", null)
                         webView.setTag(R_ID_LAST_HTML, key)
                     }
                 },
@@ -267,11 +279,16 @@ public class HtmlComponent(
 /** Name the `window.weft` shim posts to — see [MiniAppBridge.jsShim]. */
 private const val JS_BRIDGE_NAME = "AndroidWeftBridge"
 
+/** The `window.weft` shim as a document-start `<script>` for the loaded HTML. */
+private fun bridgeHeadScript(): String =
+    "<script>${MiniAppBridge.jsShim("$JS_BRIDGE_NAME.postMessage(msg);")}</script>"
+
 /**
  * Attach the `window.weft` bridge to this WebView: register the
- * `@JavascriptInterface` transport and return a [WebViewClient] that
- * injects the shim once the page has loaded. Result JS is evaluated
- * back on the WebView's thread via [WebView.post].
+ * `@JavascriptInterface` transport (available before load, so the
+ * document-start shim can post through it) and return a [WebViewClient]
+ * that fires `onOpen` once the page — and its `onOpen` registration —
+ * has loaded.
  */
 private fun WebView.attachWeftBridge(bridge: MiniAppBridge, scope: CoroutineScope): WebViewClient {
     val webView = this
@@ -281,7 +298,7 @@ private fun WebView.attachWeftBridge(bridge: MiniAppBridge, scope: CoroutineScop
     )
     return object : WebViewClient() {
         override fun onPageFinished(view: WebView?, url: String?) {
-            view?.evaluateJavascript(MiniAppBridge.jsShim("$JS_BRIDGE_NAME.postMessage(msg);"), null)
+            view?.evaluateJavascript(MiniAppBridge.openJs(), null)
         }
     }
 }

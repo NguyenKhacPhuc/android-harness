@@ -208,6 +208,14 @@ public class MiniAppBridge(
         public fun pushJs(dataJson: String): String =
             "window.weft.__data(${jsString(dataJson)});"
 
+        /** JS that fires the mini-app's `window.weft.onOpen` callback (host calls post-load). */
+        public fun openJs(): String =
+            "if (window.weft && window.weft.__open) { window.weft.__open(); }"
+
+        /** JS that fires the mini-app's `window.weft.onClose` callback (host calls before teardown). */
+        public fun closeJs(): String =
+            "if (window.weft && window.weft.__close) { window.weft.__close(); }"
+
         /**
          * The shared `window.weft` shim injected into a mini-app page.
          * Defines `callTool(name, args) -> Promise` plus the
@@ -260,6 +268,11 @@ public class MiniAppBridge(
                 try { value = JSON.parse(payload); } catch (e) { value = payload; }
                 dataCb(value);
               };
+              var openCb = null, closeCb = null, didOpen = false;
+              window.weft.onOpen = function (cb) { openCb = cb; if (didOpen) { cb(); } };
+              window.weft.onClose = function (cb) { closeCb = cb; };
+              window.weft.__open = function () { didOpen = true; if (openCb) { openCb(); } };
+              window.weft.__close = function () { if (closeCb) { closeCb(); } };
               window.weft.__resolve = function (id, payload) {
                 var p = pending[id];
                 if (!p) { return; }
