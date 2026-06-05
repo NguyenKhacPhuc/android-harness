@@ -25,11 +25,15 @@ import kotlinx.serialization.json.jsonPrimitive
  *  - **throw** → the action ran but failed → the Promise rejects with
  *    the throwable's message. (Never hangs.)
  *
+ * @param miniAppId the rendering mini-app's stable id (the bridge's own
+ *   [MiniAppBridge.miniAppId]), so a single registered invoker can route
+ *   per-mini-app — e.g. key-value storage isolated by id. `null` for an
+ *   unidentified mini-app.
  * @param argsJson the call's `args` serialized as a JSON string
  *   (`"null"` when the caller passed nothing).
  */
 public fun interface MiniAppActionInvoker {
-    public suspend fun invoke(name: String, argsJson: String): String?
+    public suspend fun invoke(miniAppId: String?, name: String, argsJson: String): String?
 }
 
 /** A single parsed `window.weft.callTool` invocation crossing the bridge. */
@@ -196,7 +200,7 @@ public class MiniAppBridge(
             return rejectJs(call.id, "not permitted: ${call.name}")
         }
         return try {
-            val result = invoker.invoke(call.name, call.argsJson)
+            val result = invoker.invoke(miniAppId, call.name, call.argsJson)
             if (result == null) {
                 rejectJs(call.id, "no such action: ${call.name}")
             } else {
