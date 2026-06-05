@@ -61,7 +61,7 @@ class MiniAppThemeTest {
     }
 
     @Test
-    fun cspMetaSealsNetworkNavigationAndRemoteResources() {
+    fun cspMetaSealsNetworkAndNavigation() {
         val csp = MiniAppTheme.cspMetaTag()
         csp shouldContain "http-equiv=\"Content-Security-Policy\""
         // the mini-app's only path out is the bridge — its own network is dead
@@ -73,6 +73,8 @@ class MiniAppThemeTest {
         csp shouldContain "frame-src 'none'"
         // self-contained inline widgets still run
         csp shouldContain "script-src 'unsafe-inline'"
+        // remote https images allowed (galleries) but fetch/XHR still blocked
+        csp shouldContain "img-src https: data:"
     }
 
     @Test
