@@ -36,6 +36,12 @@ public fun deviceSnapshot(context: Context): String {
         appendLine("- locale: ${locale.toLanguageTag()}")
         appendLine("- device: ${Build.MANUFACTURER} ${Build.MODEL}")
         appendLine("- device-class: $deviceClass")
+        // Available screen size in density-independent pixels (CSS px ≈ dp) —
+        // lets a rendered HTML mini-app size itself responsively to the surface.
+        appendLine(
+            "- screen-dp: ${context.resources.configuration.screenWidthDp}" +
+                "x${context.resources.configuration.screenHeightDp}",
+        )
         appendLine("- os: Android ${Build.VERSION.RELEASE} (API ${Build.VERSION.SDK_INT})")
         appendLine("- app-version: $versionName")
     }

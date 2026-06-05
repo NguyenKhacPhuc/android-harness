@@ -104,9 +104,15 @@ public fun AgentRenderedTreeScreen(
     val fieldValues = remember(update.tree) { mutableStateMapOf<String, String>() }
     var inFlight by remember { mutableStateOf(false) }
 
+    // A single full-screen HTML mini-app renders chromeless (no top bar, no
+    // padding, no outer scroll) — it owns the whole surface and scrolls
+    // itself. Native component trees keep the Back/Save chrome.
+    val chromeless = update.tree.type == "Html"
+
     Surface(modifier = Modifier.fillMaxSize()) {
         Column(modifier = Modifier.fillMaxSize()) {
             // Top bar — Back, label, optional thinking spinner.
+            if (!chromeless) {
             Row(
                 modifier = Modifier.fillMaxWidth().padding(horizontal = 8.dp, vertical = 4.dp),
                 verticalAlignment = Alignment.CenterVertically,
@@ -137,17 +143,20 @@ public fun AgentRenderedTreeScreen(
                 }
             }
             HorizontalDivider()
+            }
 
             // Scrolling content — trees may exceed screen height.
             // Horizontal padding is minimal (8dp) so wide components like
             // DatePicker fit; Cards in the tree already supply their own
-            // breathing room via their `padding` prop.
+            // breathing room via their `padding` prop. Chromeless (full-screen
+            // mini-app) drops the outer scroll + padding — the WebView fills the
+            // surface and scrolls itself.
             Column(
                 modifier = Modifier
                     .fillMaxSize()
-                    .verticalScroll(rememberScrollState())
-                    .padding(horizontal = 8.dp, vertical = 12.dp),
-                verticalArrangement = Arrangement.spacedBy(12.dp),
+                    .then(if (chromeless) Modifier else Modifier.verticalScroll(rememberScrollState()))
+                    .then(if (chromeless) Modifier else Modifier.padding(horizontal = 8.dp, vertical = 12.dp)),
+                verticalArrangement = if (chromeless) Arrangement.Top else Arrangement.spacedBy(12.dp),
             ) {
                 val onEvent: (ComponentEvent) -> Unit = handler@{ event ->
                     when (event) {

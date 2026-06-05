@@ -7,6 +7,7 @@ import android.webkit.WebResourceRequest
 import android.webkit.WebView
 import android.webkit.WebViewClient
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
@@ -179,6 +180,10 @@ public class HtmlComponent(
             "lg" -> Modifier.height(HTML_LG_DP.dp)
             "xl" -> Modifier.height(HTML_XL_DP.dp)
             "fill" -> Modifier.fillMaxWidth().height(HTML_FILL_DP.dp)
+            // Full-screen mini-app: fill the (bounded) parent and let the
+            // WebView scroll its own content. Only valid in a bounded parent
+            // (the chromeless rendered-tree screen), never inside a scroll.
+            "screen" -> Modifier.fillMaxSize()
             else -> Modifier.height(HTML_WRAP_DP.dp)
         }
         // Inject the app's theme so the mini-app reads as part of the app:
