@@ -65,14 +65,15 @@ class MiniAppThemeTest {
         val csp = MiniAppTheme.cspMetaTag()
         csp shouldContain "http-equiv=\"Content-Security-Policy\""
         csp shouldContain "default-src 'none'"
-        // network + remote resources are open over https
-        csp shouldContain "connect-src https: wss:"
+        // remote display resources open over https
         csp shouldContain "img-src https: data:"
         csp shouldContain "media-src https: data:"
         csp shouldContain "style-src 'unsafe-inline' https:"
         csp shouldContain "font-src https: data:"
         csp shouldContain "frame-src https:"
-        // what stays blocked: remote top-frame scripts, base + form hijack
+        // network is closed — the mini-app fetches only via the gated http_fetch action
+        csp shouldContain "connect-src 'none'"
+        // remote top-frame scripts, base + form hijack stay blocked
         csp shouldContain "script-src 'unsafe-inline'"
         csp shouldNotContain "script-src 'unsafe-inline' https"
         csp shouldContain "base-uri 'none'"
