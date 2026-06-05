@@ -1,14 +1,8 @@
 package dev.weft.android
 
-import ai.koog.agents.core.tools.ToolRegistry
-import ai.koog.prompt.executor.clients.anthropic.AnthropicClientSettings
-import ai.koog.prompt.executor.clients.anthropic.AnthropicLLMClient
-import ai.koog.prompt.executor.llms.MultiLLMPromptExecutor
 import ai.koog.prompt.llm.LLMCapability
 import ai.koog.prompt.llm.LLMProvider
 import ai.koog.prompt.llm.LLModel
-import dev.weft.contracts.ComponentMetadata
-import dev.weft.contracts.ContextProvider
 import dev.weft.contracts.ContextRegistry
 import dev.weft.contracts.DataSource
 import dev.weft.contracts.DataSourceRegistry
@@ -17,13 +11,9 @@ import dev.weft.contracts.KeyVault
 import dev.weft.contracts.OsCapabilities
 import dev.weft.contracts.UiBridge
 import dev.weft.harness.agents.WeftAgent
-import dev.weft.harness.prompt.assembleSystemPrompt
 import dev.weft.harness.cost.QuotaPolicy
 import dev.weft.harness.cost.UsageStore
-import dev.weft.harness.memory.MemoryCompactTool
-import dev.weft.harness.memory.MemoryRecallTool
 import dev.weft.harness.memory.MemoryStore
-import dev.weft.harness.memory.MemoryStoreTool
 import dev.weft.harness.observability.Redactor
 import dev.weft.harness.observability.TraceStore
 import dev.weft.mcp.HttpMcpClient
@@ -41,98 +31,10 @@ import dev.weft.android.persistence.SqlDelightTraceStore
 import dev.weft.android.persistence.SqlDelightUsageStore
 import dev.weft.android.persistence.WeftDatabaseFactory
 import dev.weft.android.persistence.pruneExpiredKeyValues
-import dev.weft.tools.AlarmSetTool
-import dev.weft.tools.AppInstalledTool
-import dev.weft.tools.AppListLaunchableTool
-import dev.weft.tools.AudioRecordTool
-import dev.weft.tools.BatteryStatusTool
-import dev.weft.tools.ColorConvertTool
-import dev.weft.tools.DetectLanguageTool
-import dev.weft.tools.HashTool
-import dev.weft.tools.ImageCropTool
-import dev.weft.tools.ImageResizeTool
-import dev.weft.tools.ImageRotateTool
-import dev.weft.tools.JsonQueryTool
-import dev.weft.tools.MathEvalTool
-import dev.weft.tools.PhoneDialTool
-import dev.weft.tools.PowerKeepScreenOnTool
-import dev.weft.tools.PowerSetBrightnessTool
-import dev.weft.tools.RandomChoiceTool
-import dev.weft.tools.RegexMatchTool
-import dev.weft.tools.SettingsOpenTool
-import dev.weft.tools.ShortcutListTool
-import dev.weft.tools.ShortcutPushTool
-import dev.weft.tools.ShortcutRemoveTool
-import dev.weft.tools.SmsComposeTool
-import dev.weft.tools.TelephonyInfoTool
-import dev.weft.tools.TextTransformTool
-import dev.weft.tools.TranslateTextTool
-import dev.weft.tools.UrlParseTool
-import dev.weft.tools.VolumeGetTool
-import dev.weft.tools.VolumeSetTool
-import dev.weft.tools.WifiInfoTool
-import dev.weft.tools.BiometricAuthenticateTool
-import dev.weft.tools.BluetoothDeviceBatteryTool
-import dev.weft.tools.BluetoothListPairedTool
-import dev.weft.tools.BluetoothOpenSettingsTool
-import dev.weft.tools.CalendarCreateTool
-import dev.weft.tools.CameraCaptureTool
-import dev.weft.tools.CalendarDeleteTool
-import dev.weft.tools.CalendarReadTool
-import dev.weft.tools.CalendarUpdateTool
-import dev.weft.tools.ClipboardReadTool
-import dev.weft.tools.ClipboardWriteTool
-import dev.weft.tools.ContactsReadTool
-import dev.weft.tools.DateComputeTool
-import dev.weft.tools.DisplayInfoTool
-import dev.weft.tools.HapticsTool
-import dev.weft.tools.LocationCurrentTool
-import dev.weft.tools.LocationGeocodeTool
-import dev.weft.tools.LocationReverseGeocodeTool
-import dev.weft.tools.MediaListRecentTool
-import dev.weft.tools.MediaPickAnyTool
-import dev.weft.tools.MediaPickImageTool
-import dev.weft.tools.MediaPickVideoTool
-import dev.weft.tools.MediaQueryTool
-import dev.weft.tools.SensorAmbientLightTool
-import dev.weft.tools.SensorStepsTodayTool
-import dev.weft.tools.SpeechRecognizeTool
-import dev.weft.tools.SpeechSayTool
-import dev.weft.tools.VisionBarcodeTool
-import dev.weft.tools.VisionOcrTool
-import dev.weft.tools.DataDeleteTool
-import dev.weft.tools.DataQueryTool
-import dev.weft.tools.DataUpsertTool
-import dev.weft.tools.DeviceInfoTool
-import dev.weft.tools.ExternalLaunchAppTool
-import dev.weft.tools.ExternalOpenUrlTool
-import dev.weft.tools.ExternalShareTool
-import dev.weft.tools.FilesReadTool
-import dev.weft.tools.FilesSaveTool
-import dev.weft.tools.FilesShareTool
-import dev.weft.tools.MapsDirectionsTool
-import dev.weft.tools.NetworkFetchTool
-import dev.weft.tools.NetworkStatusTool
-import dev.weft.tools.NotifyShowTool
-import dev.weft.tools.PdfCreateTool
-import dev.weft.tools.PdfReadTool
-import dev.weft.tools.PdfRenderPagesTool
-import dev.weft.tools.ScheduleCancelTool
-import dev.weft.tools.ScheduleCreateTool
-import dev.weft.tools.ScheduleListTool
 import dev.weft.tools.WeftContext
 import dev.weft.tools.WeftTool
 import dev.weft.tools.FindToolTool
 import dev.weft.tools.EagerToolProvider
-import dev.weft.tools.SystemUserContextTool
-import dev.weft.tools.ToolMetadataOverride
-import dev.weft.tools.compositeToolProvider
-import dev.weft.tools.UiAskTool
-import dev.weft.tools.UiDialogTool
-import dev.weft.tools.UiNavigateTool
-import dev.weft.tools.UiNotifyTool
-import dev.weft.tools.UiRenderTool
-import dev.weft.tools.UiRequestPermissionTool
 import dev.weft.tools.context.DeviceContextProvider
 import io.ktor.client.plugins.contentnegotiation.ContentNegotiation
 import io.ktor.serialization.kotlinx.json.json
@@ -172,174 +74,6 @@ public class WeftRuntime(
     public val os: OsCapabilities,
     public val uiBridge: UiBridge,
     /**
-     * App-specific opening for the system prompt — describes the app's
-     * purpose, persona, and any high-level constraints. The substrate
-     * appends the auto-generated tool catalog after this.
-     */
-    private val appPromptPreamble: String,
-    /** App-specific [DataSource]s exposed to the `data_*` tools. */
-    dataSources: List<DataSource> = emptyList(),
-    /** Network allowlist used by `network_fetch`. Defaults to "no hosts allowed". */
-    public val networkPolicy: NetworkPolicy = NetworkPolicy(coreAllowlist = emptySet()),
-    /**
-     * Extra context providers merged with the substrate default `device`
-     * provider. Use to expose app data (user profile, subscription tier…) to
-     * the agent via `system_user_context`.
-     */
-    extraContextProviders: List<ContextProvider> = emptyList(),
-    /**
-     * Hook for the app to register its own tools. Called with the
-     * [WeftContext] and the result is appended after the substrate's
-     * stable tool prelude.
-     *
-     * **This is where UI tools land.** Apps using `:substrate:android-ui`
-     * pass `substrateUi.toolsFactory` here to register `ui_render` and
-     * `ui_notify`. Apps with custom UI provide their own tools or none.
-     */
-    private val extraToolsFactory: (WeftContext) -> List<WeftTool<*, *>> = { _ -> emptyList() },
-    /**
-     * Stage 2 of `docs/architecture/tool-provider.md` — optional lazy
-     * tool catalog. When null (default), the runtime auto-builds an
-     * [EagerToolProvider] wrapping the substrate's prebuilt list plus
-     * anything `extraToolsFactory` produced, with the substrate's
-     * always-on subset (memory_*, system_user_context, find_tool)
-     * tagged accordingly. Existing single-provider hosts see zero
-     * behavior change.
-     *
-     * Apps that want lazy MCP / app-domain tools pass a custom
-     * provider — typically `compositeToolProvider(substrateProvider,
-     * appProvider, mcpProvider)`. The activation node in the agent
-     * strategy resolves names from `find_tool` searches against this
-     * provider mid-turn.
-     */
-    private val toolProviderOverride: ToolProvider? = null,
-    /**
-     * Component metadata for the system prompt's UI catalog (per ADR-007).
-     * Apps using `:substrate:android-ui` pass `substrateUi.components` here.
-     * Empty list = system prompt won't mention UI components at all.
-     */
-    private val componentMetadata: List<ComponentMetadata> = emptyList(),
-    /**
-     * Optional extra text appended to the system prompt after the standard
-     * trailing notes — useful for app-specific tool-use hints.
-     */
-    private val extraSystemNotes: String? = null,
-    /**
-     * Optional supplier of additional per-session-stable text appended
-     * to the system prompt **after** [extraSystemNotes]. Runs once at
-     * runtime construction, so the resulting text reaches the STATIC
-     * cache tier and stays cached for the runtime's lifetime.
-     *
-     * Use this for content the LLM should treat as **instructions** —
-     * user persona, locale conventions, tone preferences. Per-turn
-     * dynamic content (current screen, last action, recent memory)
-     * belongs in [extraVolatilePrefix] instead, which goes into the
-     * user message layer.
-     *
-     * CAUTION: anything that varies *within* a session (e.g., the user
-     * changing their preferences mid-conversation) belongs in
-     * [extraVolatilePrefix], not here — changing this value across
-     * runtime instances re-creates the prompt and busts the cache.
-     */
-    private val dynamicSystemPromptSection: (() -> String)? = null,
-    /**
-     * App-supplied per-turn context — composes with the substrate's
-     * built-in device snapshot. The returned text is appended below
-     * the device snapshot inside the volatile prefix layer (which sits
-     * just above the user message). Use for short, churning context the
-     * LLM should treat as **data** rather than instructions: current
-     * screen, active document id, last UI action timestamp, etc.
-     *
-     * For stable-per-session content, use [dynamicSystemPromptSection]
-     * instead — that reaches the STATIC cache tier.
-     */
-    private val extraVolatilePrefix: () -> String = { "" },
-    /**
-     * App-registered [MemoryProvider]s. Queried per-turn alongside the
-     * substrate's own memory provider; hits are injected into the user
-     * message as "Relevant context" so the LLM sees them without
-     * needing to call `memory_recall`. Useful for RAG, app-managed user
-     * profile data, vector-store retrieval, etc.
-     */
-    private val extraMemoryProviders: List<dev.weft.contracts.MemoryProvider> = emptyList(),
-    /**
-     * Optional override for the substrate's [MemoryStore]. Defaults to
-     * a SQLDelight-backed store on the substrate database. Apps with
-     * their own memory backend (remote KB, vector store) supply an
-     * implementation here; the `memory_*` tools then route through it.
-     */
-    private val memoryStoreOverride: MemoryStore? = null,
-    /**
-     * Optional override for the substrate's [ConversationStore]. Same
-     * pattern as [memoryStoreOverride] — defaults to a SQLDelight-backed
-     * store on the substrate database. Apps that want a synced /
-     * multi-device conversation store supply their own implementation
-     * here.
-     */
-    private val conversationStoreOverride: ConversationStore? = null,
-    public val quotaPolicy: QuotaPolicy = QuotaPolicy(),
-    /**
-     * Single redactor instance shared between tool-trace writes (applied by
-     * [WeftAgent] before persisting argsPreview / resultPreview /
-     * finalAssistantMessage / error messages) and post-hoc exports
-     * (apps should redact the JSON string before sharing it externally).
-     *
-     * Override to extend the rule set without losing defaults:
-     * `redactor = Redactor(Redactor.DEFAULT_RULES + myRules)`. Pass an
-     * empty list to disable: `Redactor(rules = emptyList())`.
-     */
-    public val redactor: Redactor = Redactor(),
-    /**
-     * How often to re-sweep TTL-expired `key_value` rows in the background.
-     * The one-shot startup sweep handles the common case; the periodic
-     * ticker covers long-lived sessions (apps that stay alive for hours).
-     * Pass [Duration.INFINITE] to disable the periodic sweep entirely (the
-     * startup sweep still runs).
-     */
-    private val ttlSweepInterval: Duration = DEFAULT_TTL_SWEEP_INTERVAL,
-    private val maxIterations: Int = MAX_ITERATIONS_DEFAULT,
-    /**
-     * Per-LLM-call `max_tokens` budget threaded into every agent built
-     * by [buildAgent]. See [WeftAgent.DEFAULT_MAX_OUTPUT_TOKENS]
-     * for why this defaults to 8192 instead of Koog's 2048.
-     */
-    private val maxOutputTokens: Int = WeftAgent.DEFAULT_MAX_OUTPUT_TOKENS,
-    /**
-     * Registered agent declarations. Empty list (default) =
-     * auto-synthesize a single
-     * [dev.weft.harness.agents.AgentDeclaration.default] entry, which
-     * reproduces pre-multi-agent behavior. Apps that want multiple
-     * agents (e.g. "writer" + "researcher") pass declarations here;
-     * `runtime.buildAgent(name, provider)` selects by name.
-     */
-    agents: List<dev.weft.harness.agents.AgentDeclaration> = emptyList(),
-    /**
-     * MCP servers to discover tools from. Discovery (HTTP initialize +
-     * tools/list) runs asynchronously in [runtimeScope] on
-     * [Dispatchers.IO]; the resulting tools resolve through
-     * [mcpToolsReady] and are appended to the agent's tool catalog the
-     * first time [buildAgent] is called.
-     *
-     * Empty list (default) = no MCP, no background work. Same
-     * [networkPolicy] gates apply: every server URL must pass the
-     * allowlist or the request fails.
-     */
-    private val mcpServers: List<McpServerConfig> = emptyList(),
-    /**
-     * Per-server error sink. Discovery isolates failures — a single
-     * unreachable server doesn't reject [mcpToolsReady]; it routes
-     * through here and the failing server's tools are omitted. Use to
-     * log diagnostics or surface a "reconnect" hint.
-     */
-    private val onMcpError: (McpServerConfig, Throwable) -> Unit = { _, _ -> },
-    /**
-     * Hard timeout per MCP server discovery. A misbehaving server can
-     * otherwise hang the deferred forever, blocking the first
-     * [buildAgent] call. On timeout the server is treated like any
-     * other failure — [onMcpError] fires and its tools are omitted.
-     */
-    private val mcpDiscoveryTimeout: Duration = DEFAULT_MCP_DISCOVERY_TIMEOUT,
-    /**
      * SQLDelight database backing every persistent store the substrate
      * ships. Built by `WeftRuntime.create` from the app's platform
      * handle; tests can pass a JDBC in-memory variant; iOS hosts pass
@@ -348,28 +82,49 @@ public class WeftRuntime(
     private val database: dev.weft.android.db.WeftDatabase,
     /**
      * HTTP client used by `network_fetch` (and the MCP transport when
-     * one is configured). [Companion.create] on Android wires a
-     * Ktor + OkHttp client wrapped with the host-allowlist policy; iOS
-     * hosts wire Ktor + Darwin similarly. Apps can supply their own —
-     * useful for adding tracing, custom retry, or a corporate proxy.
+     * one is configured). [Companion.create] wires a host-allowlist
+     * Ktor client (OkHttp on Android, Darwin on iOS). Apps can supply
+     * their own — useful for tracing, custom retry, or a corporate proxy.
      */
     private val networkClient: io.ktor.client.HttpClient,
     /**
-     * Per-turn device snapshot prepended to the user message. Android's
-     * `create` factory wires the substrate's built-in
-     * `deviceSnapshot(context)` (Build.VERSION + locale + connectivity);
-     * iOS hosts wire a UIDevice-backed equivalent. Default returns
-     * empty — the LLM still gets all the other context, just without a
-     * platform-specific device block.
+     * Per-turn device snapshot prepended to the user message. The `create`
+     * factories wire a platform-specific provider; the default returns
+     * empty.
      */
     private val deviceSnapshotProvider: () -> String = { "" },
+    /** App-facing configuration — see [WeftRuntimeConfig]. */
+    private val config: WeftRuntimeConfig,
 ) {
+    // Unpack the config into the names the class body uses. Keeps the
+    // constructor + the `assembleWeftRuntime` plumbing free of a 20-arg
+    // bag; the public `create` factories build a [WeftRuntimeConfig].
+    private val appPromptPreamble: String get() = config.appPromptPreamble
+    public val networkPolicy: NetworkPolicy get() = config.networkPolicy
+    private val extraToolsFactory get() = config.extraToolsFactory
+    private val toolProviderOverride get() = config.toolProviderOverride
+    private val componentMetadata get() = config.componentMetadata
+    private val extraSystemNotes get() = config.extraSystemNotes
+    private val dynamicSystemPromptSection get() = config.dynamicSystemPromptSection
+    private val extraVolatilePrefix get() = config.extraVolatilePrefix
+    private val extraMemoryProviders get() = config.extraMemoryProviders
+    private val memoryStoreOverride get() = config.memoryStoreOverride
+    private val conversationStoreOverride get() = config.conversationStoreOverride
+    public val quotaPolicy: QuotaPolicy get() = config.quotaPolicy
+    public val redactor: Redactor get() = config.redactor
+    private val ttlSweepInterval get() = config.ttlSweepInterval
+    private val maxIterations get() = config.maxIterations
+    private val maxOutputTokens get() = config.maxOutputTokens
+    private val mcpServers get() = config.mcpServers
+    private val onMcpError get() = config.onMcpError
+    private val mcpDiscoveryTimeout get() = config.mcpDiscoveryTimeout
+
     public val keyVault: KeyVault get() = os.keyVault
 
     /** Raw list snapshot — kept for prompt re-assembly when MCP tools resolve. */
-    private val rawDataSources: List<DataSource> = dataSources
+    private val rawDataSources: List<DataSource> = config.dataSources
 
-    public val dataSources: DataSourceRegistry = DataSourceRegistry(dataSources)
+    public val dataSources: DataSourceRegistry = DataSourceRegistry(config.dataSources)
 
     /**
      * Map of [dev.weft.harness.agents.AgentDeclaration]s keyed by
@@ -385,6 +140,7 @@ public class WeftRuntime(
      * keyed by provider identity.
      */
     public val agentDeclarations: Map<String, dev.weft.harness.agents.AgentDeclaration> = run {
+        val agents = config.agents
         val effective = if (agents.isEmpty()) {
             listOf(dev.weft.harness.agents.AgentDeclaration.default())
         } else {
@@ -403,7 +159,7 @@ public class WeftRuntime(
     }
 
     public val contextRegistry: ContextRegistry = ContextRegistry(
-        listOf(DeviceContextProvider(os)) + extraContextProviders,
+        listOf(DeviceContextProvider(os)) + config.extraContextProviders,
     )
 
     // `networkClient` is now a constructor arg — `Companion.create()`
@@ -493,142 +249,20 @@ public class WeftRuntime(
     )
 
     /**
-     * The substrate's tool catalog plus any tools supplied by the app. App
-     * tools come last so the LLM sees the stable substrate prelude first
-     * (helps prompt caching once Koog ships Anthropic cache_control).
-     *
-     * Every tool here is platform-neutral — they talk through abstract
-     * contracts (`OsCapabilities`, `UiBridge`, `DataSource`, `MemoryStore`).
-     * `ui_render` / `ui_notify` delegate validation + rendering to the
-     * app's [UiBridge] impl, so the SDK doesn't know or care which UI
-     * framework the app is using.
+     * The substrate's prebuilt tool list — substrate built-ins (see
+     * [defaultToolCatalog]) + [extraToolsFactory]. App tools come last so
+     * the LLM sees the stable substrate prelude first (helps prompt
+     * caching). Does NOT include `find_tool` (which depends on
+     * [toolProvider], which depends on this list — circularity broken by
+     * separating the two). [tools] is the public view that appends
+     * `find_tool` when [hasOnDemandTools].
      */
-    /**
-     * The substrate's prebuilt tool list — substrate built-ins +
-     * [extraToolsFactory]. Does NOT include `find_tool` (which depends
-     * on [toolProvider], which depends on this list — circularity
-     * broken by separating the two). [tools] is the public view that
-     * appends `find_tool` when [hasOnDemandTools].
-     */
-    private val prebuiltTools: List<WeftTool<*, *>> = listOf<WeftTool<*, *>>(
-        NotifyShowTool(toolContext),
-        ScheduleCreateTool(toolContext),
-        ScheduleListTool(toolContext),
-        ScheduleCancelTool(toolContext),
-        UiAskTool(toolContext),
-        UiDialogTool(toolContext),
-        UiNavigateTool(toolContext),
-        UiRequestPermissionTool(toolContext),
-        UiRenderTool(toolContext),
-        UiNotifyTool(toolContext),
-        SystemUserContextTool(toolContext, contextRegistry),
-        DataQueryTool(toolContext, this.dataSources),
-        DataUpsertTool(toolContext, this.dataSources),
-        DataDeleteTool(toolContext, this.dataSources),
-        ExternalOpenUrlTool(toolContext),
-        ExternalLaunchAppTool(toolContext),
-        ExternalShareTool(toolContext),
-        ContactsReadTool(toolContext),
-        CalendarReadTool(toolContext),
-        CalendarCreateTool(toolContext),
-        CalendarUpdateTool(toolContext),
-        CalendarDeleteTool(toolContext),
-        ClipboardReadTool(toolContext),
-        ClipboardWriteTool(toolContext),
-        BiometricAuthenticateTool(toolContext),
-        HapticsTool(toolContext),
-        VisionOcrTool(toolContext),
-        VisionBarcodeTool(toolContext),
-        LocationCurrentTool(toolContext),
-        LocationGeocodeTool(toolContext),
-        LocationReverseGeocodeTool(toolContext),
-        SpeechSayTool(toolContext),
-        SpeechRecognizeTool(toolContext),
-        AudioRecordTool(toolContext),
-        CameraCaptureTool(toolContext),
-        FilesSaveTool(toolContext),
-        FilesReadTool(toolContext),
-        FilesShareTool(toolContext),
-        NetworkFetchTool(toolContext, networkClient),
-        MemoryStoreTool(toolContext, memoryStore),
-        MemoryRecallTool(toolContext, memoryStore),
-        MemoryCompactTool(toolContext, memoryStore),
-        // Read-only device-state tools (no permissions, no I/O of note).
-        BatteryStatusTool(toolContext),
-        NetworkStatusTool(toolContext),
-        DeviceInfoTool(toolContext),
-        DisplayInfoTool(toolContext),
-        // Intent-launching tools — hand off to user-installed apps.
-        MapsDirectionsTool(toolContext),
-        AlarmSetTool(toolContext),
-        // PDF — extract / render / create. PdfBox-Android backs read+create;
-        // platform PdfRenderer backs render-pages.
-        PdfReadTool(toolContext),
-        PdfRenderPagesTool(toolContext),
-        PdfCreateTool(toolContext),
-        // Bluetooth — narrow read-side surface. List paired, open settings,
-        // best-effort device battery. No scan/connect (Android-locked-down).
-        BluetoothListPairedTool(toolContext),
-        BluetoothOpenSettingsTool(toolContext),
-        BluetoothDeviceBatteryTool(toolContext),
-        // Gallery — read-only MediaStore queries. Returns content:// URIs
-        // the agent can hand to vision_ocr / external_share / files_read.
-        // Needs READ_MEDIA_* permissions; Play scrutinizes these. For
-        // "user picks the file" flows prefer the picker tools below.
-        MediaListRecentTool(toolContext),
-        MediaQueryTool(toolContext),
-        // Photo Picker — system-mediated, NO permission. Preferred over
-        // the MediaLibrary tools whenever the user is the one choosing.
-        MediaPickImageTool(toolContext),
-        MediaPickVideoTool(toolContext),
-        MediaPickAnyTool(toolContext),
-        // Installed-apps discovery — useful for routing decisions
-        // (which music app is installed? which maps?).
-        AppInstalledTool(toolContext),
-        AppListLaunchableTool(toolContext),
-        // Lightweight sensors — step counter, ambient light. Both
-        // returnable as "available=false" when the device lacks them.
-        SensorStepsTodayTool(toolContext),
-        SensorAmbientLightTool(toolContext),
-        // Pure date arithmetic — no I/O. Eliminates LLM date-math errors.
-        DateComputeTool(toolContext),
-        // Telephony — Intent-handoff dial / SMS compose, plus carrier
-        // info read. No permission for any of these.
-        PhoneDialTool(toolContext),
-        SmsComposeTool(toolContext),
-        TelephonyInfoTool(toolContext),
-        // Wifi state read. SSID needs LOCATION on Android 9+.
-        WifiInfoTool(toolContext),
-        // Volume control — per-stream get/set, normalized 0..1.
-        VolumeGetTool(toolContext),
-        VolumeSetTool(toolContext),
-        // Power — keep screen on, per-window brightness. Scoped to
-        // the foreground Activity; no permission needed.
-        PowerKeepScreenOnTool(toolContext),
-        PowerSetBrightnessTool(toolContext),
-        // Settings deep-link — one tool, many panels via enum.
-        SettingsOpenTool(toolContext),
-        // App shortcuts — pin / remove / list dynamic launcher shortcuts.
-        ShortcutPushTool(toolContext),
-        ShortcutRemoveTool(toolContext),
-        ShortcutListTool(toolContext),
-        // Translation + language ID via ML Kit (~30MB model per pair).
-        TranslateTextTool(toolContext),
-        DetectLanguageTool(toolContext),
-        // Image transforms — resize / crop / rotate via Bitmap APIs.
-        ImageResizeTool(toolContext),
-        ImageCropTool(toolContext),
-        ImageRotateTool(toolContext),
-        // Pure utility tools — no OS, no permissions. Reduce LLM
-        // arithmetic / string / regex mistakes by routing through code.
-        MathEvalTool(toolContext),
-        TextTransformTool(toolContext),
-        HashTool(toolContext),
-        RegexMatchTool(toolContext),
-        UrlParseTool(toolContext),
-        ColorConvertTool(toolContext),
-        RandomChoiceTool(toolContext),
-        JsonQueryTool(toolContext),
+    private val prebuiltTools: List<WeftTool<*, *>> = defaultToolCatalog(
+        ctx = toolContext,
+        contextRegistry = contextRegistry,
+        dataSources = this.dataSources,
+        networkClient = networkClient,
+        memoryStore = memoryStore,
     ) + extraToolsFactory(toolContext)
 
     /**
@@ -672,6 +306,21 @@ public class WeftRuntime(
             .takeIf { it.isNotBlank() }
 
     /**
+     * Assembles the system prompt for any tool catalog with this runtime's
+     * stable inputs (preamble, components, data-source descriptions, extra
+     * notes) baked in. The pre-MCP, MCP-resolved, and per-agent prompts all
+     * route through it.
+     */
+    private val promptComposer = SystemPromptComposer(
+        appPreamble = appPromptPreamble,
+        components = componentMetadata,
+        // Registered DataSources are auto-listed in the prompt so apps don't
+        // hand-document their data layer in the preamble.
+        dataSources = rawDataSources,
+        extraNotes = systemPromptExtraNotes,
+    )
+
+    /**
      * The assembled system prompt: app preamble + auto-generated tool
      * catalog + standard trailing notes + optional [extraSystemNotes].
      * Computed once at construction.
@@ -684,16 +333,37 @@ public class WeftRuntime(
      * once discovery completes; this field is for human / devtools
      * inspection of the substrate-stable prompt.
      */
-    public val systemPrompt: String = assembleSystemPrompt(
-        appPreamble = appPromptPreamble,
-        tools = tools,
-        components = componentMetadata,
-        // Pass the registered DataSources so the substrate can auto-list
-        // them in the system prompt. Apps no longer need to hand-document
-        // their data layer in the preamble — register a DataSource with
-        // a description and the SDK takes it from there.
-        dataSources = dataSources,
-        extraNotes = systemPromptExtraNotes,
+    public val systemPrompt: String = promptComposer.forTools(tools)
+
+    /**
+     * Assembles [WeftAgent]s from [AgentDeclaration]s. Holds the
+     * agent-loop collaborators; reaches MCP-resolution + delegate
+     * recursion back through lambdas so the runtime keeps ownership of
+     * its caches.
+     */
+    private val agentBuilder = AgentBuilder(
+        toolContext = toolContext,
+        agentDeclarations = agentDeclarations,
+        promptComposer = promptComposer,
+        deps = AgentLoopDeps(
+            traceStore = traceStore,
+            usageStore = usageStore,
+            quotaPolicy = quotaPolicy,
+            redactor = redactor,
+            conversationStore = conversationStore,
+            memoryRegistry = memoryRegistry,
+            maxIterations = maxIterations,
+            maxOutputTokens = maxOutputTokens,
+            deviceSnapshotProvider = deviceSnapshotProvider,
+            extraVolatilePrefix = extraVolatilePrefix,
+            toolProvider = toolProvider,
+            hasOnDemandTools = hasOnDemandTools,
+        ),
+        resolveTools = { resolvedTools() },
+        resolvedSystemPrompt = { resolvedSystemPrompt() },
+        resolveAgent = { name, prov, pool ->
+            buildAgent(agentName = name, provider = prov, modelPoolOverride = pool)
+        },
     )
 
     /**
@@ -767,17 +437,7 @@ public class WeftRuntime(
     public suspend fun resolvedSystemPrompt(): String {
         cachedResolvedSystemPrompt?.let { return it }
         val mcp = mcpToolsReady.await()
-        if (mcp.isEmpty()) {
-            cachedResolvedSystemPrompt = systemPrompt
-            return systemPrompt
-        }
-        val prompt = assembleSystemPrompt(
-            appPreamble = appPromptPreamble,
-            tools = tools + mcp,
-            components = componentMetadata,
-            dataSources = rawDataSources,
-            extraNotes = systemPromptExtraNotes,
-        )
+        val prompt = if (mcp.isEmpty()) systemPrompt else promptComposer.forTools(tools + mcp)
         cachedResolvedSystemPrompt = prompt
         return prompt
     }
@@ -786,28 +446,6 @@ public class WeftRuntime(
     public suspend fun resolvedTools(): List<WeftTool<*, *>> =
         tools + mcpToolsReady.await()
 
-    /**
-     * Per-agent variant of [resolvedSystemPrompt]: rebuilds the system
-     * prompt against [agentTools] (the filtered catalog) instead of the
-     * full one. Called only from [buildAgentForDeclaration] when an
-     * agent declares a non-empty [dev.weft.harness.agents.AgentDeclaration.allowedTools],
-     * so the agent's prompt describes exactly the tools it can call —
-     * not the substrate-wide ~50 + N-MCP catalog.
-     *
-     * Stage 1 of the [docs/architecture/tool-provider.md] design.
-     * Not cached across calls: builds fresh each [buildAgent] invocation
-     * for whichever agent is being constructed. Acceptable because
-     * [buildAgent] is the slow path (provider / model change events);
-     * the turn-loop hot path uses the closure captured at build time.
-     */
-    private fun systemPromptFor(agentTools: List<WeftTool<*, *>>): String =
-        assembleSystemPrompt(
-            appPreamble = appPromptPreamble,
-            tools = agentTools,
-            components = componentMetadata,
-            dataSources = rawDataSources,
-            extraNotes = systemPromptExtraNotes,
-        )
 
     /**
      * Build a Koog-backed [WeftAgent] using a [WeftCredentialProvider].
@@ -877,303 +515,12 @@ public class WeftRuntime(
                 "Unknown agent: '$agentName'. " +
                     "Registered: ${agentDeclarations.keys}",
             )
-        return buildAgentForDeclaration(
+        return agentBuilder.build(
             declaration = declaration,
             provider = provider,
             modelPoolOverride = modelPoolOverride,
             strategyOverride = strategyOverride,
         )
-    }
-
-    @OptIn(kotlin.time.ExperimentalTime::class)
-    private suspend fun buildAgentForDeclaration(
-        declaration: dev.weft.harness.agents.AgentDeclaration,
-        provider: dev.weft.contracts.WeftCredentialProvider,
-        modelPoolOverride: dev.weft.harness.agents.routing.ModelPool?,
-        strategyOverride: dev.weft.harness.agents.strategy.WeftStrategy?,
-    ): WeftAgent {
-        // Pick the Koog client + model pool + cache binder for the
-        // configured provider. Adding a new provider here means: import the
-        // Koog `*LLMClient`, pick the [ModelPool] (cheap/standard/vision/
-        // heavy), choose a `CacheBinder` (Anthropic-shaped providers get
-        // [AnthropicCacheBinder]; everything else falls back to
-        // [NoOpCacheBinder] until/unless Koog grows explicit cache markers
-        // for that provider). Per-turn model routing happens inside
-        // [WeftAgent] via [dev.weft.harness.agents.routing.DefaultModelRouter].
-        val (executor, defaultPool, cacheBinder) = buildExecutorFor(provider)
-        val modelPool = modelPoolOverride ?: defaultPool
-
-        // Sub-agent runner: spawns isolated WeftAgents on demand. Shares
-        // the executor / pool / cacheBinder / usageStore / quota with the
-        // parent so costs aggregate and the daily quota covers the whole
-        // tree; isolates everything else (tools subset, fresh history,
-        // discarded trace store). The `delegate` and `delegate_parallel`
-        // tools wrap this runner so the orchestrator LLM can invoke it
-        // via the normal tool-call mechanism.
-        // Block the first buildAgent call until MCP discovery resolves.
-        // Subsequent calls see the already-completed deferred at zero
-        // cost. mcpToolsReady never rejects — failed servers go through
-        // onMcpError and yield empty.
-        val resolvedToolsAll = resolvedTools()
-
-        // Apply this declaration's tool allowlist. Empty allowlist =
-        // every tool is included (today's default-agent behavior).
-        // Non-empty = filter to whitelisted names only; MCP tools are
-        // matched in their qualified ${server}:${name} form.
-        val agentTools = if (declaration.allowedTools.isEmpty()) {
-            resolvedToolsAll
-        } else {
-            resolvedToolsAll.filter { it.descriptor.name in declaration.allowedTools }
-        }
-
-        // delegate_to_agent: present in every agent's catalog when more
-        // than the default agent is registered. The factory captures
-        // the active provider so the delegate inherits credentials.
-        // Depth is bounded by DelegateToAgentTool.MAX_DELEGATION_DEPTH
-        // via DelegationContext in the coroutine context — no extra
-        // tracking needed here.
-        val otherAgents = agentDeclarations.values.filter { it.name != declaration.name }
-        val delegateTool = if (otherAgents.isEmpty()) {
-            null
-        } else {
-            dev.weft.harness.agents.DelegateToAgentTool(
-                ctx = toolContext,
-                resolveAgent = { targetName ->
-                    buildAgent(
-                        agentName = targetName,
-                        provider = provider,
-                        modelPoolOverride = modelPoolOverride,
-                        strategyOverride = null,
-                    )
-                },
-                knownAgents = otherAgents,
-            )
-        }
-        val allTools = if (delegateTool != null) agentTools + delegateTool else agentTools
-
-        // Bind cache markers to the catalog: the LAST tool's descriptor
-        // gets `cache_control = OneHour`, which Anthropic uses as the
-        // caching breakpoint for the *entire* tool-definition prefix. For
-        // a substrate with 40+ tools this caches far more tokens than the
-        // system message alone. NoOpCacheBinder returns the list unchanged.
-        val cachedTools = cacheBinder.markedTools(allTools, dev.weft.harness.prompt.cache.CacheTier.STATIC)
-        val toolRegistry = ToolRegistry { cachedTools.forEach { tool(it) } }
-
-        // Compose the effective system prompt for this declaration:
-        // substrate's resolved prompt + the agent's role fragment.
-        //
-        // Catalog scoping (Stage 1 of docs/architecture/tool-provider.md):
-        //   - Empty allowlist (default agent) → reuse the cached full
-        //     catalog from resolvedSystemPrompt(). Identical to today.
-        //   - Non-empty allowlist → rebuild the prompt against agentTools
-        //     so it describes only the tools this agent can call. A
-        //     writer agent with two allowed tools no longer pays tokens
-        //     for ~50 unreachable tool descriptions.
-        //
-        // Cache trade-off: per-agent prompts don't share Anthropic's
-        // cache prefix with each other or with the default. For multi-
-        // agent hosts the catalog savings dominate the cache loss; for
-        // single-agent hosts the default branch keeps today's caching
-        // bit-for-bit.
-        val baseSystemPrompt = if (declaration.allowedTools.isEmpty()) {
-            resolvedSystemPrompt()
-        } else {
-            // Use allTools (filtered + delegate_to_agent if present)
-            // so the prompt-catalog matches what the wire registry
-            // actually accepts.
-            systemPromptFor(allTools)
-        }
-        val effectiveSystemPrompt = if (declaration.systemFragment.isBlank()) {
-            baseSystemPrompt
-        } else {
-            "$baseSystemPrompt\n\n## Role\n${declaration.systemFragment}"
-        }
-        return WeftAgent(
-            executor = executor,
-            modelPool = modelPool,
-            // DefaultModelRouter (rules: vision → vision-capable, coding
-            // hints → heavy, short fresh chat → cheap, else standard).
-            // Apps that want a single fixed model can pass
-            // dev.weft.harness.agents.routing.StaticModelRouter(modelPool.standard)
-            // via a future WeftRuntime opt-out.
-            toolRegistry = toolRegistry,
-            traceStore = traceStore,
-            baseSystemPromptSupplier = { effectiveSystemPrompt },
-            // Compose: device snapshot first (substrate default), then
-            // the app-supplied per-turn extension. Each section
-            // separated by a blank line so the LLM can tell them apart.
-            // Empty extensions are dropped so the prompt doesn't grow
-            // unnecessarily.
-            volatilePrefixSupplier = {
-                listOf(deviceSnapshotProvider(), extraVolatilePrefix())
-                    .filter { it.isNotBlank() }
-                    .joinToString("\n\n")
-            },
-            maxIterations = maxIterations,
-            usageStore = usageStore,
-            quotaPolicy = quotaPolicy,
-            redactor = redactor,
-            maxOutputTokens = maxOutputTokens,
-            conversationStore = conversationStore,
-            cacheBinder = cacheBinder,
-            memoryRegistry = memoryRegistry,
-            // Explicit override beats the declaration's own strategy
-            // (which itself defaults to DefaultStrategy() per the
-            // AgentDeclaration data class).
-            strategy = strategyOverride ?: declaration.strategy,
-            agentName = declaration.name,
-            // Stage 2: pass the runtime's lazy ToolProvider so the
-            // agent's strategy can resolve names from find_tool searches
-            // mid-turn. Pass null when the host is in pure eager mode
-            // (no on-demand tools) — saves the activation node from
-            // doing work it'd skip anyway.
-            toolProvider = if (hasOnDemandTools) toolProvider else null,
-        )
-    }
-
-    /**
-     * Build the Koog [MultiLLMPromptExecutor], provider-specific
-     * [dev.weft.harness.agents.routing.ModelPool], and matching
-     * [dev.weft.harness.prompt.cache.CacheBinder] for [provider]. Switch on
-     * [dev.weft.contracts.ProviderKind].
-     *
-     * The model pool is the **closed set** that [WeftAgent]'s router
-     * picks from per turn. Adding new models means: pick them here, then
-     * either update [dev.weft.harness.agents.routing.DefaultModelRouter] rules
-     * if you want the default router to route to them, or pass a custom
-     * router that does.
-     */
-    @OptIn(kotlin.time.ExperimentalTime::class)
-    private suspend fun buildExecutorFor(
-        provider: dev.weft.contracts.WeftCredentialProvider,
-    ): Triple<MultiLLMPromptExecutor, dev.weft.harness.agents.routing.ModelPool, dev.weft.harness.prompt.cache.CacheBinder> = when (provider.kind) {
-        dev.weft.contracts.ProviderKind.Anthropic -> {
-            val client = AnthropicLLMClient(
-                apiKey = provider.bearer(),
-                settings = AnthropicClientSettings(
-                    // All four pool models share the same Anthropic client.
-                    // modelVersionsMap maps Koog's LLModel.id values to the
-                    // wire-API names. Sonnet 4.6 is the only custom (non-Koog-
-                    // catalog) entry; the rest come from AnthropicModels.
-                    modelVersionsMap = mapOf(SONNET_4_6_MODEL to "claude-sonnet-4-6"),
-                    baseUrl = provider.baseUrl,
-                ),
-                // Koog 1.0.0 made the HTTP client a pluggable runtime dep
-                // discovered via ServiceLoader. Android's packaging is
-                // fragile around META-INF/services entries (R8 + AGP
-                // resource-merging both can strip them), so we pass the
-                // factory explicitly. The arg-less constructor uses
-                // sensible defaults (Ktor's default HttpClient, SSE on,
-                // KotlinLogging logger).
-                httpClientFactory = ai.koog.http.client.ktor.KtorKoogHttpClient.Factory(),
-            )
-            val pool = dev.weft.harness.agents.routing.ModelPool(
-                // Haiku 4.5 for short / fresh-chat turns. ~3.7× cheaper
-                // input, ~3.7× cheaper output than Sonnet.
-                cheap = ai.koog.prompt.executor.clients.anthropic.AnthropicModels.Haiku_4_5,
-                // Sonnet 4.6 (our custom model entry) handles the bulk
-                // of turns: good reasoning, vision, tool use.
-                standard = SONNET_4_6_MODEL,
-                // Sonnet supports vision; no need for a separate vision
-                // model on the Anthropic side.
-                vision = SONNET_4_6_MODEL,
-                // Opus 4.7 for explicit coding / heavy reasoning. ~5×
-                // the cost of Sonnet; only fires on the coding-keyword
-                // heuristic.
-                heavy = ai.koog.prompt.executor.clients.anthropic.AnthropicModels.Opus_4_7,
-            )
-            Triple(
-                MultiLLMPromptExecutor(client),
-                pool,
-                dev.weft.harness.prompt.cache.AnthropicCacheBinder,
-            )
-        }
-        dev.weft.contracts.ProviderKind.OpenAI -> {
-            val client = ai.koog.prompt.executor.clients.openai.OpenAILLMClient(
-                apiKey = provider.bearer(),
-                settings = ai.koog.prompt.executor.clients.openai.OpenAIClientSettings(
-                    baseUrl = provider.baseUrl,
-                ),
-                httpClientFactory = ai.koog.http.client.ktor.KtorKoogHttpClient.Factory(),
-            )
-            val pool = dev.weft.harness.agents.routing.ModelPool(
-                cheap = ai.koog.prompt.executor.clients.openai.OpenAIModels.Chat.GPT4oMini,
-                standard = ai.koog.prompt.executor.clients.openai.OpenAIModels.Chat.GPT4o,
-                vision = ai.koog.prompt.executor.clients.openai.OpenAIModels.Chat.GPT4o,
-                // GPT-4o handles coding well enough; bumping to O3 for
-                // coding would be an opt-in given its latency profile.
-                heavy = ai.koog.prompt.executor.clients.openai.OpenAIModels.Chat.GPT4o,
-            )
-            Triple(
-                MultiLLMPromptExecutor(client),
-                pool,
-                // OpenAI caches stable prefixes server-side, no explicit
-                // markers needed. The binder is a no-op for prompt building
-                // and tool marking; cache hits show up as cachedTokens in
-                // prompt_tokens_details (currently not surfaced by Koog 1.0.0's
-                // metaInfo for OpenAI — observability gap to track).
-                dev.weft.harness.prompt.cache.NoOpCacheBinder,
-            )
-        }
-        dev.weft.contracts.ProviderKind.OpenRouter -> {
-            val client = ai.koog.prompt.executor.clients.openrouter.OpenRouterLLMClient(
-                apiKey = provider.bearer(),
-                settings = ai.koog.prompt.executor.clients.openrouter.OpenRouterClientSettings(),
-                httpClientFactory = ai.koog.http.client.ktor.KtorKoogHttpClient.Factory(),
-            )
-            // OpenRouter's value is the breadth — mix providers per tier
-            // so users see what's possible from one key. Quality picks:
-            // cheap = OpenAI's smallest (consistent + fast), standard +
-            // vision = Claude 4.5 Sonnet, heavy = Claude 4.5 Opus.
-            // Override in app settings later if users want to pin tiers
-            // to specific OpenRouter catalog entries.
-            val pool = dev.weft.harness.agents.routing.ModelPool(
-                cheap = ai.koog.prompt.executor.clients.openrouter.OpenRouterModels.GPT4oMini,
-                standard = ai.koog.prompt.executor.clients.openrouter.OpenRouterModels.Claude4_5Sonnet,
-                vision = ai.koog.prompt.executor.clients.openrouter.OpenRouterModels.Claude4_5Sonnet,
-                heavy = ai.koog.prompt.executor.clients.openrouter.OpenRouterModels.Claude4_5Opus,
-            )
-            Triple(
-                MultiLLMPromptExecutor(client),
-                pool,
-                // OpenRouter is a passthrough; upstream's caching shows
-                // through but we don't drive markers from our side.
-                dev.weft.harness.prompt.cache.NoOpCacheBinder,
-            )
-        }
-        dev.weft.contracts.ProviderKind.DeepSeek -> {
-            // DeepSeek's API is OpenAI-compatible. Koog dropped its
-            // dedicated DeepSeek client at 1.0.0, so we use OpenAILLMClient
-            // pointed at api.deepseek.com. Models are constructed locally
-            // (DEEPSEEK_*_MODEL on this companion) and tagged with
-            // LLMProvider.DeepSeek so MultiLLMPromptExecutor dispatches
-            // them here — but the executor map keys this client under
-            // LLMProvider.DeepSeek explicitly to satisfy that lookup
-            // (OpenAILLMClient doesn't care that its key isn't OpenAI).
-            val client = ai.koog.prompt.executor.clients.openai.OpenAILLMClient(
-                apiKey = provider.bearer(),
-                settings = ai.koog.prompt.executor.clients.openai.OpenAIClientSettings(
-                    baseUrl = DEEPSEEK_BASE_URL,
-                ),
-                httpClientFactory = ai.koog.http.client.ktor.KtorKoogHttpClient.Factory(),
-            )
-            // Two-model catalog: Chat for general, Reasoner for heavy.
-            // No vision support — image attachments will fail at the API
-            // layer. Document that in app-facing copy.
-            val pool = dev.weft.harness.agents.routing.ModelPool(
-                cheap = DEEPSEEK_CHAT_MODEL,
-                standard = DEEPSEEK_CHAT_MODEL,
-                vision = DEEPSEEK_CHAT_MODEL,
-                heavy = DEEPSEEK_REASONER_MODEL,
-            )
-            Triple(
-                MultiLLMPromptExecutor(
-                    mapOf(LLMProvider.DeepSeek to client),
-                ),
-                pool,
-                dev.weft.harness.prompt.cache.NoOpCacheBinder,
-            )
-        }
     }
 
     /**
@@ -1200,7 +547,7 @@ public class WeftRuntime(
          * [ai.koog.prompt.llm.LLMProvider.DeepSeek] so routing + cost
          * attribution stay distinct.
          */
-        public val DEEPSEEK_BASE_URL: String = "https://api.deepseek.com"
+        public const val DEEPSEEK_BASE_URL: String = "https://api.deepseek.com"
 
         public val DEEPSEEK_CHAT_MODEL: LLModel = LLModel(
             provider = LLMProvider.DeepSeek,
@@ -1269,13 +616,6 @@ public class WeftRuntime(
             contextLength = 200_000,
             maxOutputTokens = 8_192,
         )
-
-        // `create(...)` Android-convenience factory lives as a
-        // Companion-extension in `WeftRuntimeAndroid.kt` so the class
-        // declaration itself can lift to commonMain. iOS hosts write
-        // their own `create(WeftPlatform, …)` extension that wires the
-        // Darwin Ktor engine + their iOS-side OsCapabilities + a
-        // UIDevice-backed deviceSnapshotProvider.
     }
 }
 
@@ -1286,6 +626,6 @@ public class WeftRuntime(
  * are omitted.
  */
 public class McpDiscoveryTimeoutException(
-    public val server: McpServerConfig,
-    public val timeout: Duration,
+    server: McpServerConfig,
+    timeout: Duration,
 ) : RuntimeException("MCP discovery timed out for ${server.name} after $timeout")
