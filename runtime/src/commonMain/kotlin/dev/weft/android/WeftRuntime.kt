@@ -1,9 +1,6 @@
 package dev.weft.android
 
 import ai.koog.agents.core.tools.ToolRegistry
-import ai.koog.prompt.executor.clients.anthropic.AnthropicClientSettings
-import ai.koog.prompt.executor.clients.anthropic.AnthropicLLMClient
-import ai.koog.prompt.executor.llms.MultiLLMPromptExecutor
 import ai.koog.prompt.llm.LLMCapability
 import ai.koog.prompt.llm.LLMProvider
 import ai.koog.prompt.llm.LLModel
@@ -687,7 +684,7 @@ public class WeftRuntime(
         // [NoOpCacheBinder] until/unless Koog grows explicit cache markers
         // for that provider). Per-turn model routing happens inside
         // [WeftAgent] via [dev.weft.harness.agents.routing.DefaultModelRouter].
-        val (executor, defaultPool, cacheBinder) = buildExecutorFor(provider)
+        val (executor, defaultPool, cacheBinder) = buildProviderExecutor(provider)
         val modelPool = modelPoolOverride ?: defaultPool
 
         // Sub-agent runner: spawns isolated WeftAgents on demand. Shares
@@ -816,151 +813,6 @@ public class WeftRuntime(
             // doing work it'd skip anyway.
             toolProvider = if (hasOnDemandTools) toolProvider else null,
         )
-    }
-
-    /**
-     * Build the Koog [MultiLLMPromptExecutor], provider-specific
-     * [dev.weft.harness.agents.routing.ModelPool], and matching
-     * [dev.weft.harness.prompt.cache.CacheBinder] for [provider]. Switch on
-     * [dev.weft.contracts.ProviderKind].
-     *
-     * The model pool is the **closed set** that [WeftAgent]'s router
-     * picks from per turn. Adding new models means: pick them here, then
-     * either update [dev.weft.harness.agents.routing.DefaultModelRouter] rules
-     * if you want the default router to route to them, or pass a custom
-     * router that does.
-     */
-    @OptIn(kotlin.time.ExperimentalTime::class)
-    private suspend fun buildExecutorFor(
-        provider: dev.weft.contracts.WeftCredentialProvider,
-    ): Triple<MultiLLMPromptExecutor, dev.weft.harness.agents.routing.ModelPool, dev.weft.harness.prompt.cache.CacheBinder> = when (provider.kind) {
-        dev.weft.contracts.ProviderKind.Anthropic -> {
-            val client = AnthropicLLMClient(
-                apiKey = provider.bearer(),
-                settings = AnthropicClientSettings(
-                    // All four pool models share the same Anthropic client.
-                    // modelVersionsMap maps Koog's LLModel.id values to the
-                    // wire-API names. Sonnet 4.6 is the only custom (non-Koog-
-                    // catalog) entry; the rest come from AnthropicModels.
-                    modelVersionsMap = mapOf(SONNET_4_6_MODEL to "claude-sonnet-4-6"),
-                    baseUrl = provider.baseUrl,
-                ),
-                // Koog 1.0.0 made the HTTP client a pluggable runtime dep
-                // discovered via ServiceLoader. Android's packaging is
-                // fragile around META-INF/services entries (R8 + AGP
-                // resource-merging both can strip them), so we pass the
-                // factory explicitly. The arg-less constructor uses
-                // sensible defaults (Ktor's default HttpClient, SSE on,
-                // KotlinLogging logger).
-                httpClientFactory = ai.koog.http.client.ktor.KtorKoogHttpClient.Factory(),
-            )
-            val pool = dev.weft.harness.agents.routing.ModelPool(
-                // Haiku 4.5 for short / fresh-chat turns. ~3.7× cheaper
-                // input, ~3.7× cheaper output than Sonnet.
-                cheap = ai.koog.prompt.executor.clients.anthropic.AnthropicModels.Haiku_4_5,
-                // Sonnet 4.6 (our custom model entry) handles the bulk
-                // of turns: good reasoning, vision, tool use.
-                standard = SONNET_4_6_MODEL,
-                // Sonnet supports vision; no need for a separate vision
-                // model on the Anthropic side.
-                vision = SONNET_4_6_MODEL,
-                // Opus 4.7 for explicit coding / heavy reasoning. ~5×
-                // the cost of Sonnet; only fires on the coding-keyword
-                // heuristic.
-                heavy = ai.koog.prompt.executor.clients.anthropic.AnthropicModels.Opus_4_7,
-            )
-            Triple(
-                MultiLLMPromptExecutor(client),
-                pool,
-                dev.weft.harness.prompt.cache.AnthropicCacheBinder,
-            )
-        }
-        dev.weft.contracts.ProviderKind.OpenAI -> {
-            val client = ai.koog.prompt.executor.clients.openai.OpenAILLMClient(
-                apiKey = provider.bearer(),
-                settings = ai.koog.prompt.executor.clients.openai.OpenAIClientSettings(
-                    baseUrl = provider.baseUrl,
-                ),
-                httpClientFactory = ai.koog.http.client.ktor.KtorKoogHttpClient.Factory(),
-            )
-            val pool = dev.weft.harness.agents.routing.ModelPool(
-                cheap = ai.koog.prompt.executor.clients.openai.OpenAIModels.Chat.GPT4oMini,
-                standard = ai.koog.prompt.executor.clients.openai.OpenAIModels.Chat.GPT4o,
-                vision = ai.koog.prompt.executor.clients.openai.OpenAIModels.Chat.GPT4o,
-                // GPT-4o handles coding well enough; bumping to O3 for
-                // coding would be an opt-in given its latency profile.
-                heavy = ai.koog.prompt.executor.clients.openai.OpenAIModels.Chat.GPT4o,
-            )
-            Triple(
-                MultiLLMPromptExecutor(client),
-                pool,
-                // OpenAI caches stable prefixes server-side, no explicit
-                // markers needed. The binder is a no-op for prompt building
-                // and tool marking; cache hits show up as cachedTokens in
-                // prompt_tokens_details (currently not surfaced by Koog 1.0.0's
-                // metaInfo for OpenAI — observability gap to track).
-                dev.weft.harness.prompt.cache.NoOpCacheBinder,
-            )
-        }
-        dev.weft.contracts.ProviderKind.OpenRouter -> {
-            val client = ai.koog.prompt.executor.clients.openrouter.OpenRouterLLMClient(
-                apiKey = provider.bearer(),
-                settings = ai.koog.prompt.executor.clients.openrouter.OpenRouterClientSettings(),
-                httpClientFactory = ai.koog.http.client.ktor.KtorKoogHttpClient.Factory(),
-            )
-            // OpenRouter's value is the breadth — mix providers per tier
-            // so users see what's possible from one key. Quality picks:
-            // cheap = OpenAI's smallest (consistent + fast), standard +
-            // vision = Claude 4.5 Sonnet, heavy = Claude 4.5 Opus.
-            // Override in app settings later if users want to pin tiers
-            // to specific OpenRouter catalog entries.
-            val pool = dev.weft.harness.agents.routing.ModelPool(
-                cheap = ai.koog.prompt.executor.clients.openrouter.OpenRouterModels.GPT4oMini,
-                standard = ai.koog.prompt.executor.clients.openrouter.OpenRouterModels.Claude4_5Sonnet,
-                vision = ai.koog.prompt.executor.clients.openrouter.OpenRouterModels.Claude4_5Sonnet,
-                heavy = ai.koog.prompt.executor.clients.openrouter.OpenRouterModels.Claude4_5Opus,
-            )
-            Triple(
-                MultiLLMPromptExecutor(client),
-                pool,
-                // OpenRouter is a passthrough; upstream's caching shows
-                // through but we don't drive markers from our side.
-                dev.weft.harness.prompt.cache.NoOpCacheBinder,
-            )
-        }
-        dev.weft.contracts.ProviderKind.DeepSeek -> {
-            // DeepSeek's API is OpenAI-compatible. Koog dropped its
-            // dedicated DeepSeek client at 1.0.0, so we use OpenAILLMClient
-            // pointed at api.deepseek.com. Models are constructed locally
-            // (DEEPSEEK_*_MODEL on this companion) and tagged with
-            // LLMProvider.DeepSeek so MultiLLMPromptExecutor dispatches
-            // them here — but the executor map keys this client under
-            // LLMProvider.DeepSeek explicitly to satisfy that lookup
-            // (OpenAILLMClient doesn't care that its key isn't OpenAI).
-            val client = ai.koog.prompt.executor.clients.openai.OpenAILLMClient(
-                apiKey = provider.bearer(),
-                settings = ai.koog.prompt.executor.clients.openai.OpenAIClientSettings(
-                    baseUrl = DEEPSEEK_BASE_URL,
-                ),
-                httpClientFactory = ai.koog.http.client.ktor.KtorKoogHttpClient.Factory(),
-            )
-            // Two-model catalog: Chat for general, Reasoner for heavy.
-            // No vision support — image attachments will fail at the API
-            // layer. Document that in app-facing copy.
-            val pool = dev.weft.harness.agents.routing.ModelPool(
-                cheap = DEEPSEEK_CHAT_MODEL,
-                standard = DEEPSEEK_CHAT_MODEL,
-                vision = DEEPSEEK_CHAT_MODEL,
-                heavy = DEEPSEEK_REASONER_MODEL,
-            )
-            Triple(
-                MultiLLMPromptExecutor(
-                    mapOf(LLMProvider.DeepSeek to client),
-                ),
-                pool,
-                dev.weft.harness.prompt.cache.NoOpCacheBinder,
-            )
-        }
     }
 
     /**
