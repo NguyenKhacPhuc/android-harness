@@ -24,6 +24,9 @@ import kotlinx.serialization.Serializable
 import platform.CoreGraphics.CGRectMake
 import platform.Foundation.NSURL
 import platform.Foundation.NSURLRequest
+import platform.WebKit.WKNavigationAction
+import platform.WebKit.WKNavigationActionPolicy
+import platform.WebKit.WKNavigationDelegateProtocol
 import platform.WebKit.WKScriptMessage
 import platform.WebKit.WKScriptMessageHandlerProtocol
 import platform.WebKit.WKUserContentController
@@ -218,6 +221,8 @@ public class HtmlComponent(
         // LaunchedEffect reach the live WKWebView; when the mini-app leaves
         // composition the effect cancels and pushes stop.
         val webViewRef = remember { arrayOfNulls<WKWebView>(1) }
+        // Held here so the WKWebView's weak navigationDelegate ref survives.
+        val navGuard = remember { MiniAppNavigationGuard() }
         val updates = remember(dataSource, props.miniAppId) { dataSource?.invoke(props.miniAppId) }
         if (bridged && updates != null) {
             LaunchedEffect(updates) {
@@ -278,6 +283,7 @@ public class HtmlComponent(
                         configuration = config,
                     )
                     webViewRef[0] = webView
+                    webView.navigationDelegate = navGuard
                     handler?.bind(webView)
                     webView.loadHTMLString(decorated, baseURL = null)
                     webView
@@ -289,6 +295,35 @@ public class HtmlComponent(
                     webView.loadHTMLString(decorated, baseURL = null)
                 },
             )
+        }
+    }
+}
+
+/**
+ * [WKNavigationDelegateProtocol] for HTML mini-apps: permits only our own
+ * programmatic document load (`loadHTMLString` → an `about:blank` /
+ * `data:` navigation of type *other*) and refuses everything else — link
+ * clicks, form posts, back/forward, and any script-driven navigation to a
+ * remote origin. A mini-app's only path out is the approved-action
+ * bridge; it can't navigate away or escape the sandbox.
+ */
+@OptIn(ExperimentalForeignApi::class)
+private class MiniAppNavigationGuard : NSObject(), WKNavigationDelegateProtocol {
+    override fun webView(
+        webView: WKWebView,
+        decidePolicyForNavigationAction: WKNavigationAction,
+        decisionHandler: (WKNavigationActionPolicy) -> Unit,
+    ) {
+        // `loadHTMLString(baseURL = null)` navigates to about:blank; in-page
+        // anchors stay on about:blank#…. Any other URL (a link click, a
+        // script setting location to an http/https/file origin, a form post)
+        // is refused.
+        val url = decidePolicyForNavigationAction.request.URL?.absoluteString.orEmpty()
+        val isOwnDocumentLoad = url.isEmpty() || url.startsWith("about:blank") || url.startsWith("data:")
+        if (isOwnDocumentLoad) {
+            decisionHandler(WKNavigationActionPolicy.WKNavigationActionPolicyAllow)
+        } else {
+            decisionHandler(WKNavigationActionPolicy.WKNavigationActionPolicyCancel)
         }
     }
 }

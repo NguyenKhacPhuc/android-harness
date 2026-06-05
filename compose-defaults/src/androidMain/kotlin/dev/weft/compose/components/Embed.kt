@@ -3,6 +3,7 @@ import dev.weft.contracts.ComponentEvent
 import dev.weft.contracts.ComponentCategory
 
 import android.webkit.JavascriptInterface
+import android.webkit.WebResourceRequest
 import android.webkit.WebView
 import android.webkit.WebViewClient
 import androidx.compose.foundation.layout.Column
@@ -242,7 +243,7 @@ public class HtmlComponent(
                         webViewClient = if (bridge != null && bridged) {
                             attachWeftBridge(bridge, scope)
                         } else {
-                            WebViewClient()
+                            MiniAppWebViewClient()
                         }
                         loadDataWithBaseURL(null, loaded, "text/html", "utf-8", null)
                     }
@@ -297,11 +298,22 @@ private fun WebView.attachWeftBridge(bridge: MiniAppBridge, scope: CoroutineScop
         AndroidWeftBridge(bridge, scope) { js -> webView.post { webView.evaluateJavascript(js, null) } },
         JS_BRIDGE_NAME,
     )
-    return object : WebViewClient() {
+    return object : MiniAppWebViewClient() {
         override fun onPageFinished(view: WebView?, url: String?) {
             view?.evaluateJavascript(MiniAppBridge.openJs(), null)
         }
     }
+}
+
+/**
+ * [WebViewClient] for HTML mini-apps: blocks every navigation away from
+ * the loaded document. A mini-app's only path out is the approved-action
+ * bridge — link clicks, redirects, and form submits are refused so it
+ * can't load another origin or escape the sandbox. (The URL-loading
+ * [WebViewComponent] keeps the default client; navigation is its point.)
+ */
+private open class MiniAppWebViewClient : WebViewClient() {
+    override fun shouldOverrideUrlLoading(view: WebView?, request: WebResourceRequest?): Boolean = true
 }
 
 /**
