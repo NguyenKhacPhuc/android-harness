@@ -61,20 +61,22 @@ class MiniAppThemeTest {
     }
 
     @Test
-    fun cspMetaSealsNetworkAndNavigation() {
+    fun cspAllowsHttpsResourcesButBlocksRemoteScriptsAndHijack() {
         val csp = MiniAppTheme.cspMetaTag()
         csp shouldContain "http-equiv=\"Content-Security-Policy\""
-        // the mini-app's only path out is the bridge — its own network is dead
-        csp shouldContain "connect-src 'none'"
         csp shouldContain "default-src 'none'"
-        // no navigation away, no form posts, no base hijack, no iframes
+        // network + remote resources are open over https
+        csp shouldContain "connect-src https: wss:"
+        csp shouldContain "img-src https: data:"
+        csp shouldContain "media-src https: data:"
+        csp shouldContain "style-src 'unsafe-inline' https:"
+        csp shouldContain "font-src https: data:"
+        csp shouldContain "frame-src https:"
+        // what stays blocked: remote top-frame scripts, base + form hijack
+        csp shouldContain "script-src 'unsafe-inline'"
+        csp shouldNotContain "script-src 'unsafe-inline' https"
         csp shouldContain "base-uri 'none'"
         csp shouldContain "form-action 'none'"
-        csp shouldContain "frame-src 'none'"
-        // self-contained inline widgets still run
-        csp shouldContain "script-src 'unsafe-inline'"
-        // remote https images allowed (galleries) but fetch/XHR still blocked
-        csp shouldContain "img-src https: data:"
     }
 
     @Test
