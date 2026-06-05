@@ -232,6 +232,16 @@ public class HtmlComponent(
                 factory = { ctx ->
                     WebView(ctx).apply {
                         webViewRef[0] = this
+                        // Let the WebView scroll its own content (often taller than
+                        // the fixed box) even inside a scrolling Compose parent —
+                        // without this the parent intercepts the drag and the
+                        // mini-app can't scroll to its full length. Returns false so
+                        // the WebView still handles taps/clicks normally.
+                        @Suppress("ClickableViewAccessibility")
+                        setOnTouchListener { view, _ ->
+                            view.parent?.requestDisallowInterceptTouchEvent(true)
+                            false
+                        }
                         // JS opt-in. Sandboxed by default (no base URL → cross-origin
                         // XHR blocked). The window.weft bridge is attached only when
                         // `bridged` — see HtmlProps / HtmlComponent(invoker).
