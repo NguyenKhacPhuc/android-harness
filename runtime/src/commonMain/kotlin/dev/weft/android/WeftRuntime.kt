@@ -3,8 +3,6 @@ package dev.weft.android
 import ai.koog.prompt.llm.LLMCapability
 import ai.koog.prompt.llm.LLMProvider
 import ai.koog.prompt.llm.LLModel
-import dev.weft.contracts.ComponentMetadata
-import dev.weft.contracts.ContextProvider
 import dev.weft.contracts.ContextRegistry
 import dev.weft.contracts.DataSource
 import dev.weft.contracts.DataSourceRegistry
@@ -76,174 +74,6 @@ public class WeftRuntime(
     public val os: OsCapabilities,
     public val uiBridge: UiBridge,
     /**
-     * App-specific opening for the system prompt — describes the app's
-     * purpose, persona, and any high-level constraints. The substrate
-     * appends the auto-generated tool catalog after this.
-     */
-    private val appPromptPreamble: String,
-    /** App-specific [DataSource]s exposed to the `data_*` tools. */
-    dataSources: List<DataSource> = emptyList(),
-    /** Network allowlist used by `network_fetch`. Defaults to "no hosts allowed". */
-    public val networkPolicy: NetworkPolicy = NetworkPolicy(coreAllowlist = emptySet()),
-    /**
-     * Extra context providers merged with the substrate default `device`
-     * provider. Use to expose app data (user profile, subscription tier…) to
-     * the agent via `system_user_context`.
-     */
-    extraContextProviders: List<ContextProvider> = emptyList(),
-    /**
-     * Hook for the app to register its own tools. Called with the
-     * [WeftContext] and the result is appended after the substrate's
-     * stable tool prelude.
-     *
-     * **This is where UI tools land.** Apps using `:substrate:android-ui`
-     * pass `substrateUi.toolsFactory` here to register `ui_render` and
-     * `ui_notify`. Apps with custom UI provide their own tools or none.
-     */
-    private val extraToolsFactory: (WeftContext) -> List<WeftTool<*, *>> = { _ -> emptyList() },
-    /**
-     * Stage 2 of `docs/architecture/tool-provider.md` — optional lazy
-     * tool catalog. When null (default), the runtime auto-builds an
-     * [EagerToolProvider] wrapping the substrate's prebuilt list plus
-     * anything `extraToolsFactory` produced, with the substrate's
-     * always-on subset (memory_*, system_user_context, find_tool)
-     * tagged accordingly. Existing single-provider hosts see zero
-     * behavior change.
-     *
-     * Apps that want lazy MCP / app-domain tools pass a custom
-     * provider — typically `compositeToolProvider(substrateProvider,
-     * appProvider, mcpProvider)`. The activation node in the agent
-     * strategy resolves names from `find_tool` searches against this
-     * provider mid-turn.
-     */
-    private val toolProviderOverride: ToolProvider? = null,
-    /**
-     * Component metadata for the system prompt's UI catalog (per ADR-007).
-     * Apps using `:substrate:android-ui` pass `substrateUi.components` here.
-     * Empty list = system prompt won't mention UI components at all.
-     */
-    private val componentMetadata: List<ComponentMetadata> = emptyList(),
-    /**
-     * Optional extra text appended to the system prompt after the standard
-     * trailing notes — useful for app-specific tool-use hints.
-     */
-    private val extraSystemNotes: String? = null,
-    /**
-     * Optional supplier of additional per-session-stable text appended
-     * to the system prompt **after** [extraSystemNotes]. Runs once at
-     * runtime construction, so the resulting text reaches the STATIC
-     * cache tier and stays cached for the runtime's lifetime.
-     *
-     * Use this for content the LLM should treat as **instructions** —
-     * user persona, locale conventions, tone preferences. Per-turn
-     * dynamic content (current screen, last action, recent memory)
-     * belongs in [extraVolatilePrefix] instead, which goes into the
-     * user message layer.
-     *
-     * CAUTION: anything that varies *within* a session (e.g., the user
-     * changing their preferences mid-conversation) belongs in
-     * [extraVolatilePrefix], not here — changing this value across
-     * runtime instances re-creates the prompt and busts the cache.
-     */
-    private val dynamicSystemPromptSection: (() -> String)? = null,
-    /**
-     * App-supplied per-turn context — composes with the substrate's
-     * built-in device snapshot. The returned text is appended below
-     * the device snapshot inside the volatile prefix layer (which sits
-     * just above the user message). Use for short, churning context the
-     * LLM should treat as **data** rather than instructions: current
-     * screen, active document id, last UI action timestamp, etc.
-     *
-     * For stable-per-session content, use [dynamicSystemPromptSection]
-     * instead — that reaches the STATIC cache tier.
-     */
-    private val extraVolatilePrefix: () -> String = { "" },
-    /**
-     * App-registered [MemoryProvider]s. Queried per-turn alongside the
-     * substrate's own memory provider; hits are injected into the user
-     * message as "Relevant context" so the LLM sees them without
-     * needing to call `memory_recall`. Useful for RAG, app-managed user
-     * profile data, vector-store retrieval, etc.
-     */
-    private val extraMemoryProviders: List<dev.weft.contracts.MemoryProvider> = emptyList(),
-    /**
-     * Optional override for the substrate's [MemoryStore]. Defaults to
-     * a SQLDelight-backed store on the substrate database. Apps with
-     * their own memory backend (remote KB, vector store) supply an
-     * implementation here; the `memory_*` tools then route through it.
-     */
-    private val memoryStoreOverride: MemoryStore? = null,
-    /**
-     * Optional override for the substrate's [ConversationStore]. Same
-     * pattern as [memoryStoreOverride] — defaults to a SQLDelight-backed
-     * store on the substrate database. Apps that want a synced /
-     * multi-device conversation store supply their own implementation
-     * here.
-     */
-    private val conversationStoreOverride: ConversationStore? = null,
-    public val quotaPolicy: QuotaPolicy = QuotaPolicy(),
-    /**
-     * Single redactor instance shared between tool-trace writes (applied by
-     * [WeftAgent] before persisting argsPreview / resultPreview /
-     * finalAssistantMessage / error messages) and post-hoc exports
-     * (apps should redact the JSON string before sharing it externally).
-     *
-     * Override to extend the rule set without losing defaults:
-     * `redactor = Redactor(Redactor.DEFAULT_RULES + myRules)`. Pass an
-     * empty list to disable: `Redactor(rules = emptyList())`.
-     */
-    public val redactor: Redactor = Redactor(),
-    /**
-     * How often to re-sweep TTL-expired `key_value` rows in the background.
-     * The one-shot startup sweep handles the common case; the periodic
-     * ticker covers long-lived sessions (apps that stay alive for hours).
-     * Pass [Duration.INFINITE] to disable the periodic sweep entirely (the
-     * startup sweep still runs).
-     */
-    private val ttlSweepInterval: Duration = DEFAULT_TTL_SWEEP_INTERVAL,
-    private val maxIterations: Int = MAX_ITERATIONS_DEFAULT,
-    /**
-     * Per-LLM-call `max_tokens` budget threaded into every agent built
-     * by [buildAgent]. See [WeftAgent.DEFAULT_MAX_OUTPUT_TOKENS]
-     * for why this defaults to 8192 instead of Koog's 2048.
-     */
-    private val maxOutputTokens: Int = WeftAgent.DEFAULT_MAX_OUTPUT_TOKENS,
-    /**
-     * Registered agent declarations. Empty list (default) =
-     * auto-synthesize a single
-     * [dev.weft.harness.agents.AgentDeclaration.default] entry, which
-     * reproduces pre-multi-agent behavior. Apps that want multiple
-     * agents (e.g. "writer" + "researcher") pass declarations here;
-     * `runtime.buildAgent(name, provider)` selects by name.
-     */
-    agents: List<dev.weft.harness.agents.AgentDeclaration> = emptyList(),
-    /**
-     * MCP servers to discover tools from. Discovery (HTTP initialize +
-     * tools/list) runs asynchronously in [runtimeScope] on
-     * [Dispatchers.IO]; the resulting tools resolve through
-     * [mcpToolsReady] and are appended to the agent's tool catalog the
-     * first time [buildAgent] is called.
-     *
-     * Empty list (default) = no MCP, no background work. Same
-     * [networkPolicy] gates apply: every server URL must pass the
-     * allowlist or the request fails.
-     */
-    private val mcpServers: List<McpServerConfig> = emptyList(),
-    /**
-     * Per-server error sink. Discovery isolates failures — a single
-     * unreachable server doesn't reject [mcpToolsReady]; it routes
-     * through here and the failing server's tools are omitted. Use to
-     * log diagnostics or surface a "reconnect" hint.
-     */
-    private val onMcpError: (McpServerConfig, Throwable) -> Unit = { _, _ -> },
-    /**
-     * Hard timeout per MCP server discovery. A misbehaving server can
-     * otherwise hang the deferred forever, blocking the first
-     * [buildAgent] call. On timeout the server is treated like any
-     * other failure — [onMcpError] fires and its tools are omitted.
-     */
-    private val mcpDiscoveryTimeout: Duration = DEFAULT_MCP_DISCOVERY_TIMEOUT,
-    /**
      * SQLDelight database backing every persistent store the substrate
      * ships. Built by `WeftRuntime.create` from the app's platform
      * handle; tests can pass a JDBC in-memory variant; iOS hosts pass
@@ -252,28 +82,49 @@ public class WeftRuntime(
     private val database: dev.weft.android.db.WeftDatabase,
     /**
      * HTTP client used by `network_fetch` (and the MCP transport when
-     * one is configured). [Companion.create] on Android wires a
-     * Ktor + OkHttp client wrapped with the host-allowlist policy; iOS
-     * hosts wire Ktor + Darwin similarly. Apps can supply their own —
-     * useful for adding tracing, custom retry, or a corporate proxy.
+     * one is configured). [Companion.create] wires a host-allowlist
+     * Ktor client (OkHttp on Android, Darwin on iOS). Apps can supply
+     * their own — useful for tracing, custom retry, or a corporate proxy.
      */
     private val networkClient: io.ktor.client.HttpClient,
     /**
-     * Per-turn device snapshot prepended to the user message. Android's
-     * `create` factory wires the substrate's built-in
-     * `deviceSnapshot(context)` (Build.VERSION + locale + connectivity);
-     * iOS hosts wire a UIDevice-backed equivalent. Default returns
-     * empty — the LLM still gets all the other context, just without a
-     * platform-specific device block.
+     * Per-turn device snapshot prepended to the user message. The `create`
+     * factories wire a platform-specific provider; the default returns
+     * empty.
      */
     private val deviceSnapshotProvider: () -> String = { "" },
+    /** App-facing configuration — see [WeftRuntimeConfig]. */
+    private val config: WeftRuntimeConfig,
 ) {
+    // Unpack the config into the names the class body uses. Keeps the
+    // constructor + the `assembleWeftRuntime` plumbing free of a 20-arg
+    // bag; the public `create` factories build a [WeftRuntimeConfig].
+    private val appPromptPreamble: String get() = config.appPromptPreamble
+    public val networkPolicy: NetworkPolicy get() = config.networkPolicy
+    private val extraToolsFactory get() = config.extraToolsFactory
+    private val toolProviderOverride get() = config.toolProviderOverride
+    private val componentMetadata get() = config.componentMetadata
+    private val extraSystemNotes get() = config.extraSystemNotes
+    private val dynamicSystemPromptSection get() = config.dynamicSystemPromptSection
+    private val extraVolatilePrefix get() = config.extraVolatilePrefix
+    private val extraMemoryProviders get() = config.extraMemoryProviders
+    private val memoryStoreOverride get() = config.memoryStoreOverride
+    private val conversationStoreOverride get() = config.conversationStoreOverride
+    public val quotaPolicy: QuotaPolicy get() = config.quotaPolicy
+    public val redactor: Redactor get() = config.redactor
+    private val ttlSweepInterval get() = config.ttlSweepInterval
+    private val maxIterations get() = config.maxIterations
+    private val maxOutputTokens get() = config.maxOutputTokens
+    private val mcpServers get() = config.mcpServers
+    private val onMcpError get() = config.onMcpError
+    private val mcpDiscoveryTimeout get() = config.mcpDiscoveryTimeout
+
     public val keyVault: KeyVault get() = os.keyVault
 
     /** Raw list snapshot — kept for prompt re-assembly when MCP tools resolve. */
-    private val rawDataSources: List<DataSource> = dataSources
+    private val rawDataSources: List<DataSource> = config.dataSources
 
-    public val dataSources: DataSourceRegistry = DataSourceRegistry(dataSources)
+    public val dataSources: DataSourceRegistry = DataSourceRegistry(config.dataSources)
 
     /**
      * Map of [dev.weft.harness.agents.AgentDeclaration]s keyed by
@@ -289,6 +140,7 @@ public class WeftRuntime(
      * keyed by provider identity.
      */
     public val agentDeclarations: Map<String, dev.weft.harness.agents.AgentDeclaration> = run {
+        val agents = config.agents
         val effective = if (agents.isEmpty()) {
             listOf(dev.weft.harness.agents.AgentDeclaration.default())
         } else {
@@ -307,7 +159,7 @@ public class WeftRuntime(
     }
 
     public val contextRegistry: ContextRegistry = ContextRegistry(
-        listOf(DeviceContextProvider(os)) + extraContextProviders,
+        listOf(DeviceContextProvider(os)) + config.extraContextProviders,
     )
 
     // `networkClient` is now a constructor arg — `Companion.create()`
@@ -695,7 +547,7 @@ public class WeftRuntime(
          * [ai.koog.prompt.llm.LLMProvider.DeepSeek] so routing + cost
          * attribution stay distinct.
          */
-        public val DEEPSEEK_BASE_URL: String = "https://api.deepseek.com"
+        public const val DEEPSEEK_BASE_URL: String = "https://api.deepseek.com"
 
         public val DEEPSEEK_CHAT_MODEL: LLModel = LLModel(
             provider = LLMProvider.DeepSeek,
@@ -764,13 +616,6 @@ public class WeftRuntime(
             contextLength = 200_000,
             maxOutputTokens = 8_192,
         )
-
-        // `create(...)` Android-convenience factory lives as a
-        // Companion-extension in `WeftRuntimeAndroid.kt` so the class
-        // declaration itself can lift to commonMain. iOS hosts write
-        // their own `create(WeftPlatform, …)` extension that wires the
-        // Darwin Ktor engine + their iOS-side OsCapabilities + a
-        // UIDevice-backed deviceSnapshotProvider.
     }
 }
 
@@ -781,6 +626,6 @@ public class WeftRuntime(
  * are omitted.
  */
 public class McpDiscoveryTimeoutException(
-    public val server: McpServerConfig,
-    public val timeout: Duration,
+    server: McpServerConfig,
+    timeout: Duration,
 ) : RuntimeException("MCP discovery timed out for ${server.name} after $timeout")
