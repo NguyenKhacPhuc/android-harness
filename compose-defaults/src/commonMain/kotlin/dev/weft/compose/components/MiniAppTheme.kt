@@ -130,8 +130,11 @@ public object MiniAppTheme {
      *    mini-app cannot make network calls of its own.
      *  - `script-src` / `style-src 'unsafe-inline'` — self-contained
      *    inline widgets + the injected theme still run; no *remote* code.
-     *  - `img-src` / `font-src data:` — inline data-URI assets only, no
-     *    remote sub-resource fetches.
+     *  - `img-src https: data:` — remote https images (galleries, avatars,
+     *    photos) + inline data URIs. `connect-src` stays `'none'`, so the
+     *    residual exfiltration surface is a GET-only image ping with no
+     *    readable response — accepted for usability over a dead gallery.
+     *  - `font-src data:` — inline fonts only, no remote font fetches.
      *  - `base-uri 'none'`, `form-action 'none'`, `frame-src 'none'` — no
      *    base hijack, no form posts off-origin, no iframes.
      * Combined with the WebView's null base URL and the platform
@@ -141,7 +144,7 @@ public object MiniAppTheme {
         "default-src 'none'; " +
             "script-src 'unsafe-inline'; " +
             "style-src 'unsafe-inline'; " +
-            "img-src data:; " +
+            "img-src https: data:; " +
             "font-src data:; " +
             "connect-src 'none'; " +
             "base-uri 'none'; " +
