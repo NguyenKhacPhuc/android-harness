@@ -14,7 +14,6 @@ import dev.weft.contracts.KeyVault
 import dev.weft.contracts.OsCapabilities
 import dev.weft.contracts.UiBridge
 import dev.weft.harness.agents.WeftAgent
-import dev.weft.harness.prompt.assembleSystemPrompt
 import dev.weft.harness.cost.QuotaPolicy
 import dev.weft.harness.cost.UsageStore
 import dev.weft.harness.memory.MemoryStore
@@ -456,6 +455,21 @@ public class WeftRuntime(
             .takeIf { it.isNotBlank() }
 
     /**
+     * Assembles the system prompt for any tool catalog with this runtime's
+     * stable inputs (preamble, components, data-source descriptions, extra
+     * notes) baked in. The pre-MCP, MCP-resolved, and per-agent prompts all
+     * route through it.
+     */
+    private val promptComposer = SystemPromptComposer(
+        appPreamble = appPromptPreamble,
+        components = componentMetadata,
+        // Registered DataSources are auto-listed in the prompt so apps don't
+        // hand-document their data layer in the preamble.
+        dataSources = rawDataSources,
+        extraNotes = systemPromptExtraNotes,
+    )
+
+    /**
      * The assembled system prompt: app preamble + auto-generated tool
      * catalog + standard trailing notes + optional [extraSystemNotes].
      * Computed once at construction.
@@ -468,17 +482,7 @@ public class WeftRuntime(
      * once discovery completes; this field is for human / devtools
      * inspection of the substrate-stable prompt.
      */
-    public val systemPrompt: String = assembleSystemPrompt(
-        appPreamble = appPromptPreamble,
-        tools = tools,
-        components = componentMetadata,
-        // Pass the registered DataSources so the substrate can auto-list
-        // them in the system prompt. Apps no longer need to hand-document
-        // their data layer in the preamble — register a DataSource with
-        // a description and the SDK takes it from there.
-        dataSources = dataSources,
-        extraNotes = systemPromptExtraNotes,
-    )
+    public val systemPrompt: String = promptComposer.forTools(tools)
 
     /**
      * MCP-discovered tools, resolved asynchronously. Always present
@@ -551,17 +555,7 @@ public class WeftRuntime(
     public suspend fun resolvedSystemPrompt(): String {
         cachedResolvedSystemPrompt?.let { return it }
         val mcp = mcpToolsReady.await()
-        if (mcp.isEmpty()) {
-            cachedResolvedSystemPrompt = systemPrompt
-            return systemPrompt
-        }
-        val prompt = assembleSystemPrompt(
-            appPreamble = appPromptPreamble,
-            tools = tools + mcp,
-            components = componentMetadata,
-            dataSources = rawDataSources,
-            extraNotes = systemPromptExtraNotes,
-        )
+        val prompt = if (mcp.isEmpty()) systemPrompt else promptComposer.forTools(tools + mcp)
         cachedResolvedSystemPrompt = prompt
         return prompt
     }
@@ -585,13 +579,7 @@ public class WeftRuntime(
      * the turn-loop hot path uses the closure captured at build time.
      */
     private fun systemPromptFor(agentTools: List<WeftTool<*, *>>): String =
-        assembleSystemPrompt(
-            appPreamble = appPromptPreamble,
-            tools = agentTools,
-            components = componentMetadata,
-            dataSources = rawDataSources,
-            extraNotes = systemPromptExtraNotes,
-        )
+        promptComposer.forTools(agentTools)
 
     /**
      * Build a Koog-backed [WeftAgent] using a [WeftCredentialProvider].
