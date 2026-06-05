@@ -8,6 +8,7 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.safeDrawingPadding
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.rememberScrollState
@@ -110,7 +111,13 @@ public fun AgentRenderedTreeScreen(
     val chromeless = update.tree.type == "Html"
 
     Surface(modifier = Modifier.fillMaxSize()) {
-        Column(modifier = Modifier.fillMaxSize()) {
+        Column(
+            // A chromeless mini-app fills the whole display (the host draws this
+            // screen edge-to-edge); a chromed native render keeps the safe-area
+            // inset so its Back/Save bar clears the system bars.
+            modifier = Modifier.fillMaxSize()
+                .then(if (chromeless) Modifier else Modifier.safeDrawingPadding()),
+        ) {
             // Top bar — Back, label, optional thinking spinner.
             if (!chromeless) {
             Row(
