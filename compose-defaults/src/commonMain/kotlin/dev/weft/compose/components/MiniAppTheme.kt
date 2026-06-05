@@ -122,31 +122,23 @@ public object MiniAppTheme {
         "<script>window.weft = window.weft || {}; window.weft.theme = ${themeJson(tokens)};</script>"
 
     /**
-     * The `<meta>` Content-Security-Policy injected ahead of every mini-app
-     * document. A mini-app is a sandboxed web page that may reach the
-     * network freely over https — what stays blocked is remote top-frame
-     * code and escaping the document:
-     *  - `default-src 'none'` — deny anything not explicitly allowed below.
-     *  - `script-src 'unsafe-inline'` — inline scripts + the injected theme
-     *    run, but **no remote scripts** (`<script src=…>`) — the page can't
-     *    pull in remote code it didn't author. The main protection kept.
-     *  - `connect-src https: wss:` — `fetch` / `XHR` / WebSocket to https.
+     * The `<meta>` Content-Security-Policy for every mini-app document.
+     * Display resources are open over https; programmatic network access is
+     * closed, so a mini-app reaches the network only through the gated
+     * `http_fetch` action:
+     *  - `default-src 'none'` — deny anything not allowed below.
+     *  - `script-src 'unsafe-inline'` — inline scripts only; no remote code.
+     *  - `connect-src 'none'` — no `fetch` / `XHR` / WebSocket from the page.
+     *    The mini-app fetches via `window.weft.callTool('http_fetch', …)`,
+     *    which the user approves on first run — network access stays
+     *    consent-gated and auditable, never silent.
      *  - `style-src 'unsafe-inline' https:` / `font-src https: data:` —
-     *    inline + remote CSS and web fonts (CDN, Google Fonts).
+     *    inline + remote CSS and web fonts.
      *  - `img-src https: data:` / `media-src https: data:` — remote https
-     *    images, audio and video, plus inline data URIs.
-     *  - `frame-src https:` — embed https iframes (video, maps). Sub-frames
-     *    are sandboxed from the host bridge by the browser.
-     *  - `base-uri 'none'`, `form-action 'none'` — no base hijack, no
-     *    off-origin form posts.
-     * Top-frame navigation away is still refused by the platform
-     * navigation guard (the mini-app can't replace its own document).
-     *
-     * Trade-off: with the network open, a mini-app's JS can exfiltrate
-     * data directly — the per-action consent gate (`http_fetch` etc.) no
-     * longer fences its network access. Accepted for full-featured
-     * widgets; the `connect-src`/`frame-src` allowances can be tightened
-     * back to an allowlist if a stricter posture is wanted.
+     *    images, audio, video + inline data URIs.
+     *  - `frame-src https:` — embed https iframes (sandboxed from the bridge).
+     *  - `base-uri 'none'`, `form-action 'none'` — no base / form hijack.
+     * Top-frame navigation away is refused by the platform nav guard.
      */
     public const val MINI_APP_CSP: String =
         "default-src 'none'; " +
@@ -155,7 +147,7 @@ public object MiniAppTheme {
             "img-src https: data:; " +
             "font-src https: data:; " +
             "media-src https: data:; " +
-            "connect-src https: wss:; " +
+            "connect-src 'none'; " +
             "frame-src https:; " +
             "base-uri 'none'; " +
             "form-action 'none'"
