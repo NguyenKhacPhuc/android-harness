@@ -20,10 +20,7 @@ import dev.weft.harness.agents.WeftAgent
 import dev.weft.harness.prompt.assembleSystemPrompt
 import dev.weft.harness.cost.QuotaPolicy
 import dev.weft.harness.cost.UsageStore
-import dev.weft.harness.memory.MemoryCompactTool
-import dev.weft.harness.memory.MemoryRecallTool
 import dev.weft.harness.memory.MemoryStore
-import dev.weft.harness.memory.MemoryStoreTool
 import dev.weft.harness.observability.Redactor
 import dev.weft.harness.observability.TraceStore
 import dev.weft.mcp.HttpMcpClient
@@ -41,98 +38,10 @@ import dev.weft.android.persistence.SqlDelightTraceStore
 import dev.weft.android.persistence.SqlDelightUsageStore
 import dev.weft.android.persistence.WeftDatabaseFactory
 import dev.weft.android.persistence.pruneExpiredKeyValues
-import dev.weft.tools.AlarmSetTool
-import dev.weft.tools.AppInstalledTool
-import dev.weft.tools.AppListLaunchableTool
-import dev.weft.tools.AudioRecordTool
-import dev.weft.tools.BatteryStatusTool
-import dev.weft.tools.ColorConvertTool
-import dev.weft.tools.DetectLanguageTool
-import dev.weft.tools.HashTool
-import dev.weft.tools.ImageCropTool
-import dev.weft.tools.ImageResizeTool
-import dev.weft.tools.ImageRotateTool
-import dev.weft.tools.JsonQueryTool
-import dev.weft.tools.MathEvalTool
-import dev.weft.tools.PhoneDialTool
-import dev.weft.tools.PowerKeepScreenOnTool
-import dev.weft.tools.PowerSetBrightnessTool
-import dev.weft.tools.RandomChoiceTool
-import dev.weft.tools.RegexMatchTool
-import dev.weft.tools.SettingsOpenTool
-import dev.weft.tools.ShortcutListTool
-import dev.weft.tools.ShortcutPushTool
-import dev.weft.tools.ShortcutRemoveTool
-import dev.weft.tools.SmsComposeTool
-import dev.weft.tools.TelephonyInfoTool
-import dev.weft.tools.TextTransformTool
-import dev.weft.tools.TranslateTextTool
-import dev.weft.tools.UrlParseTool
-import dev.weft.tools.VolumeGetTool
-import dev.weft.tools.VolumeSetTool
-import dev.weft.tools.WifiInfoTool
-import dev.weft.tools.BiometricAuthenticateTool
-import dev.weft.tools.BluetoothDeviceBatteryTool
-import dev.weft.tools.BluetoothListPairedTool
-import dev.weft.tools.BluetoothOpenSettingsTool
-import dev.weft.tools.CalendarCreateTool
-import dev.weft.tools.CameraCaptureTool
-import dev.weft.tools.CalendarDeleteTool
-import dev.weft.tools.CalendarReadTool
-import dev.weft.tools.CalendarUpdateTool
-import dev.weft.tools.ClipboardReadTool
-import dev.weft.tools.ClipboardWriteTool
-import dev.weft.tools.ContactsReadTool
-import dev.weft.tools.DateComputeTool
-import dev.weft.tools.DisplayInfoTool
-import dev.weft.tools.HapticsTool
-import dev.weft.tools.LocationCurrentTool
-import dev.weft.tools.LocationGeocodeTool
-import dev.weft.tools.LocationReverseGeocodeTool
-import dev.weft.tools.MediaListRecentTool
-import dev.weft.tools.MediaPickAnyTool
-import dev.weft.tools.MediaPickImageTool
-import dev.weft.tools.MediaPickVideoTool
-import dev.weft.tools.MediaQueryTool
-import dev.weft.tools.SensorAmbientLightTool
-import dev.weft.tools.SensorStepsTodayTool
-import dev.weft.tools.SpeechRecognizeTool
-import dev.weft.tools.SpeechSayTool
-import dev.weft.tools.VisionBarcodeTool
-import dev.weft.tools.VisionOcrTool
-import dev.weft.tools.DataDeleteTool
-import dev.weft.tools.DataQueryTool
-import dev.weft.tools.DataUpsertTool
-import dev.weft.tools.DeviceInfoTool
-import dev.weft.tools.ExternalLaunchAppTool
-import dev.weft.tools.ExternalOpenUrlTool
-import dev.weft.tools.ExternalShareTool
-import dev.weft.tools.FilesReadTool
-import dev.weft.tools.FilesSaveTool
-import dev.weft.tools.FilesShareTool
-import dev.weft.tools.MapsDirectionsTool
-import dev.weft.tools.NetworkFetchTool
-import dev.weft.tools.NetworkStatusTool
-import dev.weft.tools.NotifyShowTool
-import dev.weft.tools.PdfCreateTool
-import dev.weft.tools.PdfReadTool
-import dev.weft.tools.PdfRenderPagesTool
-import dev.weft.tools.ScheduleCancelTool
-import dev.weft.tools.ScheduleCreateTool
-import dev.weft.tools.ScheduleListTool
 import dev.weft.tools.WeftContext
 import dev.weft.tools.WeftTool
 import dev.weft.tools.FindToolTool
 import dev.weft.tools.EagerToolProvider
-import dev.weft.tools.SystemUserContextTool
-import dev.weft.tools.ToolMetadataOverride
-import dev.weft.tools.compositeToolProvider
-import dev.weft.tools.UiAskTool
-import dev.weft.tools.UiDialogTool
-import dev.weft.tools.UiNavigateTool
-import dev.weft.tools.UiNotifyTool
-import dev.weft.tools.UiRenderTool
-import dev.weft.tools.UiRequestPermissionTool
 import dev.weft.tools.context.DeviceContextProvider
 import io.ktor.client.plugins.contentnegotiation.ContentNegotiation
 import io.ktor.serialization.kotlinx.json.json
@@ -493,142 +402,20 @@ public class WeftRuntime(
     )
 
     /**
-     * The substrate's tool catalog plus any tools supplied by the app. App
-     * tools come last so the LLM sees the stable substrate prelude first
-     * (helps prompt caching once Koog ships Anthropic cache_control).
-     *
-     * Every tool here is platform-neutral — they talk through abstract
-     * contracts (`OsCapabilities`, `UiBridge`, `DataSource`, `MemoryStore`).
-     * `ui_render` / `ui_notify` delegate validation + rendering to the
-     * app's [UiBridge] impl, so the SDK doesn't know or care which UI
-     * framework the app is using.
+     * The substrate's prebuilt tool list — substrate built-ins (see
+     * [defaultToolCatalog]) + [extraToolsFactory]. App tools come last so
+     * the LLM sees the stable substrate prelude first (helps prompt
+     * caching). Does NOT include `find_tool` (which depends on
+     * [toolProvider], which depends on this list — circularity broken by
+     * separating the two). [tools] is the public view that appends
+     * `find_tool` when [hasOnDemandTools].
      */
-    /**
-     * The substrate's prebuilt tool list — substrate built-ins +
-     * [extraToolsFactory]. Does NOT include `find_tool` (which depends
-     * on [toolProvider], which depends on this list — circularity
-     * broken by separating the two). [tools] is the public view that
-     * appends `find_tool` when [hasOnDemandTools].
-     */
-    private val prebuiltTools: List<WeftTool<*, *>> = listOf<WeftTool<*, *>>(
-        NotifyShowTool(toolContext),
-        ScheduleCreateTool(toolContext),
-        ScheduleListTool(toolContext),
-        ScheduleCancelTool(toolContext),
-        UiAskTool(toolContext),
-        UiDialogTool(toolContext),
-        UiNavigateTool(toolContext),
-        UiRequestPermissionTool(toolContext),
-        UiRenderTool(toolContext),
-        UiNotifyTool(toolContext),
-        SystemUserContextTool(toolContext, contextRegistry),
-        DataQueryTool(toolContext, this.dataSources),
-        DataUpsertTool(toolContext, this.dataSources),
-        DataDeleteTool(toolContext, this.dataSources),
-        ExternalOpenUrlTool(toolContext),
-        ExternalLaunchAppTool(toolContext),
-        ExternalShareTool(toolContext),
-        ContactsReadTool(toolContext),
-        CalendarReadTool(toolContext),
-        CalendarCreateTool(toolContext),
-        CalendarUpdateTool(toolContext),
-        CalendarDeleteTool(toolContext),
-        ClipboardReadTool(toolContext),
-        ClipboardWriteTool(toolContext),
-        BiometricAuthenticateTool(toolContext),
-        HapticsTool(toolContext),
-        VisionOcrTool(toolContext),
-        VisionBarcodeTool(toolContext),
-        LocationCurrentTool(toolContext),
-        LocationGeocodeTool(toolContext),
-        LocationReverseGeocodeTool(toolContext),
-        SpeechSayTool(toolContext),
-        SpeechRecognizeTool(toolContext),
-        AudioRecordTool(toolContext),
-        CameraCaptureTool(toolContext),
-        FilesSaveTool(toolContext),
-        FilesReadTool(toolContext),
-        FilesShareTool(toolContext),
-        NetworkFetchTool(toolContext, networkClient),
-        MemoryStoreTool(toolContext, memoryStore),
-        MemoryRecallTool(toolContext, memoryStore),
-        MemoryCompactTool(toolContext, memoryStore),
-        // Read-only device-state tools (no permissions, no I/O of note).
-        BatteryStatusTool(toolContext),
-        NetworkStatusTool(toolContext),
-        DeviceInfoTool(toolContext),
-        DisplayInfoTool(toolContext),
-        // Intent-launching tools — hand off to user-installed apps.
-        MapsDirectionsTool(toolContext),
-        AlarmSetTool(toolContext),
-        // PDF — extract / render / create. PdfBox-Android backs read+create;
-        // platform PdfRenderer backs render-pages.
-        PdfReadTool(toolContext),
-        PdfRenderPagesTool(toolContext),
-        PdfCreateTool(toolContext),
-        // Bluetooth — narrow read-side surface. List paired, open settings,
-        // best-effort device battery. No scan/connect (Android-locked-down).
-        BluetoothListPairedTool(toolContext),
-        BluetoothOpenSettingsTool(toolContext),
-        BluetoothDeviceBatteryTool(toolContext),
-        // Gallery — read-only MediaStore queries. Returns content:// URIs
-        // the agent can hand to vision_ocr / external_share / files_read.
-        // Needs READ_MEDIA_* permissions; Play scrutinizes these. For
-        // "user picks the file" flows prefer the picker tools below.
-        MediaListRecentTool(toolContext),
-        MediaQueryTool(toolContext),
-        // Photo Picker — system-mediated, NO permission. Preferred over
-        // the MediaLibrary tools whenever the user is the one choosing.
-        MediaPickImageTool(toolContext),
-        MediaPickVideoTool(toolContext),
-        MediaPickAnyTool(toolContext),
-        // Installed-apps discovery — useful for routing decisions
-        // (which music app is installed? which maps?).
-        AppInstalledTool(toolContext),
-        AppListLaunchableTool(toolContext),
-        // Lightweight sensors — step counter, ambient light. Both
-        // returnable as "available=false" when the device lacks them.
-        SensorStepsTodayTool(toolContext),
-        SensorAmbientLightTool(toolContext),
-        // Pure date arithmetic — no I/O. Eliminates LLM date-math errors.
-        DateComputeTool(toolContext),
-        // Telephony — Intent-handoff dial / SMS compose, plus carrier
-        // info read. No permission for any of these.
-        PhoneDialTool(toolContext),
-        SmsComposeTool(toolContext),
-        TelephonyInfoTool(toolContext),
-        // Wifi state read. SSID needs LOCATION on Android 9+.
-        WifiInfoTool(toolContext),
-        // Volume control — per-stream get/set, normalized 0..1.
-        VolumeGetTool(toolContext),
-        VolumeSetTool(toolContext),
-        // Power — keep screen on, per-window brightness. Scoped to
-        // the foreground Activity; no permission needed.
-        PowerKeepScreenOnTool(toolContext),
-        PowerSetBrightnessTool(toolContext),
-        // Settings deep-link — one tool, many panels via enum.
-        SettingsOpenTool(toolContext),
-        // App shortcuts — pin / remove / list dynamic launcher shortcuts.
-        ShortcutPushTool(toolContext),
-        ShortcutRemoveTool(toolContext),
-        ShortcutListTool(toolContext),
-        // Translation + language ID via ML Kit (~30MB model per pair).
-        TranslateTextTool(toolContext),
-        DetectLanguageTool(toolContext),
-        // Image transforms — resize / crop / rotate via Bitmap APIs.
-        ImageResizeTool(toolContext),
-        ImageCropTool(toolContext),
-        ImageRotateTool(toolContext),
-        // Pure utility tools — no OS, no permissions. Reduce LLM
-        // arithmetic / string / regex mistakes by routing through code.
-        MathEvalTool(toolContext),
-        TextTransformTool(toolContext),
-        HashTool(toolContext),
-        RegexMatchTool(toolContext),
-        UrlParseTool(toolContext),
-        ColorConvertTool(toolContext),
-        RandomChoiceTool(toolContext),
-        JsonQueryTool(toolContext),
+    private val prebuiltTools: List<WeftTool<*, *>> = defaultToolCatalog(
+        ctx = toolContext,
+        contextRegistry = contextRegistry,
+        dataSources = this.dataSources,
+        networkClient = networkClient,
+        memoryStore = memoryStore,
     ) + extraToolsFactory(toolContext)
 
     /**
