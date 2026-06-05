@@ -1,6 +1,5 @@
 package dev.weft.android
 
-import ai.koog.agents.core.tools.ToolRegistry
 import ai.koog.prompt.llm.LLMCapability
 import ai.koog.prompt.llm.LLMProvider
 import ai.koog.prompt.llm.LLModel
@@ -485,6 +484,37 @@ public class WeftRuntime(
     public val systemPrompt: String = promptComposer.forTools(tools)
 
     /**
+     * Assembles [WeftAgent]s from [AgentDeclaration]s. Holds the
+     * agent-loop collaborators; reaches MCP-resolution + delegate
+     * recursion back through lambdas so the runtime keeps ownership of
+     * its caches.
+     */
+    private val agentBuilder = AgentBuilder(
+        toolContext = toolContext,
+        agentDeclarations = agentDeclarations,
+        promptComposer = promptComposer,
+        deps = AgentLoopDeps(
+            traceStore = traceStore,
+            usageStore = usageStore,
+            quotaPolicy = quotaPolicy,
+            redactor = redactor,
+            conversationStore = conversationStore,
+            memoryRegistry = memoryRegistry,
+            maxIterations = maxIterations,
+            maxOutputTokens = maxOutputTokens,
+            deviceSnapshotProvider = deviceSnapshotProvider,
+            extraVolatilePrefix = extraVolatilePrefix,
+            toolProvider = toolProvider,
+            hasOnDemandTools = hasOnDemandTools,
+        ),
+        resolveTools = { resolvedTools() },
+        resolvedSystemPrompt = { resolvedSystemPrompt() },
+        resolveAgent = { name, prov, pool ->
+            buildAgent(agentName = name, provider = prov, modelPoolOverride = pool)
+        },
+    )
+
+    /**
      * MCP-discovered tools, resolved asynchronously. Always present
      * (resolves to an empty list when [mcpServers] is empty). Per-server
      * failures route to [onMcpError]; the deferred itself never rejects.
@@ -564,22 +594,6 @@ public class WeftRuntime(
     public suspend fun resolvedTools(): List<WeftTool<*, *>> =
         tools + mcpToolsReady.await()
 
-    /**
-     * Per-agent variant of [resolvedSystemPrompt]: rebuilds the system
-     * prompt against [agentTools] (the filtered catalog) instead of the
-     * full one. Called only from [buildAgentForDeclaration] when an
-     * agent declares a non-empty [dev.weft.harness.agents.AgentDeclaration.allowedTools],
-     * so the agent's prompt describes exactly the tools it can call —
-     * not the substrate-wide ~50 + N-MCP catalog.
-     *
-     * Stage 1 of the [docs/architecture/tool-provider.md] design.
-     * Not cached across calls: builds fresh each [buildAgent] invocation
-     * for whichever agent is being constructed. Acceptable because
-     * [buildAgent] is the slow path (provider / model change events);
-     * the turn-loop hot path uses the closure captured at build time.
-     */
-    private fun systemPromptFor(agentTools: List<WeftTool<*, *>>): String =
-        promptComposer.forTools(agentTools)
 
     /**
      * Build a Koog-backed [WeftAgent] using a [WeftCredentialProvider].
@@ -649,157 +663,11 @@ public class WeftRuntime(
                 "Unknown agent: '$agentName'. " +
                     "Registered: ${agentDeclarations.keys}",
             )
-        return buildAgentForDeclaration(
+        return agentBuilder.build(
             declaration = declaration,
             provider = provider,
             modelPoolOverride = modelPoolOverride,
             strategyOverride = strategyOverride,
-        )
-    }
-
-    @OptIn(kotlin.time.ExperimentalTime::class)
-    private suspend fun buildAgentForDeclaration(
-        declaration: dev.weft.harness.agents.AgentDeclaration,
-        provider: dev.weft.contracts.WeftCredentialProvider,
-        modelPoolOverride: dev.weft.harness.agents.routing.ModelPool?,
-        strategyOverride: dev.weft.harness.agents.strategy.WeftStrategy?,
-    ): WeftAgent {
-        // Pick the Koog client + model pool + cache binder for the
-        // configured provider. Adding a new provider here means: import the
-        // Koog `*LLMClient`, pick the [ModelPool] (cheap/standard/vision/
-        // heavy), choose a `CacheBinder` (Anthropic-shaped providers get
-        // [AnthropicCacheBinder]; everything else falls back to
-        // [NoOpCacheBinder] until/unless Koog grows explicit cache markers
-        // for that provider). Per-turn model routing happens inside
-        // [WeftAgent] via [dev.weft.harness.agents.routing.DefaultModelRouter].
-        val (executor, defaultPool, cacheBinder) = buildProviderExecutor(provider)
-        val modelPool = modelPoolOverride ?: defaultPool
-
-        // Sub-agent runner: spawns isolated WeftAgents on demand. Shares
-        // the executor / pool / cacheBinder / usageStore / quota with the
-        // parent so costs aggregate and the daily quota covers the whole
-        // tree; isolates everything else (tools subset, fresh history,
-        // discarded trace store). The `delegate` and `delegate_parallel`
-        // tools wrap this runner so the orchestrator LLM can invoke it
-        // via the normal tool-call mechanism.
-        // Block the first buildAgent call until MCP discovery resolves.
-        // Subsequent calls see the already-completed deferred at zero
-        // cost. mcpToolsReady never rejects — failed servers go through
-        // onMcpError and yield empty.
-        val resolvedToolsAll = resolvedTools()
-
-        // Apply this declaration's tool allowlist. Empty allowlist =
-        // every tool is included (today's default-agent behavior).
-        // Non-empty = filter to whitelisted names only; MCP tools are
-        // matched in their qualified ${server}:${name} form.
-        val agentTools = if (declaration.allowedTools.isEmpty()) {
-            resolvedToolsAll
-        } else {
-            resolvedToolsAll.filter { it.descriptor.name in declaration.allowedTools }
-        }
-
-        // delegate_to_agent: present in every agent's catalog when more
-        // than the default agent is registered. The factory captures
-        // the active provider so the delegate inherits credentials.
-        // Depth is bounded by DelegateToAgentTool.MAX_DELEGATION_DEPTH
-        // via DelegationContext in the coroutine context — no extra
-        // tracking needed here.
-        val otherAgents = agentDeclarations.values.filter { it.name != declaration.name }
-        val delegateTool = if (otherAgents.isEmpty()) {
-            null
-        } else {
-            dev.weft.harness.agents.DelegateToAgentTool(
-                ctx = toolContext,
-                resolveAgent = { targetName ->
-                    buildAgent(
-                        agentName = targetName,
-                        provider = provider,
-                        modelPoolOverride = modelPoolOverride,
-                        strategyOverride = null,
-                    )
-                },
-                knownAgents = otherAgents,
-            )
-        }
-        val allTools = if (delegateTool != null) agentTools + delegateTool else agentTools
-
-        // Bind cache markers to the catalog: the LAST tool's descriptor
-        // gets `cache_control = OneHour`, which Anthropic uses as the
-        // caching breakpoint for the *entire* tool-definition prefix. For
-        // a substrate with 40+ tools this caches far more tokens than the
-        // system message alone. NoOpCacheBinder returns the list unchanged.
-        val cachedTools = cacheBinder.markedTools(allTools, dev.weft.harness.prompt.cache.CacheTier.STATIC)
-        val toolRegistry = ToolRegistry { cachedTools.forEach { tool(it) } }
-
-        // Compose the effective system prompt for this declaration:
-        // substrate's resolved prompt + the agent's role fragment.
-        //
-        // Catalog scoping (Stage 1 of docs/architecture/tool-provider.md):
-        //   - Empty allowlist (default agent) → reuse the cached full
-        //     catalog from resolvedSystemPrompt(). Identical to today.
-        //   - Non-empty allowlist → rebuild the prompt against agentTools
-        //     so it describes only the tools this agent can call. A
-        //     writer agent with two allowed tools no longer pays tokens
-        //     for ~50 unreachable tool descriptions.
-        //
-        // Cache trade-off: per-agent prompts don't share Anthropic's
-        // cache prefix with each other or with the default. For multi-
-        // agent hosts the catalog savings dominate the cache loss; for
-        // single-agent hosts the default branch keeps today's caching
-        // bit-for-bit.
-        val baseSystemPrompt = if (declaration.allowedTools.isEmpty()) {
-            resolvedSystemPrompt()
-        } else {
-            // Use allTools (filtered + delegate_to_agent if present)
-            // so the prompt-catalog matches what the wire registry
-            // actually accepts.
-            systemPromptFor(allTools)
-        }
-        val effectiveSystemPrompt = if (declaration.systemFragment.isBlank()) {
-            baseSystemPrompt
-        } else {
-            "$baseSystemPrompt\n\n## Role\n${declaration.systemFragment}"
-        }
-        return WeftAgent(
-            executor = executor,
-            modelPool = modelPool,
-            // DefaultModelRouter (rules: vision → vision-capable, coding
-            // hints → heavy, short fresh chat → cheap, else standard).
-            // Apps that want a single fixed model can pass
-            // dev.weft.harness.agents.routing.StaticModelRouter(modelPool.standard)
-            // via a future WeftRuntime opt-out.
-            toolRegistry = toolRegistry,
-            traceStore = traceStore,
-            baseSystemPromptSupplier = { effectiveSystemPrompt },
-            // Compose: device snapshot first (substrate default), then
-            // the app-supplied per-turn extension. Each section
-            // separated by a blank line so the LLM can tell them apart.
-            // Empty extensions are dropped so the prompt doesn't grow
-            // unnecessarily.
-            volatilePrefixSupplier = {
-                listOf(deviceSnapshotProvider(), extraVolatilePrefix())
-                    .filter { it.isNotBlank() }
-                    .joinToString("\n\n")
-            },
-            maxIterations = maxIterations,
-            usageStore = usageStore,
-            quotaPolicy = quotaPolicy,
-            redactor = redactor,
-            maxOutputTokens = maxOutputTokens,
-            conversationStore = conversationStore,
-            cacheBinder = cacheBinder,
-            memoryRegistry = memoryRegistry,
-            // Explicit override beats the declaration's own strategy
-            // (which itself defaults to DefaultStrategy() per the
-            // AgentDeclaration data class).
-            strategy = strategyOverride ?: declaration.strategy,
-            agentName = declaration.name,
-            // Stage 2: pass the runtime's lazy ToolProvider so the
-            // agent's strategy can resolve names from find_tool searches
-            // mid-turn. Pass null when the host is in pure eager mode
-            // (no on-demand tools) — saves the activation node from
-            // doing work it'd skip anyway.
-            toolProvider = if (hasOnDemandTools) toolProvider else null,
         )
     }
 
