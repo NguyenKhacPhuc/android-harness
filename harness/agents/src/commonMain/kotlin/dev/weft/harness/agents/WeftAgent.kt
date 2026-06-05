@@ -825,7 +825,11 @@ class WeftAgent(
                 )
             }
             trySend(StreamChunk.Failed(redactedMsg))
-            throw t
+            // The failure is already surfaced (Failed chunk + state.lastError),
+            // so don't re-throw — re-throwing escapes the turn's launch scope
+            // and crashes the host (e.g. a max_tokens truncation). Cancellation
+            // must still propagate.
+            if (t is kotlinx.coroutines.CancellationException) throw t
         }
         }  // close withContext(TraceContext)
         // Producer block ends here; channelFlow closes the channel and the
@@ -997,7 +1001,7 @@ class WeftAgent(
         }
         val compacted = compactor.compact(turns)
 
-        val initialPrompt: Prompt = prompt(id = "chat", params = LLMParams(maxTokens = maxOutputTokens)) {
+        val initialPrompt: Prompt = prompt(id = "chat", params = LLMParams(maxTokens = minOf(maxOutputTokens, modelPool.standard.maxOutputTokens?.toInt() ?: Int.MAX_VALUE))) {
             cacheBinder.cachedSystem(
                 this,
                 systemMsg,
@@ -1153,7 +1157,7 @@ class WeftAgent(
         }
         val compacted = compactor.compact(turns)
 
-        val initialPrompt: Prompt = prompt(id = "chat-stream", params = LLMParams(maxTokens = maxOutputTokens)) {
+        val initialPrompt: Prompt = prompt(id = "chat-stream", params = LLMParams(maxTokens = minOf(maxOutputTokens, modelPool.standard.maxOutputTokens?.toInt() ?: Int.MAX_VALUE))) {
             cacheBinder.cachedSystem(
                 this,
                 systemMsg,

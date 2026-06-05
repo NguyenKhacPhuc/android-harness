@@ -9,6 +9,7 @@ import dev.weft.contracts.OsCapabilities
 import dev.weft.contracts.ToolProvider
 import dev.weft.contracts.UiBridge
 import dev.weft.harness.agents.AgentDeclaration
+import dev.weft.harness.agents.WeftAgent
 import dev.weft.harness.conversation.ConversationStore
 import dev.weft.harness.cost.QuotaPolicy
 import dev.weft.harness.memory.MemoryStore
@@ -59,6 +60,7 @@ internal fun assembleWeftRuntime(
     quotaPolicy: QuotaPolicy,
     redactor: Redactor,
     maxIterations: Int,
+    maxOutputTokens: Int = WeftAgent.DEFAULT_MAX_OUTPUT_TOKENS,
     mcpServers: List<McpServerConfig>,
     onMcpError: (McpServerConfig, Throwable) -> Unit,
     mcpDiscoveryTimeout: Duration,
@@ -82,6 +84,7 @@ internal fun assembleWeftRuntime(
     quotaPolicy = quotaPolicy,
     redactor = redactor,
     maxIterations = maxIterations,
+    maxOutputTokens = maxOutputTokens,
     agents = agents,
     mcpServers = mcpServers,
     onMcpError = onMcpError,
