@@ -300,12 +300,12 @@ public class HtmlComponent(
 }
 
 /**
- * [WKNavigationDelegateProtocol] for HTML mini-apps: permits only our own
- * programmatic document load (`loadHTMLString` → an `about:blank` /
- * `data:` navigation of type *other*) and refuses everything else — link
- * clicks, form posts, back/forward, and any script-driven navigation to a
- * remote origin. A mini-app's only path out is the approved-action
- * bridge; it can't navigate away or escape the sandbox.
+ * [WKNavigationDelegateProtocol] for HTML mini-apps: refuses **main-frame**
+ * navigation away from the loaded document — link clicks, form posts,
+ * back/forward, or a script setting `location` to a remote origin can't
+ * replace the mini-app with another page. Sub-frame loads (iframes, gated
+ * by the CSP's `frame-src`) are allowed through, as is our own
+ * programmatic `loadHTMLString` (about:blank / data:).
  */
 @OptIn(ExperimentalForeignApi::class)
 private class MiniAppNavigationGuard : NSObject(), WKNavigationDelegateProtocol {
@@ -314,13 +314,14 @@ private class MiniAppNavigationGuard : NSObject(), WKNavigationDelegateProtocol 
         decidePolicyForNavigationAction: WKNavigationAction,
         decisionHandler: (WKNavigationActionPolicy) -> Unit,
     ) {
-        // `loadHTMLString(baseURL = null)` navigates to about:blank; in-page
-        // anchors stay on about:blank#…. Any other URL (a link click, a
-        // script setting location to an http/https/file origin, a form post)
-        // is refused.
+        // Allow iframe (sub-frame) loads; only guard the main frame.
+        val isMainFrame = decidePolicyForNavigationAction.targetFrame?.mainFrame ?: true
         val url = decidePolicyForNavigationAction.request.URL?.absoluteString.orEmpty()
+        // `loadHTMLString(baseURL = null)` navigates to about:blank; in-page
+        // anchors stay on about:blank#…. A real remote URL in the main frame
+        // (link click, script location change, form post) is refused.
         val isOwnDocumentLoad = url.isEmpty() || url.startsWith("about:blank") || url.startsWith("data:")
-        if (isOwnDocumentLoad) {
+        if (!isMainFrame || isOwnDocumentLoad) {
             decisionHandler(WKNavigationActionPolicy.WKNavigationActionPolicyAllow)
         } else {
             decisionHandler(WKNavigationActionPolicy.WKNavigationActionPolicyCancel)

@@ -306,14 +306,16 @@ private fun WebView.attachWeftBridge(bridge: MiniAppBridge, scope: CoroutineScop
 }
 
 /**
- * [WebViewClient] for HTML mini-apps: blocks every navigation away from
- * the loaded document. A mini-app's only path out is the approved-action
- * bridge — link clicks, redirects, and form submits are refused so it
- * can't load another origin or escape the sandbox. (The URL-loading
- * [WebViewComponent] keeps the default client; navigation is its point.)
+ * [WebViewClient] for HTML mini-apps: blocks **main-frame** navigation
+ * away from the loaded document — link clicks, redirects, and form
+ * submits can't replace the mini-app with another page. Sub-frame loads
+ * (iframes, gated by the CSP's `frame-src`) are allowed through. (The
+ * URL-loading [WebViewComponent] keeps the default client; navigation is
+ * its point.)
  */
 private open class MiniAppWebViewClient : WebViewClient() {
-    override fun shouldOverrideUrlLoading(view: WebView?, request: WebResourceRequest?): Boolean = true
+    override fun shouldOverrideUrlLoading(view: WebView?, request: WebResourceRequest?): Boolean =
+        request?.isForMainFrame != false
 }
 
 /**
