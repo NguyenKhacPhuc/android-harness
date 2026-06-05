@@ -17,7 +17,7 @@ class MiniAppBridgeTest {
     @Test
     fun successfulCallResolvesWithResultJson() {
         runBlocking {
-            val bridge = MiniAppBridge(MiniAppActionInvoker { _, _ -> """{"epoch":42}""" })
+            val bridge = MiniAppBridge(MiniAppActionInvoker { _, _, _ -> """{"epoch":42}""" })
             val js = bridge.handle("""{"id":"1","name":"get_time","args":{}}""")
             js shouldStartWith "window.weft.__resolve("
             js shouldContain "\"1\""
@@ -28,7 +28,7 @@ class MiniAppBridgeTest {
     @Test
     fun unknownActionRejectsWithNoSuchAction() {
         runBlocking {
-            val bridge = MiniAppBridge(MiniAppActionInvoker { _, _ -> null })
+            val bridge = MiniAppBridge(MiniAppActionInvoker { _, _, _ -> null })
             val js = bridge.handle("""{"id":"7","name":"nope","args":null}""")
             js shouldStartWith "window.weft.__reject("
             js shouldContain "no such action: nope"
@@ -40,7 +40,7 @@ class MiniAppBridgeTest {
     fun failingActionRejectsWithMessageAndDoesNotHang() {
         runBlocking {
             val bridge = MiniAppBridge(
-                MiniAppActionInvoker { _, _ -> throw IllegalStateException("boom") },
+                MiniAppActionInvoker { _, _, _ -> throw IllegalStateException("boom") },
             )
             val js = bridge.handle("""{"id":"3","name":"explode","args":{}}""")
             js shouldStartWith "window.weft.__reject("
@@ -50,7 +50,7 @@ class MiniAppBridgeTest {
 
     @Test
     fun parseCallExtractsIdNameAndArgsJson() {
-        val bridge = MiniAppBridge(MiniAppActionInvoker { _, _ -> null })
+        val bridge = MiniAppBridge(MiniAppActionInvoker { _, _, _ -> null })
         val call = bridge.parseCall("""{"id":"9","name":"store_set","args":{"k":"v"}}""")
         call shouldBe MiniAppCall("9", "store_set", """{"k":"v"}""")
     }
@@ -60,7 +60,7 @@ class MiniAppBridgeTest {
         runBlocking {
             var seen: String? = null
             val bridge = MiniAppBridge(
-                MiniAppActionInvoker { _, args -> seen = args; "1" },
+                MiniAppActionInvoker { _, _, args -> seen = args; "1" },
             )
             bridge.handle("""{"id":"1","name":"x","args":{"a":1}}""")
             seen shouldBe """{"a":1}"""
@@ -68,9 +68,23 @@ class MiniAppBridgeTest {
     }
 
     @Test
+    fun theInvokerReceivesTheRenderingMiniAppsId() {
+        runBlocking {
+            var seenId: String? = "unset"
+            val bridge = MiniAppBridge(
+                MiniAppActionInvoker { id, _, _ -> seenId = id; "1" },
+                miniAppId = "calc.1",
+            )
+            bridge.handle("""{"id":"1","name":"store_get","args":{"key":"n"}}""")
+            // a single registered invoker can now route per mini-app
+            seenId shouldBe "calc.1"
+        }
+    }
+
+    @Test
     fun malformedPayloadProducesNoJs() {
         runBlocking {
-            val bridge = MiniAppBridge(MiniAppActionInvoker { _, _ -> "x" })
+            val bridge = MiniAppBridge(MiniAppActionInvoker { _, _, _ -> "x" })
             bridge.handle("not json at all") shouldBe ""
         }
     }
@@ -78,7 +92,7 @@ class MiniAppBridgeTest {
     @Test
     fun resultJsonIsEscapedIntoAJsStringLiteral() {
         runBlocking {
-            val bridge = MiniAppBridge(MiniAppActionInvoker { _, _ -> "say \"hi\"\nbye" })
+            val bridge = MiniAppBridge(MiniAppActionInvoker { _, _, _ -> "say \"hi\"\nbye" })
             val js = bridge.handle("""{"id":"1","name":"x","args":null}""")
             js shouldContain "\\\"hi\\\""
             js shouldContain "\\n"
@@ -106,7 +120,7 @@ class MiniAppBridgeTest {
         runBlocking {
             var called = false
             val bridge = MiniAppBridge(
-                MiniAppActionInvoker { _, _ -> called = true; """{"ok":true}""" },
+                MiniAppActionInvoker { _, _, _ -> called = true; """{"ok":true}""" },
                 approvedActions = setOf("get_time", "store_set"),
             )
             val js = bridge.handle("""{"id":"1","name":"get_time","args":{}}""")
@@ -120,7 +134,7 @@ class MiniAppBridgeTest {
         runBlocking {
             var called = false
             val bridge = MiniAppBridge(
-                MiniAppActionInvoker { _, _ -> called = true; "{}" },
+                MiniAppActionInvoker { _, _, _ -> called = true; "{}" },
                 approvedActions = setOf("get_time"),
             )
             val js = bridge.handle("""{"id":"9","name":"delete_everything","args":{}}""")
@@ -135,7 +149,7 @@ class MiniAppBridgeTest {
     fun anEmptyApprovedSetRefusesEverything() {
         runBlocking {
             val bridge = MiniAppBridge(
-                MiniAppActionInvoker { _, _ -> "{}" },
+                MiniAppActionInvoker { _, _, _ -> "{}" },
                 approvedActions = emptySet(),
             )
             val js = bridge.handle("""{"id":"1","name":"get_time","args":{}}""")
@@ -146,7 +160,7 @@ class MiniAppBridgeTest {
     @Test
     fun aNullApprovedSetIsUngatedAndCallsThrough() {
         runBlocking {
-            val bridge = MiniAppBridge(MiniAppActionInvoker { _, _ -> """{"ok":true}""" })
+            val bridge = MiniAppBridge(MiniAppActionInvoker { _, _, _ -> """{"ok":true}""" })
             val js = bridge.handle("""{"id":"1","name":"anything","args":{}}""")
             js shouldStartWith "window.weft.__resolve("
         }
@@ -161,7 +175,7 @@ class MiniAppBridgeTest {
         }
     }
 
-    private fun noopInvoker() = MiniAppActionInvoker { _, _ -> null }
+    private fun noopInvoker() = MiniAppActionInvoker { _, _, _ -> null }
 
     @Test
     fun setStateThenGetStateRoundTripsTheSavedState() {
