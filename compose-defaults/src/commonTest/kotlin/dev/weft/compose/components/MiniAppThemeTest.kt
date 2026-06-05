@@ -52,11 +52,36 @@ class MiniAppThemeTest {
     }
 
     @Test
-    fun decoratePrependsStyleBeforeTheMiniAppHtml() {
+    fun decoratePrependsHeadBeforeTheMiniAppHtml() {
         val out = MiniAppTheme.decorate("<h1>Hi</h1>", tokens, includeThemeScript = false)
-        out.indexOf("<style>") shouldBe 0
+        // CSP meta leads, then the style tag, both before the mini-app html
+        (out.indexOf("Content-Security-Policy") < out.indexOf("<style>")) shouldBe true
         (out.indexOf("<style>") < out.indexOf("<h1>Hi</h1>")) shouldBe true
         out shouldNotContain "window.weft.theme"
+    }
+
+    @Test
+    fun cspMetaSealsNetworkNavigationAndRemoteResources() {
+        val csp = MiniAppTheme.cspMetaTag()
+        csp shouldContain "http-equiv=\"Content-Security-Policy\""
+        // the mini-app's only path out is the bridge — its own network is dead
+        csp shouldContain "connect-src 'none'"
+        csp shouldContain "default-src 'none'"
+        // no navigation away, no form posts, no base hijack, no iframes
+        csp shouldContain "base-uri 'none'"
+        csp shouldContain "form-action 'none'"
+        csp shouldContain "frame-src 'none'"
+        // self-contained inline widgets still run
+        csp shouldContain "script-src 'unsafe-inline'"
+    }
+
+    @Test
+    fun decorateLeadsWithTheSealingCsp() {
+        val out = MiniAppTheme.decorate("<h1>Hi</h1>", tokens, includeThemeScript = true)
+        // the document leads with the CSP meta tag
+        out.indexOf("<meta") shouldBe 0
+        (out.indexOf("Content-Security-Policy") < out.indexOf("window.weft.theme")) shouldBe true
+        (out.indexOf("Content-Security-Policy") < out.indexOf("<h1>Hi</h1>")) shouldBe true
     }
 
     @Test

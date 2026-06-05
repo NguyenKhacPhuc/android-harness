@@ -122,12 +122,46 @@ public object MiniAppTheme {
         "<script>window.weft = window.weft || {}; window.weft.theme = ${themeJson(tokens)};</script>"
 
     /**
-     * Prepend the theme [styleTag] (always) and, when [includeThemeScript],
-     * the [themeScript] to the mini-app's [html]. The mini-app content is
+     * The sealing `<meta>` Content-Security-Policy injected ahead of every
+     * mini-app document. A mini-app's only path to the outside is the
+     * approved-action bridge, so the page itself is locked down:
+     *  - `default-src 'none'` — deny everything not explicitly allowed.
+     *  - `connect-src 'none'` — no `fetch` / `XHR` / `WebSocket`; the
+     *    mini-app cannot make network calls of its own.
+     *  - `script-src` / `style-src 'unsafe-inline'` — self-contained
+     *    inline widgets + the injected theme still run; no *remote* code.
+     *  - `img-src` / `font-src data:` — inline data-URI assets only, no
+     *    remote sub-resource fetches.
+     *  - `base-uri 'none'`, `form-action 'none'`, `frame-src 'none'` — no
+     *    base hijack, no form posts off-origin, no iframes.
+     * Combined with the WebView's null base URL and the platform
+     * navigation guard, this seals the side doors around the bridge.
+     */
+    public const val MINI_APP_CSP: String =
+        "default-src 'none'; " +
+            "script-src 'unsafe-inline'; " +
+            "style-src 'unsafe-inline'; " +
+            "img-src data:; " +
+            "font-src data:; " +
+            "connect-src 'none'; " +
+            "base-uri 'none'; " +
+            "form-action 'none'; " +
+            "frame-src 'none'"
+
+    /** The CSP as a `<meta http-equiv>` tag, honored by Android WebView + WKWebView. */
+    public fun cspMetaTag(): String =
+        "<meta http-equiv=\"Content-Security-Policy\" content=\"$MINI_APP_CSP\">"
+
+    /**
+     * Prepend the sealing [cspMetaTag] (always, first), the theme
+     * [styleTag] (always) and, when [includeThemeScript], the
+     * [themeScript] to the mini-app's [html]. The mini-app content is
      * left untouched after the injected head.
      */
     public fun decorate(html: String, tokens: MiniAppThemeTokens, includeThemeScript: Boolean): String =
         buildString {
+            append(cspMetaTag())
+            append('\n')
             append(styleTag(tokens))
             if (includeThemeScript) {
                 append('\n')
