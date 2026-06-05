@@ -72,6 +72,9 @@ kotlin {
         commonTest.dependencies {
             implementation(libs.kotest.assertions.core)
             implementation(libs.kotlinx.coroutines.test)
+            // MockEngine lets us exercise the shared TokenEndpoint + orchestrator
+            // HTTP/JSON path with canned provider responses — no real network.
+            implementation(libs.ktor.client.mock)
         }
         jvmTest.dependencies {
             implementation(libs.kotest.runner.junit5)
