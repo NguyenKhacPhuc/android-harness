@@ -85,8 +85,10 @@ class MigrationTest {
         driver.execute(null, V1_MSG_INSERT_1, 0)
         driver.execute(null, V1_MSG_INSERT_2, 0)
 
-        // Migrate v1 → v2.
-        WeftDatabase.Schema.migrate(driver, 1, 2, AfterVersion(2) {})
+        // Migrate v1 → latest. Must reach the current schema version, not a
+        // fixed one — the generated queries below (e.g. selectMessagesByConversation
+        // reads `agent_name`, added in 4.sqm) target the latest schema.
+        WeftDatabase.Schema.migrate(driver, 1, WeftDatabase.Schema.version, AfterVersion(2) {})
 
         val db = WeftDatabase(driver)
 
