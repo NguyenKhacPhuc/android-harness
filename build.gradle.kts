@@ -22,57 +22,64 @@ allprojects {
     version = (findProperty("weftVersion") as String?) ?: "0.0.1"
 }
 
-// Publishing — every KMP module is published to GitHub Packages so host apps
-// (undercurrent) can consume `dev.weft:weft-<module>` artifacts instead of a
-// composite `includeBuild`. The artifactId is rewritten from the project name
-// (`runtime`, `harness:agents`) to the consumed coordinate (`weft-runtime`,
-// `weft-harness-agents`).
+// Lint baseline — ALWAYS applied (independent of publishing). CI gates only
+// NEW lint errors. Regenerate with `./gradlew updateLintBaseline`.
 subprojects {
     pluginManager.withPlugin("com.android.library") {
-        apply(plugin = "maven-publish")
-
-        // devtools keeps its own group to match the consumer coordinate
-        // `dev.weft.devtools:weft-devtools`; every other module is `dev.weft`.
-        if (name == "devtools") group = "dev.weft.devtools"
-
-        extensions.configure<KotlinMultiplatformExtension> {
-            androidTarget { publishLibraryVariants("release") }
-        }
-
-        // Lint baseline: capture today's findings so CI gates only NEW lint
-        // errors. Regenerate with `./gradlew updateLintBaseline`.
         extensions.configure<com.android.build.api.dsl.LibraryExtension> {
             lint { baseline = file("lint-baseline.xml") }
         }
+    }
+}
 
-        // Only declare the remote repo when credentials exist — Gradle rejects a
-        // maven repo with a null username, which would break non-publish builds
-        // and IDE sync. publishToMavenLocal is unaffected (separate repo).
-        val gprUser = (findProperty("gpr.user") as String?) ?: System.getenv("GITHUB_ACTOR")
-        val gprKey = (findProperty("gpr.key") as String?) ?: System.getenv("GITHUB_TOKEN")
-        if (gprUser != null && gprKey != null) {
-            extensions.configure<PublishingExtension> {
-                repositories {
-                    maven {
-                        name = "GitHubPackages"
-                        url = uri("https://maven.pkg.github.com/NguyenKhacPhuc/android-harness")
-                        credentials {
-                            username = gprUser
-                            password = gprKey
+// Publishing — every KMP module is published to GitHub Packages so host apps
+// (undercurrent) can consume `dev.weft:weft-<module>` artifacts. ONLY applied
+// when actually publishing (`-PweftVersion`). Applying maven-publish
+// unconditionally makes KMP resolve inter-module deps by GAV, and the
+// artifactId rewrite (`security` -> `weft-security`) then breaks composite-build
+// consumers (undercurrent local dev) whose auto-substitution can't match the
+// renamed coordinate. So gate it — composite consumers use plain project deps.
+if (providers.gradleProperty("weftVersion").isPresent) {
+    subprojects {
+        pluginManager.withPlugin("com.android.library") {
+            apply(plugin = "maven-publish")
+
+            // devtools keeps its own group to match the consumer coordinate
+            // `dev.weft.devtools:weft-devtools`; every other module is `dev.weft`.
+            if (name == "devtools") group = "dev.weft.devtools"
+
+            extensions.configure<KotlinMultiplatformExtension> {
+                androidTarget { publishLibraryVariants("release") }
+            }
+
+            // Only declare the remote repo when credentials exist — Gradle rejects
+            // a maven repo with a null username. publishToMavenLocal is unaffected.
+            val gprUser = (findProperty("gpr.user") as String?) ?: System.getenv("GITHUB_ACTOR")
+            val gprKey = (findProperty("gpr.key") as String?) ?: System.getenv("GITHUB_TOKEN")
+            if (gprUser != null && gprKey != null) {
+                extensions.configure<PublishingExtension> {
+                    repositories {
+                        maven {
+                            name = "GitHubPackages"
+                            url = uri("https://maven.pkg.github.com/NguyenKhacPhuc/android-harness")
+                            credentials {
+                                username = gprUser
+                                password = gprKey
+                            }
                         }
                     }
                 }
             }
-        }
 
-        // Rewrite artifactIds AFTER the KMP plugin finalizes them, so the
-        // platform publications (…-jvm, …-android, …-iosarm64) get prefixed too.
-        val publishName = "weft-" + path.removePrefix(":").replace(":", "-")
-        afterEvaluate {
-            extensions.configure<PublishingExtension> {
-                publications.withType<MavenPublication>().configureEach {
-                    if (!artifactId.startsWith("weft-")) {
-                        artifactId = artifactId.replaceFirst(project.name, publishName)
+            // Rewrite artifactIds AFTER the KMP plugin finalizes them, so the
+            // platform publications (…-jvm, …-android, …-iosarm64) get prefixed too.
+            val publishName = "weft-" + path.removePrefix(":").replace(":", "-")
+            afterEvaluate {
+                extensions.configure<PublishingExtension> {
+                    publications.withType<MavenPublication>().configureEach {
+                        if (!artifactId.startsWith("weft-")) {
+                            artifactId = artifactId.replaceFirst(project.name, publishName)
+                        }
                     }
                 }
             }
