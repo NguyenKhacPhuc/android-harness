@@ -100,3 +100,13 @@ subprojects {
         .configureEach { enabled = false }
 }
 
+// Gradle 9 fails a JVM test task that has sources but discovers no tests.
+// Across these KMP modules the kotest suites run via jvmTest; other JVM test
+// tasks (e.g. androidUnitTest) compile the shared specs but legitimately run
+// zero. Don't fail on that.
+subprojects {
+    tasks.withType<Test>().configureEach {
+        failOnNoDiscoveredTests = false
+    }
+}
+

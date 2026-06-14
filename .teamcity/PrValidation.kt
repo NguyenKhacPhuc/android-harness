@@ -20,10 +20,10 @@ object PrValidation : BuildType({
         preflightStep()
         // Stage 2 — code quality
         gradleStep("quality · detekt + lint", "detekt lint")
-        // Stage 2 — testing: shared (jvmTest = kotest), Android (Robolectric/unit),
-        // iOS (simulator). Root `test` only runs Android unit tests, so jvmTest
-        // and iosSimulatorArm64Test are explicit.
-        gradleStep("test · shared + android + ios", "jvmTest test iosSimulatorArm64Test")
+        // Stage 2 — testing: shared (jvmTest = kotest) + iOS (simulator). weft has
+        // no Android unit tests — kotest runs via jvmTest, so `test`
+        // (androidUnitTest) would compile the specs but discover zero tests.
+        gradleStep("test · shared + ios", "jvmTest iosSimulatorArm64Test")
         // Stage 3 — build: Android AARs + iOS klibs
         gradleStep("build · android + ios", "assembleDebug compileKotlinIosSimulatorArm64")
     }
