@@ -3,9 +3,9 @@ import jetbrains.buildServer.configs.kotlin.*
 /*
  * Weft substrate SDK — TeamCity versioned settings (Kotlin DSL, portable).
  *
- * Pipeline:
- *   BuildWeft    — compile (Android + iOS) + tests + detekt, on push/PR
- *   PublishWeft  — `./gradlew publish` to GitHub Packages, manual + version param
+ * Pipeline (two configs):
+ *   PrValidation — build + test + lint + detekt, on main + PRs
+ *   PublishWeft  — all of the above + `publish` to GitHub Packages, manual + version
  *
  * The VCS root already exists on the server (Weft_Weft) and is referenced by
  * id from Common.kt — not redefined here.
@@ -16,7 +16,7 @@ version = "2025.03"
 project {
     description = "Weft SDK CI — KMP substrate published to GitHub Packages"
 
-    buildType(BuildWeft)
+    buildType(PrValidation)
     buildType(PublishWeft)
 
     params {
@@ -26,8 +26,8 @@ project {
 
         param("github.username", "NguyenKhacPhuc")
         // `github.token` is a SECRET — do not declare it here. Add it in the
-        // TeamCity UI (Project → Parameters → Add → type Password) with
-        // write:packages scope. TeamCity stores the value securely and writes
-        // the credentialsJSON token back into this file on the next sync.
+        // TeamCity UI (Project → Parameters → Add → type Password). Needs
+        // write:packages (publish) + repo:status (PR commit-status publisher).
+        // TeamCity stores it securely and writes the credentialsJSON token back.
     }
 }
