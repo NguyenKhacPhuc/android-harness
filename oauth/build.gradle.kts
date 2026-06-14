@@ -71,6 +71,10 @@ kotlin {
         }
         commonTest.dependencies {
             implementation(libs.kotest.assertions.core)
+            // Spec DSL (BehaviorSpec / Given-When-Then) lives in the framework
+            // engine, not the matchers artifact. commonTest metadata compilation
+            // needs it; jvmTest's kotest-runner-junit5 masks the gap on JVM only.
+            implementation(libs.kotest.framework.engine)
             implementation(libs.kotlinx.coroutines.test)
             // MockEngine lets us exercise the shared TokenEndpoint + orchestrator
             // HTTP/JSON path with canned provider responses — no real network.
