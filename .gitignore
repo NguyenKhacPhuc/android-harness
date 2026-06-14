@@ -126,3 +126,6 @@ yarn-error.log*
 # ---- Docs site build output ----
 site/
 .docusaurus/
+
+# TeamCity DSL local compile output
+.teamcity/target/
