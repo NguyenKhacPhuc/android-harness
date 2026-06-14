@@ -1,5 +1,6 @@
 import jetbrains.buildServer.configs.kotlin.*
 import jetbrains.buildServer.configs.kotlin.buildSteps.gradle
+import jetbrains.buildServer.configs.kotlin.buildSteps.script
 
 /*
  * VCS root already exists on the server — referenced by id, not defined here.
@@ -15,6 +16,14 @@ fun BuildType.weftCheckout() {
     }
 }
 
+/** Preflight: report the toolchain so build logs show what ran. */
+fun BuildSteps.preflightStep() {
+    script {
+        name = "preflight · toolchain"
+        scriptContent = "java -version; xcodebuild -version || true; ./gradlew --version | grep -i gradle || true"
+    }
+}
+
 /** Gradle step using the wrapper + agent JDK 17, run at the repo root. */
 fun BuildSteps.gradleStep(stepName: String, gradleTasks: String) {
     gradle {
@@ -25,8 +34,9 @@ fun BuildSteps.gradleStep(stepName: String, gradleTasks: String) {
         jdkHome = "%jdk.home%"
         // --no-configuration-cache: TeamCity's gradle-runner init script
         // registers build listeners, which the config cache (on in
-        // gradle.properties) rejects under Gradle 9. Local dev keeps the cache.
-        gradleParams = "--no-daemon --stacktrace --no-configuration-cache"
+        // gradle.properties) rejects under Gradle 9. The daemon is kept (a
+        // persistent self-hosted agent reuses it across the staged steps).
+        gradleParams = "--stacktrace --no-configuration-cache"
     }
 }
 

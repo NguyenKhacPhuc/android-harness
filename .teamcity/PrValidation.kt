@@ -16,14 +16,16 @@ object PrValidation : BuildType({
     weftCheckout()
 
     steps {
-        gradleStep(
-            "build + test + lint + detekt",
-            // assembleDebug builds the Android AARs; compileKotlinIosSimulatorArm64
-            // builds iOS. jvmTest runs the kotest suites (the root `test` task
-            // only runs Android unit tests, NOT jvmTest); `test` adds the Android
-            // unit tests. lint = Android lint, detekt = Kotlin static analysis.
-            "detekt lint assembleDebug compileKotlinIosSimulatorArm64 jvmTest test",
-        )
+        // Stage 1 — environment
+        preflightStep()
+        // Stage 2 — code quality
+        gradleStep("quality · detekt + lint", "detekt lint")
+        // Stage 2 — testing: shared (jvmTest = kotest), Android (Robolectric/unit),
+        // iOS (simulator). Root `test` only runs Android unit tests, so jvmTest
+        // and iosSimulatorArm64Test are explicit.
+        gradleStep("test · shared + android + ios", "jvmTest test iosSimulatorArm64Test")
+        // Stage 3 — build: Android AARs + iOS klibs
+        gradleStep("build · android + ios", "assembleDebug compileKotlinIosSimulatorArm64")
     }
 
     triggers {

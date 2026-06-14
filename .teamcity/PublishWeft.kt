@@ -22,11 +22,19 @@ object PublishWeft : BuildType({
     weftCheckout()
 
     steps {
+        // Stage 1 — environment
+        preflightStep()
+        // Stage 2 — code quality
+        gradleStep("quality · detekt + lint", "detekt lint")
+        // Stage 2 — testing (shared + android + ios)
+        gradleStep("test · shared + android + ios", "jvmTest test iosSimulatorArm64Test")
+        // Stage 3 — build (android + ios)
+        gradleStep("build · android + ios", "assembleDebug compileKotlinIosSimulatorArm64")
+        // Stage 4 — deploy: publish artifacts to GitHub Packages (the SDK's
+        // "deployment"). For a library this is real, not a gated scaffold.
         gradleStep(
-            "build + test + lint + detekt + publish",
-            // jvmTest runs kotest (root `test` only runs Android unit tests);
-            // publish builds + uploads all variants incl. the iOS klibs.
-            "detekt lint assembleDebug jvmTest test publish -PweftVersion=%weft.version% -Pgpr.user=%github.username% -Pgpr.key=%github.token%",
+            "deploy · publish to GitHub Packages",
+            "publish -PweftVersion=%weft.version% -Pgpr.user=%github.username% -Pgpr.key=%github.token%",
         )
     }
 
