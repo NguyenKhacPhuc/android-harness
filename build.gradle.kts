@@ -39,6 +39,12 @@ subprojects {
             androidTarget { publishLibraryVariants("release") }
         }
 
+        // Lint baseline: capture today's findings so CI gates only NEW lint
+        // errors. Regenerate with `./gradlew updateLintBaseline`.
+        extensions.configure<com.android.build.api.dsl.LibraryExtension> {
+            lint { baseline = file("lint-baseline.xml") }
+        }
+
         // Only declare the remote repo when credentials exist — Gradle rejects a
         // maven repo with a null username, which would break non-publish builds
         // and IDE sync. publishToMavenLocal is unaffected (separate repo).

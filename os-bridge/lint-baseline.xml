@@ -1,0 +1,465 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<issues format="6" by="lint 8.13.0" type="baseline" client="gradle" dependencies="false" name="AGP (8.13.0)" variant="all" version="8.13.0">
+
+    <issue
+        id="MissingPermission"
+        message="Call requires permission which may be rejected by user: code should explicitly check to see if permission is available (with `checkPermission`) or explicitly handle a potential `SecurityException`"
+        errorLine1="                val task = fused.getCurrentLocation(req, /* cancellationToken = */ null)"
+        errorLine2="                           ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~">
+        <location
+            file="src/androidMain/kotlin/dev/weft/osbridge/location/AndroidLocation.kt"
+            line="54"
+            column="28"/>
+    </issue>
+
+    <issue
+        id="ExactAlarm"
+        message="`USE_EXACT_ALARM` can only be used when targeting API level 33 or higher"
+        errorLine1="    &lt;uses-permission android:name=&quot;android.permission.USE_EXACT_ALARM&quot; />"
+        errorLine2="                                   ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~">
+        <location
+            file="src/androidMain/AndroidManifest.xml"
+            line="45"
+            column="36"/>
+    </issue>
+
+    <issue
+        id="InlinedApi"
+        message="Field requires API level 28 (current min is 26): `android.bluetooth.BluetoothProfile#HID_DEVICE`"
+        errorLine1="        val profiles = listOf(BluetoothProfile.A2DP, BluetoothProfile.HEADSET, BluetoothProfile.HID_DEVICE)"
+        errorLine2="                                                                               ~~~~~~~~~~~~~~~~~~~~~~~~~~~">
+        <location
+            file="src/androidMain/kotlin/dev/weft/osbridge/bluetooth/AndroidBluetooth.kt"
+            line="104"
+            column="80"/>
+    </issue>
+
+    <issue
+        id="InlinedApi"
+        message="Field requires API level 31 (current min is 26): `android.os.VibrationEffect.Composition#PRIMITIVE_THUD`"
+        errorLine1="            HapticEffect.WARNING -> composition.addPrimitive(VibrationEffect.Composition.PRIMITIVE_THUD)"
+        errorLine2="                                                             ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~">
+        <location
+            file="src/androidMain/kotlin/dev/weft/osbridge/haptics/AndroidHaptics.kt"
+            line="63"
+            column="62"/>
+    </issue>
+
+    <issue
+        id="InlinedApi"
+        message="Field requires API level 31 (current min is 26): `android.os.VibrationEffect.Composition#PRIMITIVE_THUD`"
+        errorLine1="                composition.addPrimitive(VibrationEffect.Composition.PRIMITIVE_THUD, 1f, 0)"
+        errorLine2="                                         ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~">
+        <location
+            file="src/androidMain/kotlin/dev/weft/osbridge/haptics/AndroidHaptics.kt"
+            line="65"
+            column="42"/>
+    </issue>
+
+    <issue
+        id="InlinedApi"
+        message="Field requires API level 31 (current min is 26): `android.os.VibrationEffect.Composition#PRIMITIVE_THUD`"
+        errorLine1="                composition.addPrimitive(VibrationEffect.Composition.PRIMITIVE_THUD, 1f, 60)"
+        errorLine2="                                         ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~">
+        <location
+            file="src/androidMain/kotlin/dev/weft/osbridge/haptics/AndroidHaptics.kt"
+            line="66"
+            column="42"/>
+    </issue>
+
+    <issue
+        id="InlinedApi"
+        message="Field requires API level 33 (current min is 26): `android.Manifest.permission#POST_NOTIFICATIONS`"
+        errorLine1="    Permission.NOTIFICATIONS -> android.Manifest.permission.POST_NOTIFICATIONS"
+        errorLine2="                                ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~">
+        <location
+            file="src/androidMain/kotlin/dev/weft/osbridge/permissions/AndroidPermissions.kt"
+            line="124"
+            column="33"/>
+    </issue>
+
+    <issue
+        id="InlinedApi"
+        message="Field requires API level 33 (current min is 26): `android.Manifest.permission#READ_MEDIA_IMAGES`"
+        errorLine1="    Permission.READ_MEDIA_IMAGES -> android.Manifest.permission.READ_MEDIA_IMAGES"
+        errorLine2="                                    ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~">
+        <location
+            file="src/androidMain/kotlin/dev/weft/osbridge/permissions/AndroidPermissions.kt"
+            line="129"
+            column="37"/>
+    </issue>
+
+    <issue
+        id="InlinedApi"
+        message="Field requires API level 33 (current min is 26): `android.Manifest.permission#READ_MEDIA_VIDEO`"
+        errorLine1="    Permission.READ_MEDIA_VIDEO -> android.Manifest.permission.READ_MEDIA_VIDEO"
+        errorLine2="                                   ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~">
+        <location
+            file="src/androidMain/kotlin/dev/weft/osbridge/permissions/AndroidPermissions.kt"
+            line="130"
+            column="36"/>
+    </issue>
+
+    <issue
+        id="InlinedApi"
+        message="Field requires API level 33 (current min is 26): `android.Manifest.permission#READ_MEDIA_AUDIO`"
+        errorLine1="    Permission.READ_MEDIA_AUDIO -> android.Manifest.permission.READ_MEDIA_AUDIO"
+        errorLine2="                                   ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~">
+        <location
+            file="src/androidMain/kotlin/dev/weft/osbridge/permissions/AndroidPermissions.kt"
+            line="131"
+            column="36"/>
+    </issue>
+
+    <issue
+        id="InlinedApi"
+        message="Field requires API level 28 (current min is 26): `android.provider.Settings#ACTION_DATA_USAGE_SETTINGS`"
+        errorLine1="        SettingsPanel.DATA_USAGE -> Intent(Settings.ACTION_DATA_USAGE_SETTINGS)"
+        errorLine2="                                           ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~">
+        <location
+            file="src/androidMain/kotlin/dev/weft/osbridge/settings/AndroidSystemSettings.kt"
+            line="40"
+            column="44"/>
+    </issue>
+
+    <issue
+        id="NewApi"
+        message="Call requires API level 28 (current min is 26): `android.content.ClipboardManager#clearPrimaryClip`"
+        errorLine1="        cm.clearPrimaryClip()"
+        errorLine2="           ~~~~~~~~~~~~~~~~">
+        <location
+            file="src/androidMain/kotlin/dev/weft/osbridge/clipboard/AndroidClipboard.kt"
+            line="43"
+            column="12"/>
+    </issue>
+
+    <issue
+        id="WrongConstant"
+        message="Must be one of: BluetoothAdapter.STATE_DISCONNECTED, BluetoothAdapter.STATE_CONNECTING, BluetoothAdapter.STATE_CONNECTED, BluetoothAdapter.STATE_DISCONNECTING"
+        errorLine1="                a.getProfileConnectionState(profile) == BluetoothProfile.STATE_CONNECTED"
+        errorLine2="                                                        ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~">
+        <location
+            file="src/androidMain/kotlin/dev/weft/osbridge/bluetooth/AndroidBluetooth.kt"
+            line="111"
+            column="57"/>
+    </issue>
+
+    <issue
+        id="GradleDependency"
+        message="A newer version of `compileSdkVersion` than 35 is available: 36"
+        errorLine1="    compileSdk = libs.versions.compileSdk.get().toInt()"
+        errorLine2="    ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~">
+        <location
+            file="build.gradle.kts"
+            line="108"
+            column="5"/>
+    </issue>
+
+    <issue
+        id="SwitchIntDef"
+        message="Switch statement on an `int` with known associated constant missing case `BiometricManager.BIOMETRIC_SUCCESS`"
+        errorLine1="        when (auth) {"
+        errorLine2="        ~~~~">
+        <location
+            file="src/androidMain/kotlin/dev/weft/osbridge/biometrics/AndroidBiometrics.kt"
+            line="65"
+            column="9"/>
+    </issue>
+
+    <issue
+        id="TrustAllX509TrustManager"
+        message="`checkClientTrusted` is empty, which could cause insecure network traffic due to trusting arbitrary TLS/SSL certificates presented by peers">
+        <location
+            file="$GRADLE_USER_HOME/caches/modules-2/files-2.1/org.bouncycastle/bcpkix-jdk15to18/1.72/32faf4d74dbc333fb3a7a6c80c30417cf888fc7a/bcpkix-jdk15to18-1.72.jar"/>
+    </issue>
+
+    <issue
+        id="TrustAllX509TrustManager"
+        message="`checkClientTrusted` is empty, which could cause insecure network traffic due to trusting arbitrary TLS/SSL certificates presented by peers">
+        <location
+            file="$GRADLE_USER_HOME/caches/modules-2/files-2.1/org.bouncycastle/bcpkix-jdk15to18/1.72/32faf4d74dbc333fb3a7a6c80c30417cf888fc7a/bcpkix-jdk15to18-1.72.jar"/>
+    </issue>
+
+    <issue
+        id="TrustAllX509TrustManager"
+        message="`checkServerTrusted` is empty, which could cause insecure network traffic due to trusting arbitrary TLS/SSL certificates presented by peers">
+        <location
+            file="$GRADLE_USER_HOME/caches/modules-2/files-2.1/org.bouncycastle/bcpkix-jdk15to18/1.72/32faf4d74dbc333fb3a7a6c80c30417cf888fc7a/bcpkix-jdk15to18-1.72.jar"/>
+    </issue>
+
+    <issue
+        id="ObsoleteSdkInt"
+        message="Unnecessary; `SDK_INT` is always >= 26"
+        errorLine1="        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.N_MR1) {"
+        errorLine2="            ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~">
+        <location
+            file="src/androidMain/kotlin/dev/weft/osbridge/shortcuts/AndroidAppShortcuts.kt"
+            line="30"
+            column="13"/>
+    </issue>
+
+    <issue
+        id="ObsoleteSdkInt"
+        message="Unnecessary; `SDK_INT` is never &lt; 26"
+        errorLine1="    if (Build.VERSION.SDK_INT &lt; Build.VERSION_CODES.JELLY_BEAN_MR2) return BluetoothDeviceType.UNKNOWN"
+        errorLine2="        ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~">
+        <location
+            file="src/androidMain/kotlin/dev/weft/osbridge/bluetooth/AndroidBluetooth.kt"
+            line="136"
+            column="9"/>
+    </issue>
+
+    <issue
+        id="ObsoleteSdkInt"
+        message="Unnecessary; `SDK_INT` is always >= 26"
+        errorLine1="        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {"
+        errorLine2="            ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~">
+        <location
+            file="src/androidMain/kotlin/dev/weft/osbridge/haptics/AndroidHaptics.kt"
+            line="87"
+            column="13"/>
+    </issue>
+
+    <issue
+        id="ObsoleteSdkInt"
+        message="Unnecessary; `SDK_INT` is always >= 26"
+        errorLine1="        val frequency = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.LOLLIPOP) {"
+        errorLine2="                            ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~">
+        <location
+            file="src/androidMain/kotlin/dev/weft/osbridge/wifi/AndroidWifi.kt"
+            line="42"
+            column="29"/>
+    </issue>
+
+    <issue
+        id="ObsoleteSdkInt"
+        message="Unnecessary; `SDK_INT` is never &lt; 26"
+        errorLine1="            if (Build.VERSION.SDK_INT &lt; Build.VERSION_CODES.O) return"
+        errorLine2="                ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~">
+        <location
+            file="src/androidMain/kotlin/dev/weft/osbridge/notifications/NotificationReceiver.kt"
+            line="55"
+            column="17"/>
+    </issue>
+
+    <issue
+        id="UseKtx"
+        message="Use the KTX extension function `String.toUri` instead?"
+        errorLine1="            target.contains(&apos;:&apos;) -> Intent(Intent.ACTION_VIEW, Uri.parse(target))"
+        errorLine2="                                                               ~~~~~~~~~~~~~~~~~">
+        <location
+            file="src/androidMain/kotlin/dev/weft/osbridge/shortcuts/AndroidAppShortcuts.kt"
+            line="73"
+            column="64"/>
+    </issue>
+
+    <issue
+        id="UseKtx"
+        message="Use the KTX extension function `String.toUri` instead?"
+        errorLine1="        val parsed = Uri.parse(uri)"
+        errorLine2="                     ~~~~~~~~~~~~~~">
+        <location
+            file="src/androidMain/kotlin/dev/weft/osbridge/files/AndroidFiles.kt"
+            line="62"
+            column="22"/>
+    </issue>
+
+    <issue
+        id="UseKtx"
+        message="Use the KTX extension function `String.toUri` instead?"
+        errorLine1="        val parsed = Uri.parse(uri)"
+        errorLine2="                     ~~~~~~~~~~~~~~">
+        <location
+            file="src/androidMain/kotlin/dev/weft/osbridge/files/AndroidFiles.kt"
+            line="83"
+            column="22"/>
+    </issue>
+
+    <issue
+        id="UseKtx"
+        message="Use the KTX extension function `Bitmap.scale` instead?"
+        errorLine1="                    val out = Bitmap.createScaledBitmap(src, w, h, true)"
+        errorLine2="                              ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~">
+        <location
+            file="src/androidMain/kotlin/dev/weft/osbridge/imageops/AndroidImageOps.kt"
+            line="44"
+            column="31"/>
+    </issue>
+
+    <issue
+        id="UseKtx"
+        message="Use the KTX extension function `String.toUri` instead?"
+        errorLine1="        val parsed = runCatching { Uri.parse(uri) }.getOrNull() ?: return null"
+        errorLine2="                                   ~~~~~~~~~~~~~~">
+        <location
+            file="src/androidMain/kotlin/dev/weft/osbridge/imageops/AndroidImageOps.kt"
+            line="87"
+            column="36"/>
+    </issue>
+
+    <issue
+        id="UseKtx"
+        message="Use the KTX extension function `String.toUri` instead?"
+        errorLine1="            target.contains(&apos;:&apos;) -> Intent(Intent.ACTION_VIEW, Uri.parse(target))"
+        errorLine2="                                                               ~~~~~~~~~~~~~~~~~">
+        <location
+            file="src/androidMain/kotlin/dev/weft/osbridge/intents/AndroidIntents.kt"
+            line="28"
+            column="64"/>
+    </issue>
+
+    <issue
+        id="UseKtx"
+        message="Use the KTX extension function `String.toUri` instead?"
+        errorLine1="        val uri = runCatching { Uri.parse(url) }.getOrElse { return@withContext false }"
+        errorLine2="                                ~~~~~~~~~~~~~~">
+        <location
+            file="src/androidMain/kotlin/dev/weft/osbridge/intents/AndroidIntents.kt"
+            line="39"
+            column="33"/>
+    </issue>
+
+    <issue
+        id="UseKtx"
+        message="Use the KTX extension function `String.toUri` instead?"
+        errorLine1="        val intent = Intent(Intent.ACTION_VIEW, Uri.parse(url)).apply {"
+        errorLine2="                                                ~~~~~~~~~~~~~~">
+        <location
+            file="src/androidMain/kotlin/dev/weft/osbridge/intents/AndroidIntents.kt"
+            line="70"
+            column="49"/>
+    </issue>
+
+    <issue
+        id="UseKtx"
+        message="Use the KTX extension function `SharedPreferences.edit` instead?"
+        errorLine1="        prefs.edit().putString(alias, secret).apply()"
+        errorLine2="        ~~~~~~~~~~~~">
+        <location
+            file="src/androidMain/kotlin/dev/weft/osbridge/keyvault/AndroidKeyVault.kt"
+            line="29"
+            column="9"/>
+    </issue>
+
+    <issue
+        id="UseKtx"
+        message="Use the KTX extension function `SharedPreferences.edit` instead?"
+        errorLine1="        prefs.edit().remove(alias).apply()"
+        errorLine2="        ~~~~~~~~~~~~">
+        <location
+            file="src/androidMain/kotlin/dev/weft/osbridge/keyvault/AndroidKeyVault.kt"
+            line="38"
+            column="9"/>
+    </issue>
+
+    <issue
+        id="UseKtx"
+        message="Use the KTX extension function `String.toUri` instead?"
+        errorLine1="        val parsed = runCatching { Uri.parse(uri) }.getOrNull()"
+        errorLine2="                                   ~~~~~~~~~~~~~~">
+        <location
+            file="src/androidMain/kotlin/dev/weft/osbridge/pdf/AndroidPdf.kt"
+            line="50"
+            column="36"/>
+    </issue>
+
+    <issue
+        id="UseKtx"
+        message="Use the KTX extension function `String.toUri` instead?"
+        errorLine1="        val parsed = runCatching { Uri.parse(uri) }.getOrNull()"
+        errorLine2="                                   ~~~~~~~~~~~~~~">
+        <location
+            file="src/androidMain/kotlin/dev/weft/osbridge/pdf/AndroidPdf.kt"
+            line="86"
+            column="36"/>
+    </issue>
+
+    <issue
+        id="UseKtx"
+        message="Use the KTX function `createBitmap` instead?"
+        errorLine1="                            val bitmap = Bitmap.createBitmap(width, height, Bitmap.Config.ARGB_8888)"
+        errorLine2="                                         ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~">
+        <location
+            file="src/androidMain/kotlin/dev/weft/osbridge/pdf/AndroidPdf.kt"
+            line="107"
+            column="42"/>
+    </issue>
+
+    <issue
+        id="UseKtx"
+        message="Use the KTX extension function `SharedPreferences.edit` instead?"
+        errorLine1="                prefs.edit()"
+        errorLine2="                ~~~~~~~~~~~~">
+        <location
+            file="src/androidMain/kotlin/dev/weft/osbridge/sensors/AndroidSensors.kt"
+            line="55"
+            column="17"/>
+    </issue>
+
+    <issue
+        id="UseKtx"
+        message="Use the KTX extension function `SharedPreferences.edit` instead?"
+        errorLine1="                prefs.edit()"
+        errorLine2="                ~~~~~~~~~~~~">
+        <location
+            file="src/androidMain/kotlin/dev/weft/osbridge/sensors/AndroidSensors.kt"
+            line="61"
+            column="17"/>
+    </issue>
+
+    <issue
+        id="UseKtx"
+        message="Use the KTX extension function `SharedPreferences.edit` instead?"
+        errorLine1="        prefs.edit().putLong(KEY_LAST_SEEN, cumulative).apply()"
+        errorLine2="        ~~~~~~~~~~~~">
+        <location
+            file="src/androidMain/kotlin/dev/weft/osbridge/sensors/AndroidSensors.kt"
+            line="68"
+            column="9"/>
+    </issue>
+
+    <issue
+        id="UseKtx"
+        message="Use the KTX extension function `String.toUri` instead?"
+        errorLine1="        val intent = Intent(Intent.ACTION_DIAL, Uri.parse(&quot;tel:${encodeNumber(phoneNumber)}&quot;)).apply {"
+        errorLine2="                                                ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~">
+        <location
+            file="src/androidMain/kotlin/dev/weft/osbridge/telephony/AndroidTelephony.kt"
+            line="23"
+            column="49"/>
+    </issue>
+
+    <issue
+        id="UseKtx"
+        message="Use the KTX extension function `String.toUri` instead?"
+        errorLine1="            val intent = Intent(Intent.ACTION_SENDTO, Uri.parse(&quot;smsto:${encodeNumber(phoneNumber)}&quot;)).apply {"
+        errorLine2="                                                      ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~">
+        <location
+            file="src/androidMain/kotlin/dev/weft/osbridge/telephony/AndroidTelephony.kt"
+            line="32"
+            column="55"/>
+    </issue>
+
+    <issue
+        id="UseKtx"
+        message="Use the KTX extension function `String.toUri` instead?"
+        errorLine1="        val image = InputImage.fromFilePath(appContext, Uri.parse(imageUri))"
+        errorLine2="                                                        ~~~~~~~~~~~~~~~~~~~">
+        <location
+            file="src/androidMain/kotlin/dev/weft/osbridge/vision/AndroidVision.kt"
+            line="40"
+            column="57"/>
+    </issue>
+
+    <issue
+        id="UseKtx"
+        message="Use the KTX extension function `String.toUri` instead?"
+        errorLine1="        val image = InputImage.fromFilePath(appContext, Uri.parse(imageUri))"
+        errorLine2="                                                        ~~~~~~~~~~~~~~~~~~~">
+        <location
+            file="src/androidMain/kotlin/dev/weft/osbridge/vision/AndroidVision.kt"
+            line="56"
+            column="57"/>
+    </issue>
+
+</issues>
