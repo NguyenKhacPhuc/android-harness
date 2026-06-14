@@ -24,9 +24,10 @@ project {
         // published JDK env var.
         param("jdk.home", "%env.JDK_17_0%")
 
-        // GitHub Packages auth. `github.token` must be a PASSWORD param with
-        // write:packages scope (publishing). Define it in the project UI.
         param("github.username", "NguyenKhacPhuc")
-        password("github.token", "credentialsJSON:REPLACE_WITH_TOKEN", display = ParameterDisplay.HIDDEN)
+        // `github.token` is a SECRET — do not declare it here. Add it in the
+        // TeamCity UI (Project → Parameters → Add → type Password) with
+        // write:packages scope. TeamCity stores the value securely and writes
+        // the credentialsJSON token back into this file on the next sync.
     }
 }
