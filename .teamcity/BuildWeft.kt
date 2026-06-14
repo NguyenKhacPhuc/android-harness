@@ -18,7 +18,9 @@ object BuildWeft : BuildType({
 
     triggers {
         vcs {
-            branchFilter = "+:*"
+            // Only main — the many stacked feat/* branches don't compile in
+            // isolation and would spuriously fail. Validate those via PRs later.
+            branchFilter = "+:refs/heads/main"
         }
     }
 
