@@ -24,7 +24,9 @@ object PublishWeft : BuildType({
     steps {
         gradleStep(
             "build + test + lint + detekt + publish",
-            "detekt lint test publish -PweftVersion=%weft.version% -Pgpr.user=%github.username% -Pgpr.key=%github.token%",
+            // jvmTest runs kotest (root `test` only runs Android unit tests);
+            // publish builds + uploads all variants incl. the iOS klibs.
+            "detekt lint assembleDebug jvmTest test publish -PweftVersion=%weft.version% -Pgpr.user=%github.username% -Pgpr.key=%github.token%",
         )
     }
 

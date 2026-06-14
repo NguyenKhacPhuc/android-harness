@@ -18,7 +18,11 @@ object PrValidation : BuildType({
     steps {
         gradleStep(
             "build + test + lint + detekt",
-            "detekt lint test compileKotlinIosSimulatorArm64",
+            // assembleDebug builds the Android AARs; compileKotlinIosSimulatorArm64
+            // builds iOS. jvmTest runs the kotest suites (the root `test` task
+            // only runs Android unit tests, NOT jvmTest); `test` adds the Android
+            // unit tests. lint = Android lint, detekt = Kotlin static analysis.
+            "detekt lint assembleDebug compileKotlinIosSimulatorArm64 jvmTest test",
         )
     }
 
