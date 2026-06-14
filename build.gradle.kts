@@ -39,14 +39,21 @@ subprojects {
             androidTarget { publishLibraryVariants("release") }
         }
 
-        extensions.configure<PublishingExtension> {
-            repositories {
-                maven {
-                    name = "GitHubPackages"
-                    url = uri("https://maven.pkg.github.com/NguyenKhacPhuc/android-harness")
-                    credentials {
-                        username = (findProperty("gpr.user") as String?) ?: System.getenv("GITHUB_ACTOR")
-                        password = (findProperty("gpr.key") as String?) ?: System.getenv("GITHUB_TOKEN")
+        // Only declare the remote repo when credentials exist — Gradle rejects a
+        // maven repo with a null username, which would break non-publish builds
+        // and IDE sync. publishToMavenLocal is unaffected (separate repo).
+        val gprUser = (findProperty("gpr.user") as String?) ?: System.getenv("GITHUB_ACTOR")
+        val gprKey = (findProperty("gpr.key") as String?) ?: System.getenv("GITHUB_TOKEN")
+        if (gprUser != null && gprKey != null) {
+            extensions.configure<PublishingExtension> {
+                repositories {
+                    maven {
+                        name = "GitHubPackages"
+                        url = uri("https://maven.pkg.github.com/NguyenKhacPhuc/android-harness")
+                        credentials {
+                            username = gprUser
+                            password = gprKey
+                        }
                     }
                 }
             }
