@@ -23,7 +23,10 @@ fun BuildSteps.gradleStep(stepName: String, gradleTasks: String) {
         useGradleWrapper = true
         gradleWrapperPath = ""
         jdkHome = "%jdk.home%"
-        gradleParams = "--no-daemon --stacktrace"
+        // --no-configuration-cache: TeamCity's gradle-runner init script
+        // registers build listeners, which the config cache (on in
+        // gradle.properties) rejects under Gradle 9. Local dev keeps the cache.
+        gradleParams = "--no-daemon --stacktrace --no-configuration-cache"
     }
 }
 
