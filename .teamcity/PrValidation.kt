@@ -42,7 +42,9 @@ object PrValidation : BuildType({
         pullRequests {
             vcsRootExtId = WEFT_VCS_ID
             provider = github {
-                authType = vcsRoot()
+                // Token auth (not vcsRoot) — the VCS root may be anonymous, and
+                // the PR API can't be queried anonymously. Uses github.token.
+                authType = token { token = "%github.token%" }
                 filterTargetBranch = "+:refs/heads/main"
             }
         }
