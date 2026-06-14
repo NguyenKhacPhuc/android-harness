@@ -26,8 +26,9 @@ object PublishWeft : BuildType({
         preflightStep()
         // Stage 2 — code quality
         gradleStep("quality · detekt + lint", "detekt lint")
-        // Stage 2 — testing (shared kotest via jvmTest + android unit + ios)
-        gradleStep("test · shared + android + ios", "jvmTest test iosSimulatorArm64Test")
+        // Stage 2 — testing (shared kotest via jvmTest + android unit; iOS
+        // compile-validated in the build stage, no simulator on the agent)
+        gradleStep("test · shared + android", "jvmTest test")
         // Stage 3 — build (android + ios)
         gradleStep("build · android + ios", "assembleDebug compileKotlinIosSimulatorArm64")
         // Stage 4 — deploy: publish artifacts to GitHub Packages (the SDK's

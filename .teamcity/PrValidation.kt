@@ -21,10 +21,10 @@ object PrValidation : BuildType({
         // Stage 2 — code quality
         gradleStep("quality · detekt + lint", "detekt lint")
         // Stage 2 — testing: shared kotest (jvmTest) + Android unit tests
-        // (`test` runs runtime's migration/JUnit tests) + iOS simulator.
-        // Modules whose only test sources are kotest commonTest discover zero
-        // under androidUnitTest — guarded by failOnNoDiscoveredTests=false.
-        gradleStep("test · shared + android + ios", "jvmTest test iosSimulatorArm64Test")
+        // (`test` runs runtime's migration/JUnit tests). iOS sim tests omitted —
+        // the agent has no iOS simulator runtime; iOS is compile-validated in the
+        // build stage. Empty androidUnitTest tasks: failOnNoDiscoveredTests=false.
+        gradleStep("test · shared + android", "jvmTest test")
         // Stage 3 — build: Android AARs + iOS klibs
         gradleStep("build · android + ios", "assembleDebug compileKotlinIosSimulatorArm64")
     }
