@@ -19,7 +19,10 @@ allprojects {
     group = "dev.weft"
     // Fixed release version by default (GitHub Packages handles SNAPSHOTs poorly).
     // Bump per published change, or override with -PweftVersion=x.y.z in CI.
-    version = (findProperty("weftVersion") as String?) ?: "0.0.1"
+    // 0.0.2 ships WeftAgent.ask() (#36). GitHub Packages versions are
+    // immutable, so each published change needs a fresh version here —
+    // republishing the same version 409s.
+    version = (findProperty("weftVersion") as String?) ?: "0.0.2"
 }
 
 // Lint baseline — ALWAYS applied (independent of publishing). CI gates only
