@@ -44,6 +44,7 @@ kotlin {
         commonTest.dependencies {
             implementation(libs.kotest.assertions.core)
             implementation(libs.kotlinx.coroutines.test)
+            implementation(project(":harness:testing"))
         }
         jvmTest.dependencies {
             implementation(libs.kotest.runner.junit5)
