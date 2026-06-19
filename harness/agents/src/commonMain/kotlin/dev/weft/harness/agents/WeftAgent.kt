@@ -657,6 +657,60 @@ class WeftAgent(
     }
 
     /**
+     * Run a single isolated ("headless") turn and return the assistant's
+     * reply, **without** disturbing the visible conversation.
+     *
+     * Unlike [send], an `ask` turn does NOT append to the agent's history,
+     * does NOT sync to [state] (so the chat UI observing it sees nothing),
+     * and does NOT persist to the [conversationStore]. It otherwise runs a
+     * full turn — same system prompt, memory retrieval, model routing, and
+     * tools — and is still recorded in the trace store for observability.
+     *
+     * For background callers that must consult the assistant without
+     * hijacking the user's chat (e.g. a mini-app's `window.weft.sendMessage`).
+     * The daily quota is still enforced. Throws on quota block or turn
+     * failure, same as [send].
+     */
+    public suspend fun ask(userText: String): String {
+        val quotaState = quotaPolicy.check(usageStore.usdToday())
+        if (quotaState is QuotaState.Blocked) {
+            throw QuotaExceededException(quotaState.usdToday, quotaState.thresholdUsd)
+        }
+        val memoryHits = memoryRegistry.retrieveAll(userText)
+        val effectiveText = composeEffectiveText(
+            volatilePrefix = composeVolatilePrefixWithMode(),
+            memoryHits = memoryHits,
+            userText = userText,
+        )
+        val effectiveInput = dev.weft.harness.prompt.multimodal.WeftUserInput(effectiveText, emptyList())
+        val parentTraceId = kotlin.coroutines.coroutineContext[
+            dev.weft.harness.observability.TraceContext,
+        ]?.traceId
+        val traceId = traceStore.startTrace(_state.value.conversationId, userText, parentTraceId)
+        return try {
+            val reply = kotlinx.coroutines.withContext(
+                dev.weft.harness.observability.TraceContext(traceId, _state.value.conversationId),
+            ) {
+                withRetry(
+                    policy = strategy.retry,
+                    breaker = circuitBreaker,
+                    onAttemptFailed = { _, _, _ -> },
+                ) {
+                    val agent = buildAgentForThisTurn(traceId, effectiveInput, modelTier = null)
+                    kotlinx.coroutines.withContext(dev.weft.contracts.ToolActivationSink()) {
+                        agent.run(effectiveInput)
+                    }
+                }
+            }
+            traceStore.completeTrace(traceId, redactor.redact(reply))
+            reply
+        } catch (t: Throwable) {
+            traceStore.failTrace(traceId, redactor.redact(t.message ?: t::class.simpleName.orEmpty()))
+            throw t
+        }
+    }
+
+    /**
      * Streaming variant of [send]. Returns a cold [Flow] of [StreamChunk]s
      * — text deltas as the model emits them, tool lifecycle events
      * interleaved, and a terminal [StreamChunk.Done] or [StreamChunk.Failed].
