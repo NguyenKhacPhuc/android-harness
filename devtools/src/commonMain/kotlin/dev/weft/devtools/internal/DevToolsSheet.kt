@@ -533,7 +533,7 @@ private fun PromptTab(runtime: WeftRuntime) {
     // ready, falling back to the pre-MCP snapshot during the brief
     // discovery window. produceState handles cancellation if the tab
     // closes mid-await.
-    val prompt by produceState(initialValue = runtime.systemPrompt, runtime) {
+    val prompt by produceState(initialValue = "", runtime) {
         value = runtime.resolvedSystemPrompt()
     }
     val clipboard = LocalClipboardManager.current

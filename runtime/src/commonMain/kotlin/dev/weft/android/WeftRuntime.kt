@@ -99,7 +99,7 @@ public class WeftRuntime(
     // Unpack the config into the names the class body uses. Keeps the
     // constructor + the `assembleWeftRuntime` plumbing free of a 20-arg
     // bag; the public `create` factories build a [WeftRuntimeConfig].
-    private val appPromptPreamble: String get() = config.appPromptPreamble
+    private val appPromptPreamble: suspend () -> String get() = config.appPromptPreamble
     public val networkPolicy: NetworkPolicy get() = config.networkPolicy
     private val extraToolsFactory get() = config.extraToolsFactory
     private val toolProviderOverride get() = config.toolProviderOverride
@@ -323,7 +323,8 @@ public class WeftRuntime(
     /**
      * The assembled system prompt: app preamble + auto-generated tool
      * catalog + standard trailing notes + optional [extraSystemNotes].
-     * Computed once at construction.
+     * `suspend` because it resolves the (possibly deferred) app preamble;
+     * not computed at construction.
      *
      * **MCP caveat:** this reflects the *pre-MCP* tool catalog (substrate
      * + [extraToolsFactory] only). Tools discovered from [mcpServers]
@@ -333,7 +334,7 @@ public class WeftRuntime(
      * once discovery completes; this field is for human / devtools
      * inspection of the substrate-stable prompt.
      */
-    public val systemPrompt: String = promptComposer.forTools(tools)
+    public suspend fun systemPrompt(): String = promptComposer.forTools(tools)
 
     /**
      * Assembles [WeftAgent]s from [AgentDeclaration]s. Holds the
@@ -437,7 +438,7 @@ public class WeftRuntime(
     public suspend fun resolvedSystemPrompt(): String {
         cachedResolvedSystemPrompt?.let { return it }
         val mcp = mcpToolsReady.await()
-        val prompt = if (mcp.isEmpty()) systemPrompt else promptComposer.forTools(tools + mcp)
+        val prompt = if (mcp.isEmpty()) systemPrompt() else promptComposer.forTools(tools + mcp)
         cachedResolvedSystemPrompt = prompt
         return prompt
     }

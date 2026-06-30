@@ -17,18 +17,19 @@ import dev.weft.tools.WeftTool
  * once.
  */
 internal class SystemPromptComposer(
-    private val appPreamble: String,
+    private val appPreamble: suspend () -> String,
     private val components: List<ComponentMetadata>,
     private val dataSources: List<DataSource>,
     private val extraNotes: String?,
 ) {
     /**
-     * Build the system prompt advertising exactly [tools]. Pure — callers
-     * own any caching (see [WeftRuntime.resolvedSystemPrompt]).
+     * Build the system prompt advertising exactly [tools]. Resolves the
+     * (possibly deferred) app preamble. Callers own any caching (see
+     * [WeftRuntime.resolvedSystemPrompt]).
      */
-    fun forTools(tools: List<WeftTool<*, *>>): String =
+    suspend fun forTools(tools: List<WeftTool<*, *>>): String =
         assembleSystemPrompt(
-            appPreamble = appPreamble,
+            appPreamble = appPreamble(),
             tools = tools,
             components = components,
             dataSources = dataSources,

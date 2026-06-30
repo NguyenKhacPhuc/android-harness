@@ -69,7 +69,7 @@ public fun WeftRuntime.Companion.create(
     platform: WeftPlatform,
     os: OsCapabilities = IosOsCapabilities(),
     uiBridge: UiBridge,
-    appPromptPreamble: String,
+    appPromptPreamble: suspend () -> String,
     dataSources: List<DataSource> = emptyList(),
     networkPolicy: NetworkPolicy = NetworkPolicy(coreAllowlist = emptySet()),
     extraContextProviders: List<ContextProvider> = emptyList(),

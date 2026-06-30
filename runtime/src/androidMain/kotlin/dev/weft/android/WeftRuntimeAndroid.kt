@@ -52,7 +52,7 @@ import kotlin.time.Duration
 public fun WeftRuntime.Companion.create(
     context: Context,
     uiBridge: UiBridge,
-    appPromptPreamble: String,
+    appPromptPreamble: suspend () -> String,
     dataSources: List<DataSource> = emptyList(),
     networkPolicy: NetworkPolicy = NetworkPolicy(coreAllowlist = emptySet()),
     extraContextProviders: List<ContextProvider> = emptyList(),
