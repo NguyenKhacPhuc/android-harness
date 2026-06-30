@@ -34,8 +34,14 @@ public class WeftRuntimeConfig(
      * App-specific opening for the system prompt — describes the app's
      * purpose, persona, and any high-level constraints. The substrate
      * appends the auto-generated tool catalog after this.
+     *
+     * A `suspend` provider (not a plain `String`) so the preamble can be
+     * resolved lazily — e.g. from a backend-served, asynchronously-cached
+     * config — without blocking runtime construction. Resolved when the
+     * system prompt is first assembled (at [WeftRuntime.buildAgent] /
+     * [WeftRuntime.systemPrompt]), never at construction.
      */
-    public val appPromptPreamble: String,
+    public val appPromptPreamble: suspend () -> String,
     /** App-specific [DataSource]s exposed to the `data_*` tools. */
     public val dataSources: List<DataSource> = emptyList(),
     /** Network allowlist used by `network_fetch`. Defaults to "no hosts allowed". */
