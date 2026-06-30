@@ -2,26 +2,56 @@ package dev.weft.osbridge.wifi
 
 import dev.weft.contracts.Wifi
 import dev.weft.contracts.WifiInfo
+import kotlinx.cinterop.ExperimentalForeignApi
+import kotlinx.cinterop.alloc
+import kotlinx.cinterop.memScoped
+import kotlinx.cinterop.ptr
+import kotlinx.cinterop.value
+import platform.SystemConfiguration.SCNetworkReachabilityCreateWithName
+import platform.SystemConfiguration.SCNetworkReachabilityFlagsVar
+import platform.SystemConfiguration.SCNetworkReachabilityGetFlags
+import platform.SystemConfiguration.kSCNetworkReachabilityFlagsConnectionRequired
+import platform.SystemConfiguration.kSCNetworkReachabilityFlagsIsWWAN
+import platform.SystemConfiguration.kSCNetworkReachabilityFlagsReachable
 
 /**
- * iOS stub for [Wifi]. Every method throws [NotImplementedError]
- * via [TODO] until somebody wires the iOS-native API.
+ * iOS [Wifi]. Connectivity is approximated with the same one-shot
+ * SCNetworkReachability probe as IosSystemInfo.network(): reachable +
+ * not-WWAN means a wifi-class transport. iOS limitations make several
+ * fields unknowable from a sandboxed substrate: [WifiInfo.ssid] needs
+ * the Access-WiFi-Information entitlement + NEHotspotNetwork; and
+ * link speed / RSSI / frequency have no public API. [WifiInfo.enabled]
+ * can't read the radio toggle, so it mirrors [WifiInfo.connected].
  *
- * Native API to wrap: `NetworkExtension.NEHotspotNetwork.fetchCurrent(completionHandler:)`
- * (iOS 14+, requires the Hotspot entitlement + Location permission for
- * SSID) for SSID + signal. Fall back to
- * `SystemConfiguration.CaptiveNetwork.CNCopyCurrentNetworkInfo` (deprecated
- * pre-iOS 14). `Network.NWPathMonitor` reports whether WiFi is the
- * active transport but doesn't expose link speed or RSSI directly —
- * those need the NEHotspotNetwork path.
- *
- * Open so hosts can subclass and override individual methods as they
- * implement them piecewise.
- *
- * See `docs/architecture/ios-os-capabilities.md` for effort estimates,
- * priority ordering, and what substrate tools each method unblocks.
+ * Open so hosts can subclass and override individual methods.
  */
+@OptIn(ExperimentalForeignApi::class)
 public open class IosWifi : Wifi {
-    override suspend fun info(): WifiInfo =
-        TODO("IosWifi.info — wrap NEHotspotNetwork.fetchCurrent(completionHandler:) + NWPathMonitor for online flag")
+
+    override suspend fun info(): WifiInfo = memScoped {
+        val ref = SCNetworkReachabilityCreateWithName(null, "apple.com")
+            ?: return@memScoped DISCONNECTED
+        val flags = alloc<SCNetworkReachabilityFlagsVar>()
+        if (!SCNetworkReachabilityGetFlags(ref, flags.ptr)) return@memScoped DISCONNECTED
+        val f = flags.value
+        val reachable = (f and kSCNetworkReachabilityFlagsReachable) != 0u &&
+            (f and kSCNetworkReachabilityFlagsConnectionRequired) == 0u
+        val wwan = (f and kSCNetworkReachabilityFlagsIsWWAN) != 0u
+        val connected = reachable && !wwan
+        WifiInfo(
+            // iOS can't read the radio toggle from a sandboxed app — approximate.
+            enabled = connected,
+            connected = connected,
+            // Requires Access-WiFi-Information entitlement + NEHotspotNetwork.
+            ssid = null,
+            // No public API for these on iOS.
+            linkSpeedMbps = null,
+            rssi = null,
+            frequencyMhz = null,
+        )
+    }
+
+    private companion object {
+        val DISCONNECTED = WifiInfo(enabled = false, connected = false)
+    }
 }

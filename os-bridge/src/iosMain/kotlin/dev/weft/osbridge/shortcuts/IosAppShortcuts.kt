@@ -4,28 +4,20 @@ import dev.weft.contracts.AppShortcuts
 import dev.weft.contracts.ShortcutSpec
 
 /**
- * iOS stub for [AppShortcuts]. Every method throws [NotImplementedError]
- * via [TODO] until somebody wires the iOS-native API.
+ * iOS [AppShortcuts] — honest no-op. The natural analogue is Home-Screen
+ * Quick Actions via `UIApplication.shortcutItems`, but that property is
+ * not reachable through the current Kotlin/Native UIKit binding (it
+ * surfaces as an unresolved reference). [push] / [remove] return false
+ * and [list] returns empty until a host wires Quick Actions from Swift
+ * (or static `UIApplicationShortcutItems` in Info.plist).
  *
- * Native API to wrap: `UIKit.UIApplication.shared.shortcutItems` —
- * an array of `UIApplicationShortcutItem(type:localizedTitle:localizedSubtitle:icon:userInfo:)`
- * for the long-press-app-icon shortcuts (Home-screen Quick Actions).
- * Set the array to push/replace, filter and reassign for remove, read
- * for list. iOS caps the count at 4 visible items.
- *
- * Open so hosts can subclass and override individual methods as they
- * implement them piecewise.
- *
- * See `docs/architecture/ios-os-capabilities.md` for effort estimates,
- * priority ordering, and what substrate tools each method unblocks.
+ * Open so hosts can subclass and override individual methods.
  */
 public open class IosAppShortcuts : AppShortcuts {
-    override suspend fun push(spec: ShortcutSpec): Boolean =
-        TODO("IosAppShortcuts.push — wrap UIApplication.shared.shortcutItems mutation with a UIApplicationShortcutItem")
 
-    override suspend fun remove(id: String): Boolean =
-        TODO("IosAppShortcuts.remove — wrap UIApplication.shared.shortcutItems filter-and-reassign by .type == id")
+    override suspend fun push(spec: ShortcutSpec): Boolean = false
 
-    override suspend fun list(): List<ShortcutSpec> =
-        TODO("IosAppShortcuts.list — wrap UIApplication.shared.shortcutItems read")
+    override suspend fun remove(id: String): Boolean = false
+
+    override suspend fun list(): List<ShortcutSpec> = emptyList()
 }

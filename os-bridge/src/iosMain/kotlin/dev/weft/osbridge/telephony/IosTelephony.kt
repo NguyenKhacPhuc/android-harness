@@ -2,32 +2,71 @@ package dev.weft.osbridge.telephony
 
 import dev.weft.contracts.Telephony
 import dev.weft.contracts.TelephonyInfo
+import kotlinx.cinterop.ExperimentalForeignApi
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.suspendCancellableCoroutine
+import kotlinx.coroutines.withContext
+import platform.CoreTelephony.CTCarrier
+import platform.CoreTelephony.CTTelephonyNetworkInfo
+import platform.Foundation.NSURL
+import platform.UIKit.UIApplication
+import kotlin.coroutines.resume
 
 /**
- * iOS stub for [Telephony]. Every method throws [NotImplementedError]
- * via [TODO] until somebody wires the iOS-native API.
+ * iOS [Telephony]. Dial / composeSms hand off to the system apps via
+ * `tel:` / `sms:` URLs (the user taps to act — we never auto-dial or
+ * auto-send). [info] reads the permissionless carrier snapshot from
+ * `CTTelephonyNetworkInfo` / `CTCarrier`. As of iOS 16 `CTCarrier` is
+ * deprecated and returns placeholder values ("--" / nil) on real
+ * hardware, so carrier fields are kept nullable. Airplane mode is not
+ * observable on iOS, so it is always reported false.
  *
- * Native API to wrap: `UIApplication.shared.open(URL(string: "tel:..."))`
- * for dial, `UIApplication.shared.open(URL(string: "sms:&body=..."))`
- * for composeSms, and `CoreTelephony.CTTelephonyNetworkInfo` +
- * `CTCarrier` for the carrier snapshot (`carrierName`,
- * `mobileCountryCode + mobileNetworkCode`, `isoCountryCode`). Airplane
- * mode is not directly observable on iOS — best-effort by checking
- * `NWPathMonitor` reports no transports.
- *
- * Open so hosts can subclass and override individual methods as they
- * implement them piecewise.
- *
- * See `docs/architecture/ios-os-capabilities.md` for effort estimates,
- * priority ordering, and what substrate tools each method unblocks.
+ * Open so hosts can subclass and override individual methods.
  */
+@OptIn(ExperimentalForeignApi::class)
 public open class IosTelephony : Telephony {
-    override suspend fun dial(phoneNumber: String): Boolean =
-        TODO("IosTelephony.dial — wrap UIApplication.shared.open(URL(string: \"tel:<number>\"))")
 
-    override suspend fun composeSms(phoneNumber: String, body: String?): Boolean =
-        TODO("IosTelephony.composeSms — wrap UIApplication.shared.open(URL(string: \"sms:<number>&body=<body>\"))")
+    override suspend fun dial(phoneNumber: String): Boolean {
+        if (phoneNumber.isBlank()) return false
+        val digits = phoneNumber.filter { it.isDigit() || it == '+' }
+        return open("tel://$digits")
+    }
 
-    override suspend fun info(): TelephonyInfo =
-        TODO("IosTelephony.info — wrap CTTelephonyNetworkInfo.serviceSubscriberCellularProviders + CTCarrier fields")
+    override suspend fun composeSms(phoneNumber: String, body: String?): Boolean {
+        if (phoneNumber.isBlank()) return false
+        // iOS ignores a prefilled body via the sms: URL scheme; just open the thread.
+        return open("sms:$phoneNumber")
+    }
+
+    override suspend fun info(): TelephonyInfo {
+        val networkInfo = CTTelephonyNetworkInfo()
+        val carrier = networkInfo.serviceSubscriberCellularProviders
+            ?.values
+            ?.firstOrNull() as? CTCarrier
+            ?: return TelephonyInfo()
+
+        val mcc = carrier.mobileCountryCode
+        val mnc = carrier.mobileNetworkCode
+        val networkOperator = if (mcc != null && mnc != null) "$mcc$mnc" else null
+        return TelephonyInfo(
+            carrierName = carrier.carrierName?.takeIf { it.isNotBlank() },
+            simCountryIso = carrier.isoCountryCode?.takeIf { it.isNotBlank() }?.uppercase(),
+            networkOperator = networkOperator,
+            phoneType = "GSM",
+            airplaneMode = false,
+        )
+    }
+
+    private suspend fun open(urlString: String): Boolean {
+        val url = NSURL.URLWithString(urlString) ?: return false
+        return withContext(Dispatchers.Main) {
+            val app = UIApplication.sharedApplication
+            if (!app.canOpenURL(url)) return@withContext false
+            suspendCancellableCoroutine { cont ->
+                app.openURL(url, options = emptyMap<Any?, Any?>()) { success ->
+                    if (cont.isActive) cont.resume(success)
+                }
+            }
+        }
+    }
 }

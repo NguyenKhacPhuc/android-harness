@@ -1,34 +1,48 @@
 package dev.weft.osbridge.translation
 
 import dev.weft.contracts.Translation
+import platform.NaturalLanguage.NLLanguageRecognizer
 
 /**
- * iOS stub for [Translation]. Every method throws [NotImplementedError]
- * via [TODO] until somebody wires the iOS-native API.
+ * iOS [Translation]. Language detection is real (NaturalLanguage's
+ * `NLLanguageRecognizer` runs fully offline and returns a BCP-47 tag);
+ * [supportedLanguages] is a curated static list of common ISO-639-1
+ * codes since NaturalLanguage doesn't enumerate translatable pairs.
  *
- * Native API to wrap: `Translation.framework` (iOS 17.4+) —
- * `TranslationSession.translate(_:)` with downloadable on-device models,
- * mirroring the ML Kit shape on Android. For language detection use
- * `NaturalLanguage.NLLanguageRecognizer` —
- * `processString(_:)` + `dominantLanguage`. The Translation framework
- * exposes `availableLanguages` for the supported list.
+ * [translate] is an honest no-op: Apple's on-device Translation
+ * framework (iOS 17.4+) is UI/session-gated with no headless string API
+ * reachable from Kotlin/Native, so we return null and let the host wire
+ * a cloud translator if it needs one.
  *
- * On iOS <17.4 there's no public on-device translation API; fall back
- * to a host-supplied translator (cloud service) or return null.
- *
- * Open so hosts can subclass and override individual methods as they
- * implement them piecewise.
- *
- * See `docs/architecture/ios-os-capabilities.md` for effort estimates,
- * priority ordering, and what substrate tools each method unblocks.
+ * Open so hosts can subclass and override individual methods.
  */
 public open class IosTranslation : Translation {
-    override suspend fun translate(text: String, target: String, source: String?): String? =
-        TODO("IosTranslation.translate — wrap TranslationSession.translate(_:) (iOS 17.4+) or return null on older versions")
 
-    override suspend fun detectLanguage(text: String): String =
-        TODO("IosTranslation.detectLanguage — wrap NLLanguageRecognizer.processString + dominantLanguage, return rawValue or \"und\"")
+    /**
+     * Always null on iOS — the Translation framework requires a
+     * SwiftUI `translationTask`/`TranslationSession` bound to a view,
+     * with no headless API reachable from Kotlin/Native. Hosts that need
+     * translation should subclass and delegate to a cloud service.
+     */
+    override suspend fun translate(text: String, target: String, source: String?): String? = null
 
-    override suspend fun supportedLanguages(): List<String> =
-        TODO("IosTranslation.supportedLanguages — wrap Translation.availableLanguages (iOS 17.4+)")
+    override suspend fun detectLanguage(text: String): String {
+        if (text.isBlank()) return UNDETERMINED
+        val recognizer = NLLanguageRecognizer()
+        recognizer.processString(text)
+        return recognizer.dominantLanguage() ?: UNDETERMINED
+    }
+
+    override suspend fun supportedLanguages(): List<String> = SUPPORTED
+
+    private companion object {
+        const val UNDETERMINED = "und"
+
+        // NaturalLanguage doesn't expose a translatable-pair enumeration;
+        // this mirrors the common subset Apple's models cover.
+        val SUPPORTED = listOf(
+            "en", "es", "fr", "de", "it", "pt", "ru", "zh",
+            "ja", "ko", "ar", "hi", "nl", "pl", "tr", "sv",
+        )
+    }
 }
