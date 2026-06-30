@@ -70,19 +70,21 @@ import dev.weft.osbridge.wifi.IosWifi
  * iOS [OsCapabilities] composer — mirrors the shape of
  * [dev.weft.osbridge.AndroidOsCapabilities.create] from androidMain.
  *
- * Every sub-interface defaults to its `Ios<Capability>` stub. Each
- * stub's methods throw [NotImplementedError] via [TODO] with a
- * descriptive message pointing at the iOS-native API to wrap.
+ * Every sub-interface defaults to its `Ios<Capability>` impl. Most are
+ * fully wired against the iOS-native API (Keychain, Vision, PDFKit,
+ * EventKit, Contacts, CoreLocation, UserNotifications, PhotoKit, etc.);
+ * `Audio` and `Volume` remain `TODO()` stubs pending the AVAudioSession
+ * Kotlin/Native cinterop binding. A handful are honest no-ops where iOS
+ * exposes no public API (paired-Bluetooth list, WiFi SSID, ambient
+ * light, headless translation, mic speech-to-text, launcher shortcuts).
  *
  * **Usage pattern.** Hosts compose by overriding the subsystems they've
  * actually implemented; the rest stay loud-failure stubs:
  *
  * ```kotlin
+ * // Defaults are production-ready; override only to customize:
  * val osCapabilities = IosOsCapabilities(
- *     keyVault = MyKeychainKeyVault(),                  // implemented
- *     clipboard = MyUIPasteboardClipboard(),            // implemented
- *     location = MyCLLocationManagerLocation(),         // implemented
- *     // every other capability defaults to its Ios stub → TODO()
+ *     audio = MyAVAudioRecorder(),    // wire the still-stubbed bits
  * )
  * WeftRuntime.create(WeftPlatform(), osCapabilities, ...)
  * ```
