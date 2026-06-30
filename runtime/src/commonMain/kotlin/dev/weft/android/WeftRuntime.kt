@@ -557,6 +557,10 @@ public class WeftRuntime(
                 LLMCapability.Tools,
                 LLMCapability.ToolChoice,
                 LLMCapability.Completion,
+                // DeepSeek speaks the OpenAI chat-completions wire. Koog
+                // 1.0.0's OpenAILLMClient routes on OpenAIEndpoint.* and
+                // throws "Cannot determine proper LLM params" without it.
+                LLMCapability.OpenAIEndpoint.Completions,
             ),
             contextLength = 64_000,
             maxOutputTokens = 8_192,
@@ -568,6 +572,7 @@ public class WeftRuntime(
             capabilities = listOf(
                 LLMCapability.Temperature,
                 LLMCapability.Completion,
+                LLMCapability.OpenAIEndpoint.Completions,
             ),
             contextLength = 64_000,
             maxOutputTokens = 8_192,
