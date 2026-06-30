@@ -133,19 +133,32 @@ private suspend fun ai.koog.agents.core.agent.session.AIAgentLLMWriteSession.col
     }
     onLlmStreamingComplete(metaInfo)
 
-    // Truncation guard: if the LLM hit max_tokens mid-tool-call, the JSON
-    // in `call.args` will be a partial string that fails to parse
-    // downstream with a confusing "unexpected end of input" error. Detect
-    // here and throw something the user can understand. The runtime's
-    // retry policy won't help — same prompt + same max_tokens = same
-    // truncation — so we surface the cap as the actionable signal.
-    if (finishReason == "max_tokens" && toolCalls.isNotEmpty()) {
+    // Truncation guard: the model stopped because it hit the output-token
+    // cap, not because it was done. Provider spellings differ — Anthropic
+    // reports "max_tokens", the OpenAI family (OpenAI / DeepSeek /
+    // OpenRouter) reports "length" — so match both. The runtime's retry
+    // policy won't help (same prompt + same cap = same truncation), so we
+    // surface it as a hard error rather than let a half-finished turn end
+    // silently. Without this the reply just stops mid-sentence and the
+    // turn completes as if successful.
+    if (finishReason == "max_tokens" || finishReason == "length") {
+        val outTokens = metaInfo.outputTokensCount ?: '?'
+        if (toolCalls.isNotEmpty()) {
+            // A truncated tool call means partial JSON in `call.args` that
+            // would fail downstream with a confusing "unexpected end of
+            // input" — name the real cause instead.
+            throw StreamingTruncatedException(
+                "LLM hit the output token limit ($outTokens out) while " +
+                    "emitting a tool call (${toolCalls.first().tool}). The tool's " +
+                    "JSON arguments were truncated. Raise WeftRuntime(maxOutputTokens=…) " +
+                    "or simplify the request — for ui_render trees this usually means asking " +
+                    "for fewer components per turn.",
+            )
+        }
         throw StreamingTruncatedException(
-            "LLM hit max_tokens (${metaInfo.outputTokensCount ?: '?'} out) while " +
-                "emitting a tool call (${toolCalls.first().tool}). The tool's " +
-                "JSON arguments were truncated. Raise WeftRuntime(maxOutputTokens=…) " +
-                "or simplify the request — for ui_render trees this usually means asking " +
-                "for fewer components per turn.",
+            "The response was cut off at the output token limit ($outTokens tokens). " +
+                "Ask for a shorter answer or break the request into parts. If the model " +
+                "supports a larger output budget, raise WeftRuntime(maxOutputTokens=…).",
         )
     }
 
@@ -170,10 +183,13 @@ private suspend fun ai.koog.agents.core.agent.session.AIAgentLLMWriteSession.col
 }
 
 /**
- * Thrown when streaming hits `max_tokens` while the model was emitting a
- * tool call. The tool-call JSON is truncated, so we can't execute it; the
- * caller needs to either raise the budget or get the model to produce a
- * smaller call. [dev.weft.harness.agents.WeftAgent.sendStreaming] propagates this
+ * Thrown when streaming stops because the model hit the output-token cap
+ * (`finishReason` `max_tokens` on Anthropic, `length` on the OpenAI
+ * family) rather than finishing its turn. Covers both a truncated tool
+ * call (partial, unparseable JSON) and a truncated text reply (cut off
+ * mid-sentence). The caller needs to raise the budget or shrink the
+ * request — a retry with the same cap truncates identically.
+ * [dev.weft.harness.agents.WeftAgent.sendStreaming] propagates this
  * through its Flow as [StreamChunk.Failed].
  */
 class StreamingTruncatedException(message: String) : RuntimeException(message)
